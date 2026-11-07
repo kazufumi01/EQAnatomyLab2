@@ -39,6 +39,7 @@ private:
     void setEar (bool on);
     void applySkin (int i);
     void applySurface (int i);
+    void applyScale (int i);
     // body
     GraphView graph { ph };
     SatStrip satStrip { ph };

@@ -12,6 +12,10 @@ EQAnatomyView::EQAnatomyView (EQAnatomyProcessor& p) : proc (p)
     for (int i = 0; i < theme::numSurfaces(); ++i) zoom.surfaceNames.add (theme::surfaceName (i));
     zoom.getSurface = [] { return theme::surface; };
     zoom.setSurface = [this] (int i) { applySurface (i); };
+    for (const char* n : { "+-6", "+-12", "+-20 (default)", "+-30" }) zoom.scaleNames.add (n);
+    zoom.getScale = [] { return juce::jlimit (0, 3, ZoomPrefs::file().getIntValue ("eqanatomy.gscale", 2)); };
+    zoom.setScale = [this] (int i) { applyScale (i); };
+    applyScale (zoom.getScale());
     setLookAndFeel (&lnf);
     juce::LookAndFeel::setDefaultLookAndFeel (&lnf);
 
@@ -154,6 +158,14 @@ void EQAnatomyView::applySurface (int i)
 {
     theme::surface = juce::jlimit (0, theme::numSurfaces() - 1, i);
     ZoomPrefs::file().setValue ("eqanatomy.surface", theme::surface); ZoomPrefs::file().saveIfNeeded();
+    repaint();
+}
+
+void EQAnatomyView::applyScale (int i)
+{
+    i = juce::jlimit (0, 3, i);
+    ZoomPrefs::file().setValue ("eqanatomy.gscale", i); ZoomPrefs::file().saveIfNeeded();
+    graph.setDbRange (i == 0 ? 6.0f : i == 1 ? 12.0f : i == 2 ? 20.0f : 30.0f);
     repaint();
 }
 

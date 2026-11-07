@@ -72,7 +72,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
         l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::band (i, "freq"), 1 }, n + "Freq", freqRange, (float) d.f,
                                                       AudioParameterFloatAttributes().withLabel ("Hz")));
         l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::band (i, "gain"), 1 }, n + "Gain",
-                                                      NormalisableRange<float> (-18.0f, 18.0f, 0.01f), 0.0f,
+                                                      NormalisableRange<float> (-30.0f, 30.0f, 0.01f), 0.0f,
                                                       AudioParameterFloatAttributes().withLabel ("dB")));
         l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::band (i, "q"), 1 }, n + "Q", qRange, (float) d.q));
         l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::band (i, "slope"), 1 }, n + "Slope", slopeNames(), 3));
@@ -124,7 +124,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::tbSens, 2 }, "Transient sensitivity", NormalisableRange<float> (-12.0f, 12.0f, 0.1f), 0.0f, AudioParameterFloatAttributes().withLabel ("dB")));
     l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::tbWidth, 2 }, "Transient width", NormalisableRange<float> (1.0f, 18.0f, 0.1f), 6.0f, AudioParameterFloatAttributes().withLabel ("dB")));
     l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::tbAtt, 2 }, "Transient attack", NormalisableRange<float> (0.1f, 2.0f, 0.01f), 2.0f, AudioParameterFloatAttributes().withLabel ("ms")));
-    l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::tbMethod, 2 }, "Transient method", StringArray { "Ratio", "Slope" }, 0));
+    l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::tbMethod, 2 }, "Transient method", StringArray { "Ratio", "Slope" }, 1));   // new instances: Slope. Sessions saved before 0.1.1 are pinned to Ratio in setStateInformation
     l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::tbLc, 2 }, "Detector low cut", NormalisableRange<float> (20.0f, 1000.0f, 0.0f, 0.4f), 20.0f, AudioParameterFloatAttributes().withLabel ("Hz")));
     for (int k = 1; k <= 2; ++k)
     {

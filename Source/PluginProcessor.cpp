@@ -685,7 +685,7 @@ void EQAnatomyProcessor::applyLesson (int index)
             set (pid::band (i, "dyn"), 0.0f);
         }
     }
-    set (pid::tbSens, 0.0f); set (pid::tbWidth, 6.0f); set (pid::tbAtt, 2.0f); set (pid::tbMethod, 0.0f); set (pid::tbLc, 20.0f); set (pid::tbE1g, 0.0f); set (pid::tbE2g, 0.0f);
+    set (pid::tbSens, 0.0f); set (pid::tbWidth, 6.0f); set (pid::tbAtt, 2.0f); set (pid::tbMethod, 1.0f); set (pid::tbLc, 20.0f); set (pid::tbE1g, 0.0f); set (pid::tbE2g, 0.0f);
     set (pid::mode, (float) ls.mode);
     if (ls.res >= 0) set (pid::res, (float) ls.res);
     set (pid::qmode, (float) ls.qmode);
@@ -714,7 +714,19 @@ void EQAnatomyProcessor::setStateInformation (const void* data, int size)
     {
         auto root = juce::ValueTree::fromXml (*xml);
         auto p = root.getChildWithName (apvts.state.getType());
-        if (p.isValid()) apvts.replaceState (p);
+        if (p.isValid())
+        {
+            // sessions saved before 0.1.1 may lack the detector method: they were Ratio, keep them that way
+            bool hasMethod = false;
+            for (int i = 0; i < p.getNumChildren(); ++i)
+                if (p.getChild (i).getProperty ("id").toString() == pid::tbMethod) { hasMethod = true; break; }
+            if (! hasMethod)
+            {
+                juce::ValueTree n ("PARAM"); n.setProperty ("id", juce::String (pid::tbMethod), nullptr); n.setProperty ("value", 0.0f, nullptr);
+                p.appendChild (n, nullptr);
+            }
+            apvts.replaceState (p);
+        }
         auto u = root.getChildWithName ("UI");
         if (u.isValid()) uiState.copyPropertiesAndChildrenFrom (u, nullptr);
         undo.clearUndoHistory();

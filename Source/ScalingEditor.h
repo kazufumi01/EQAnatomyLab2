@@ -33,6 +33,7 @@ public:
     // optional skins (EQ Anatomy Lab): names, current index and setter
     juce::StringArray skinNames; std::function<int()> getSkin; std::function<void (int)> setSkin;
     juce::StringArray surfaceNames; std::function<int()> getSurface; std::function<void (int)> setSurface;
+    juce::StringArray scaleNames; std::function<int()> getScale; std::function<void (int)> setScale;   // graph vertical scale
     ZoomButton() { onClick = [this] { showMenu(); }; setTooltip ("Window size and look"); }
     void refresh() { if (get) setButtonText (juce::String (juce::roundToInt (get() * 100.0f)) + "%"); }
 private:
@@ -58,9 +59,17 @@ private:
             const int cur = getSurface ? getSurface() : 0;
             for (int i = 0; i < surfaceNames.size(); ++i) m.addItem (200 + i, surfaceNames[i], true, i == cur);
         }
+        if (setScale && scaleNames.size() > 0)
+        {
+            m.addSectionHeader ("Graph scale (dB)");
+            const int cur = getScale ? getScale() : 0;
+            for (int i = 0; i < scaleNames.size(); ++i) m.addItem (300 + i, scaleNames[i], true, i == cur);
+        }
         m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
                          [this] (int r)
                          {
+                             if (r >= 300 && setScale) setScale (r - 300);
+                             else
                              if (r >= 200 && setSurface) setSurface (r - 200);
                              else if (r >= 100 && setSkin) setSkin (r - 100);
                              else if (r > 0 && r <= zoomSteps().size() && set) set (zoomSteps()[r - 1]);

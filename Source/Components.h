@@ -399,7 +399,7 @@ public:
     void paint (juce::Graphics& g) override
     {
         auto r = getLocalBounds().toFloat().reduced (0.5f);
-        g.setColour (theme::popup.withAlpha (0.72f)); g.fillRoundedRectangle (r, 8.0f);
+        g.setColour (theme::popup.withAlpha (0.86f)); g.fillRoundedRectangle (r, 8.0f);
         g.setColour (theme::text.withAlpha (0.18f)); g.drawRoundedRectangle (r, 8.0f, 1.0f);
         const bool bandOn = ph.value (pid::band (band, "on")) > 0.5f;
         const auto d = dotArea().toFloat();
@@ -798,11 +798,16 @@ public:
         const auto lp = labelRow();
         for (double f : { 50., 100., 200., 500., 1000., 2000., 5000., 10000. })
         { g.setColour (theme::faint); g.drawText (fmtHz (f), (int) xOf (f) - 20, (int) lp, 40, 14, juce::Justification::centred); }
-        for (int db = -18; db <= 18; db += 6)
+        g.setColour (theme::faint);
+        g.drawText ("20", (int) pr.getX() + 2, (int) lp, 30, 14, juce::Justification::centredLeft);
+        g.drawText ("20k", (int) pr.getRight() - 32, (int) lp, 30, 14, juce::Justification::centredRight);
+        const int dbStep = dbRange <= 6.5f ? 2 : dbRange <= 12.5f ? 4 : dbRange <= 20.5f ? 6 : 10;
+        const int dbTop = ((int) (dbRange + 0.5f) / dbStep) * dbStep;
+        for (int db = -dbTop; db <= dbTop; db += dbStep)
         {
             const float y = yOf (db);
             g.setColour (db == 0 ? theme::zero : theme::grid); g.drawHorizontalLine ((int) y, pr.getX(), pr.getRight());
-            if (std::abs (db) < 18) { g.setColour (theme::faint); g.drawText (fmtDb (db, 0), 2, (int) y - 7, (int) pr.getX() - 6, 14, juce::Justification::centredRight); }
+            if (std::abs (db) < dbTop) { g.setColour (theme::faint); g.drawText (fmtDb (db, 0), 2, (int) y - 7, (int) pr.getX() - 6, 14, juce::Justification::centredRight); }
         }
         if (ear)
         {
@@ -836,7 +841,7 @@ public:
         if (! selCurve.empty())
         {
             juce::Path p; p.startNewSubPath (xOf (fr.front()), yOf (0));
-            for (size_t i = 0; i < fr.size(); ++i) p.lineTo (xOf (fr[i]), yOf (juce::jlimit (-20.0, 20.0, selCurve[i])));
+            for (size_t i = 0; i < fr.size(); ++i) p.lineTo (xOf (fr[i]), yOf (juce::jlimit (-(double) dbRange, (double) dbRange, selCurve[i])));
             p.lineTo (xOf (fr.back()), yOf (0)); p.closeSubPath();
             g.setColour (theme::bandColour (s).withAlpha (0.16f)); g.fillPath (p);
         }
@@ -879,14 +884,14 @@ public:
         // analog ideal (zero latency only): shows the cramping near Nyquist
         if (! ghost.mag.empty())
         {
-            juce::Path p; for (size_t i = 0; i < fr.size(); ++i) { const float x = xOf (fr[i]), y = yOf (juce::jlimit (-20.0, 20.0, ghost.mag[i])); if (i == 0) p.startNewSubPath (x, y); else p.lineTo (x, y); }
+            juce::Path p; for (size_t i = 0; i < fr.size(); ++i) { const float x = xOf (fr[i]), y = yOf (juce::jlimit (-(double) dbRange, (double) dbRange, ghost.mag[i])); if (i == 0) p.startNewSubPath (x, y); else p.lineTo (x, y); }
             juce::Path d; const float dash[] = { 4.0f, 3.0f }; juce::PathStrokeType (1.2f).createDashedStroke (d, p, dash, 2);
             g.setColour (theme::muted.withAlpha (0.6f)); g.fillPath (d);
         }
         // side channel
         if (anyMS && ! curS.mag.empty())
         {
-            juce::Path p; for (size_t i = 0; i < fr.size(); ++i) { const float x = xOf (fr[i]), y = yOf (juce::jlimit (-20.0, 20.0, curS.mag[i])); if (i == 0) p.startNewSubPath (x, y); else p.lineTo (x, y); }
+            juce::Path p; for (size_t i = 0; i < fr.size(); ++i) { const float x = xOf (fr[i]), y = yOf (juce::jlimit (-(double) dbRange, (double) dbRange, curS.mag[i])); if (i == 0) p.startNewSubPath (x, y); else p.lineTo (x, y); }
             juce::Path d; const float dash[] = { 6.0f, 3.0f }; juce::PathStrokeType (2.0f).createDashedStroke (d, p, dash, 2);
             g.setColour (theme::side); g.fillPath (d);
         }
@@ -895,7 +900,7 @@ public:
             juce::Path p, fill;
             for (size_t i = 0; i < fr.size(); ++i)
             {
-                const float x = xOf (fr[i]), y = yOf (juce::jlimit (-20.0, 20.0, cur.mag[i]));
+                const float x = xOf (fr[i]), y = yOf (juce::jlimit (-(double) dbRange, (double) dbRange, cur.mag[i]));
                 if (i == 0) { p.startNewSubPath (x, y); fill.startNewSubPath (x, yOf (0)); }
                 else p.lineTo (x, y);
                 fill.lineTo (x, y);
@@ -903,19 +908,19 @@ public:
             fill.lineTo (xOf (fr.back()), yOf (0)); fill.closeSubPath();
             g.setColour (theme::curve.withAlpha (0.08f)); g.fillPath (fill);
             g.setColour (liveMag.empty() ? theme::curve : theme::curve.withAlpha (0.45f));
-            g.strokePath (p, juce::PathStrokeType (liveMag.empty() ? 2.6f : 1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            g.strokePath (p, juce::PathStrokeType (liveMag.empty() ? 1.9f : 1.3f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         }
         if (! liveMag.empty())
         {
             juce::Path p;
-            for (size_t i = 0; i < fr.size(); ++i) { const float x = xOf (fr[i]), y = yOf (juce::jlimit (-20.0, 20.0, liveMag[i])); if (i == 0) p.startNewSubPath (x, y); else p.lineTo (x, y); }
+            for (size_t i = 0; i < fr.size(); ++i) { const float x = xOf (fr[i]), y = yOf (juce::jlimit (-(double) dbRange, (double) dbRange, liveMag[i])); if (i == 0) p.startNewSubPath (x, y); else p.lineTo (x, y); }
             g.setColour (theme::live); g.strokePath (p, juce::PathStrokeType (2.4f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         }
         // Delta: what the Delta button plays, |H − 1|
         if (ph.value (pid::delta) > 0.5f)
         {
             juce::Path p;
-            for (size_t i = 0; i < fr.size(); ++i) { const float x = xOf (fr[i]), y = yOf (juce::jlimit (-20.0, 20.0, cur.delta[i])); if (i == 0) p.startNewSubPath (x, y); else p.lineTo (x, y); }
+            for (size_t i = 0; i < fr.size(); ++i) { const float x = xOf (fr[i]), y = yOf (juce::jlimit (-(double) dbRange, (double) dbRange, cur.delta[i])); if (i == 0) p.startNewSubPath (x, y); else p.lineTo (x, y); }
             juce::Path d; const float dash[] = { 6.0f, 3.0f }; juce::PathStrokeType (2.2f).createDashedStroke (d, p, dash, 2);
             g.setColour (theme::pre); g.fillPath (d);
             auto box = juce::Rectangle<float> (pr.getX() + 8, pr.getY() + 24, 330, 40);
@@ -938,9 +943,9 @@ public:
                 if (! (b.type == eqcore::Type::Bell || b.type == eqcore::Type::LowShelf || b.type == eqcore::Type::HighShelf)) continue;
                 const float a = ph.value (pid::band (i, "range")), bl = ph.value (pid::band (i, "below"));
                 const float x = xOf (b.f) + 16;
-                const float y0 = yOf (juce::jlimit (-20.0, 20.0, b.g + std::min (0.0f, std::min (a, bl)))), y1 = yOf (juce::jlimit (-20.0, 20.0, b.g + std::max (0.0f, std::max (a, bl))));
+                const float y0 = yOf (juce::jlimit (-(double) dbRange, (double) dbRange, b.g + std::min (0.0f, std::min (a, bl)))), y1 = yOf (juce::jlimit (-(double) dbRange, (double) dbRange, b.g + std::max (0.0f, std::max (a, bl))));
                 g.setColour (theme::bandColour (i).withAlpha (0.35f)); g.fillRoundedRectangle (x - 2, std::min (y0, y1), 4, std::abs (y1 - y0) + 1, 2);
-                const float yn = yOf (juce::jlimit (-20.0, 20.0, b.g + (double) ph.proc.dynGainDb[(size_t) i].load()));
+                const float yn = yOf (juce::jlimit (-(double) dbRange, (double) dbRange, b.g + (double) ph.proc.dynGainDb[(size_t) i].load()));
                 g.setColour (theme::bandColour (i)); g.fillEllipse (x - 4, yn - 4, 8, 8);
             }
         }
@@ -1067,7 +1072,7 @@ public:
             else axis = 0;
             const bool noGain = t == (int) eqcore::Type::LowCut || t == (int) eqcore::Type::HighCut || t == (int) eqcore::Type::Notch || t == (int) eqcore::Type::AllPass;
             ph.set (pid::band (b, "freq"), axis == 2 ? startF : (float) fOf (e.position.x));
-            if (! noGain) ph.set (pid::band (b, "gain"), axis == 1 ? startG : juce::jlimit (-18.0f, 18.0f, juce::jmap (e.position.y, pr.getBottom(), pr.getY(), -20.0f, 20.0f)));
+            if (! noGain) ph.set (pid::band (b, "gain"), axis == 1 ? startG : juce::jlimit (-30.0f, 30.0f, juce::jmap (e.position.y, pr.getBottom(), pr.getY(), -dbRange, dbRange)));
         }
         else
         {
@@ -1101,7 +1106,7 @@ public:
             {
                 const auto pr = plot();
                 ph.setGesture (pid::band (i, "type"), 0); ph.setGesture (pid::band (i, "freq"), (float) fOf (e.position.x));
-                ph.setGesture (pid::band (i, "gain"), juce::jlimit (-18.0f, 18.0f, juce::jmap (e.position.y, pr.getBottom(), pr.getY(), -20.0f, 20.0f)));
+                ph.setGesture (pid::band (i, "gain"), juce::jlimit (-30.0f, 30.0f, juce::jmap (e.position.y, pr.getBottom(), pr.getY(), -dbRange, dbRange)));
                 ph.setGesture (pid::band (i, "q"), 1.0f); ph.setGesture (pid::band (i, "on"), 1.0f); ph.select (i);
                 return;
             }
@@ -1296,11 +1301,16 @@ private:
     }
     float xOf (double f) const { const auto p = plot(); return p.getX() + (float) (std::log (f / 20.0) / std::log (1000.0)) * p.getWidth(); }
     double fOf (float x) const { const auto p = plot(); return juce::jlimit (20.0, 20000.0, 20.0 * std::pow (1000.0, (x - p.getX()) / p.getWidth())); }
-    float yOf (double db) const { const auto p = plot(); return juce::jmap ((float) db, -20.0f, 20.0f, p.getBottom(), p.getY()); }
+    float yOf (double db) const { const auto p = plot(); return juce::jmap ((float) db, -dbRange, dbRange, p.getBottom(), p.getY()); }
+public:
+    float dbRange = 20.0f;      // vertical scale, +-dB (6 / 12 / 20 / 30); 20 = as before
+    void setDbRange (float r) { dbRange = r; repaint(); }
+private:
+
     juce::Point<float> nodePos (int i, const eqcore::Band& b) const
     {
         const bool noGain = b.type == eqcore::Type::LowCut || b.type == eqcore::Type::HighCut || b.type == eqcore::Type::Notch || b.type == eqcore::Type::AllPass;
-        return { xOf (b.f), yOf (noGain ? 0.0 : juce::jlimit (-18.0, 18.0, b.g)) };
+        return { xOf (b.f), yOf (noGain ? 0.0 : juce::jlimit (-(double) dbRange, (double) dbRange, b.g)) };
         juce::ignoreUnused (i);
     }
     std::optional<std::pair<juce::Point<float>, juce::Point<float>>> handles (int s) const
@@ -1309,7 +1319,7 @@ private:
         if (! b.on || ! (b.type == eqcore::Type::Bell || b.type == eqcore::Type::Notch)) return std::nullopt;
         const double q = eqcore::effectiveQ (b, ph.proc.currentQMode());
         const double oct = 2.0 / std::log (2.0) * std::asinh (1.0 / (2.0 * q));
-        const float y = yOf (b.type == eqcore::Type::Notch ? -6.0 : juce::jlimit (-18.0, 18.0, b.g / 2.0));
+        const float y = yOf (b.type == eqcore::Type::Notch ? -6.0 : juce::jlimit (-(double) dbRange, (double) dbRange, b.g / 2.0));
         return std::make_pair (juce::Point<float> (xOf (std::max (20.0, b.f * std::pow (2.0, -oct / 2))), y),
                                juce::Point<float> (xOf (std::min (20000.0, b.f * std::pow (2.0, oct / 2))), y));
     }
