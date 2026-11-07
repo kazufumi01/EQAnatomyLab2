@@ -756,6 +756,7 @@ public:
 
     void paint (juce::Graphics& g) override
     {
+        updateAutoRange();
         auto r = getLocalBounds().toFloat();
         g.setColour (theme::well); g.fillRoundedRectangle (r, 6.0f);
         g.setColour (theme::line); g.drawRoundedRectangle (r.reduced (0.5f), 6.0f, 1.0f);
@@ -1032,7 +1033,7 @@ public:
         if (drag.band < 0) return;
         ph.select (drag.band);
         if (e.mods.isAltDown()) { altSolo = true; ph.proc.soloBand = drag.band; }
-        downPos = e.position; axis = 0;
+        downPos = e.position; axis = 0; scaleHold = true;   // drag above the plot to go past the current scale; it widens on release
         startF = ph.value (pid::band (drag.band, "freq")); startG = ph.value (pid::band (drag.band, "gain"));
         startQ = ph.value (pid::band (drag.band, "q")); startY = e.position.y;
         for (auto w : { "freq", "gain", "q" }) ph.begin (pid::band (drag.band, w));
@@ -1089,6 +1090,7 @@ public:
     }
     void mouseUp (const juce::MouseEvent&) override
     {
+        if (scaleHold) { scaleHold = false; repaint(); }
         if (scDrag != 0) { ph.end (scDrag == 1 ? pid::tbSens : pid::tbWidth); scDrag = 0; return; }
         if (drag.what >= 3) ph.end (drag.what == 3 ? pid::satLo : pid::satHi);
         else if (drag.band >= 0) for (auto w : { "freq", "gain", "q" }) ph.end (pid::band (drag.band, w));
@@ -1303,8 +1305,28 @@ private:
     double fOf (float x) const { const auto p = plot(); return juce::jlimit (20.0, 20000.0, 20.0 * std::pow (1000.0, (x - p.getX()) / p.getWidth())); }
     float yOf (double db) const { const auto p = plot(); return juce::jmap ((float) db, -dbRange, dbRange, p.getBottom(), p.getY()); }
 public:
-    float dbRange = 20.0f;      // vertical scale, +-dB (6 / 12 / 20 / 30); 20 = as before
-    void setDbRange (float r) { dbRange = r; repaint(); }
+    float dbRange = 20.0f;      // vertical scale in use, +-dB (follows userRange, widened automatically)
+    float userRange = 20.0f;    // scale chosen in the menu (6 / 12 / 20 / 30); 20 = as before
+    bool scaleHold = false;     // frozen while a dot is dragged, so the mapping under the mouse does not jump
+    void setDbRange (float r) { userRange = r; updateAutoRange(); repaint(); }
+    // magnitude scale only (the phase scale stays manual): widen to the smallest step that shows the
+    // largest band gain with 1 dB headroom, and fall back to the chosen scale when gains come down again
+    void updateAutoRange()
+    {
+        if (scaleHold) return;
+        float need = 0.0f;
+        for (int i = 0; i < 6; ++i)
+        {
+            if (ph.value (pid::band (i, "on")) < 0.5f) continue;
+            const int t = (int) ph.value (pid::band (i, "type"));
+            if (t == (int) eqcore::Type::LowCut || t == (int) eqcore::Type::HighCut || t == (int) eqcore::Type::Notch || t == (int) eqcore::Type::AllPass) continue;
+            need = std::max (need, std::abs (ph.value (pid::band (i, "gain"))) + 1.0f);
+        }
+        float r = userRange;
+        for (float st : { 6.0f, 12.0f, 20.0f, 30.0f }) if (st >= userRange && st >= need) { r = st; break; }
+        if (need > 30.0f) r = 30.0f;
+        dbRange = r;
+    }
 private:
 
     juce::Point<float> nodePos (int i, const eqcore::Band& b) const
