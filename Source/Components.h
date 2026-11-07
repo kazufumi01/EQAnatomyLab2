@@ -204,99 +204,108 @@ private:
 };
 
 // =============================================================================
-//  Floating band editor. Translucent (no blur, so it costs nothing).
-//    row 1  ● B3  type  slope  🎧
-//    row 2  FREQ  GAIN  Q
-//    row 3  PHASE Min|Lin   CH St|M|S
-//    row 4  DYN  In|SC  THR  ABOVE  BELOW  meter
-//    row 5  TRANSIENT ─────●───── BODY
+//  Band editor, in two layouts (0.1.1)
+//    compact = the floating panel. Follows the dot; drag its top strip to park it
+//      somewhere else (double-click the strip to make it follow again)
+//        ⋮⋮ ● B3  type            SOLO
+//        FREQ    GAIN    Q
+//        SLOPE ▸        CH ▸
+//    full = the detail panel at the bottom left: band tabs, everything above,
+//      then PHASE, DYN (detector, meter, six numbers), TRANSIENT/BODY, T/B scope
 // =============================================================================
 class BandPopup : public juce::Component
 {
 public:
-    explicit BandPopup (ParamHelp& h)
-        : ph (h), fq (h, "FREQ Hz"), gn (h, "GAIN dB"), qv (h, "Q"), th (h, "THR"), rg (h, "ABOVE"), bl (h, "BELOW"),
-          at (h, "ATT ms"), rl (h, "REL ms"), kn (h, "KNEE dB"), sn (h, "SENS dB"), wd (h, "WIDTH dB"), ta (h, "ATK ms"),
-          phaseSeg (h, { "Min", "Lin" }), chSeg (h, { "St", "M", "S" }), srcSeg (h, { "In", "SC", "M", "S" })
+    explicit BandPopup (ParamHelp& h, bool fullLayout = false)
+        : ph (h), full (fullLayout), fq (h, "FREQ Hz"), gn (h, "GAIN dB"), qv (h, "Q"), th (h, "THR"), rg (h, "ABOVE"), bl (h, "BELOW"),
+          at (h, "ATT ms"), rl (h, "REL ms"), kn (h, "KNEE dB"),
+          phaseSeg (h, { "Min", "Lin" }), srcSeg (h, { "In", "SC", "M", "S" })
     {
         setOpaque (false);
-        for (auto* d : { &fq, &gn, &qv, &th, &rg, &bl, &at, &rl, &kn, &sn, &wd, &ta }) d->onRightClick = [this] { hidePanel(); };
+        if (! full) for (auto* d : { &fq, &gn, &qv }) d->onRightClick = [this] { hidePanel(); };
         dynBtn.setButtonText ("DYN");
         dynBtn.onClick = [this] { ph.toggleGesture (pid::band (band, "dyn")); }; markReset (dynBtn);
         soloBtn.setButtonText ("SOLO"); soloBtn.setClickingTogglesState (false);
         soloBtn.onClick = [this] { ph.proc.soloBand = ph.proc.soloBand.load() == band ? -1 : band; };
         soloBtn.setColour (juce::TextButton::buttonOnColourId, theme::pre);   // refreshed in refresh()
-        for (auto* c : { (juce::Component*) &dynBtn, (juce::Component*) &soloBtn }) addAndMakeVisible (c);
+        // slope and channel open a small menu (they take little room); Option+click resets
+        slopeBtn.onClick = [this] { if (ParamHelp::altDown()) ph.resetDefault (pid::band (band, "slope")); else slopeMenu(); }; markReset (slopeBtn);
+        chBtn.onClick    = [this] { if (ParamHelp::altDown()) ph.resetDefault (pid::band (band, "ch")); else chMenu(); }; markReset (chBtn);
+        scopeBtn.setButtonText ("T/B Scope"); scopeBtn.setClickingTogglesState (false);
+        scopeBtn.onClick = [this] { ph.proc.uiState.setProperty ("scope", ! (bool) ph.proc.uiState.getProperty ("scope", false), nullptr); };
+        for (auto* b : { &slopeBtn, &chBtn, &scopeBtn, &dynBtn, &soloBtn }) b->getProperties().set ("fontPx", full ? 10.0 : 10.5);
+        for (auto* c : { (juce::Component*) &soloBtn, (juce::Component*) &slopeBtn, (juce::Component*) &chBtn }) addAndMakeVisible (c);
         th.format = [] (float v) { return fmtDb (v, 0); };
         rg.format = [] (float v) { return fmtDb (v); };
         bl.format = [] (float v) { return fmtDb (v); };
         auto num = [] (float v) { return v == std::round (v) ? juce::String ((int) v) : juce::String (v, 1); };
         at.format = [] (float v) { return juce::String (v, v < 10.0f ? 1 : 0); };
         rl.format = [] (float v) { return juce::String ((int) std::round (v)); };
-        kn.format = num; sn.format = [] (float v) { return fmtDb (v); }; wd.format = num;
-        at.setParam (pid::band (0, "att")); sn.setParam (pid::tbSens); wd.setParam (pid::tbWidth); ta.setParam (pid::tbAtt); ta.format = [] (float v) { return juce::String (v, 2); };    // at: band set in refresh()
-        for (auto* d : { &th, &rg, &bl, &at, &rl, &kn, &sn, &wd, &ta }) { d->compact = true; addAndMakeVisible (*d); }
-        for (auto* s : { &phaseSeg, &chSeg, &srcSeg }) addAndMakeVisible (*s);
-        srcSeg.itemOn = [this] (int i) { return i != 1 || ph.proc.sidechainConnected(); };   // SC needs the host's sidechain; Mid / Side always work
-        tb.setSliderStyle (juce::Slider::LinearHorizontal); tb.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
-        tb.setRange (-100.0, 100.0, 1.0); tb.setDoubleClickReturnValue (true, 0.0); markReset (tb);
-        tb.onDragStart = [this] { tbDrag = true; ph.proc.undo.beginNewTransaction(); ph.begin (pid::band (band, "tb")); };
-        tb.onDragEnd = [this] { tbDrag = false; ph.end (pid::band (band, "tb")); };
-        tb.onValueChange = [this]
-        {
-            if (refreshing) return;
-            if (tbDrag) ph.set (pid::band (band, "tb"), (float) tb.getValue());      // left (−) = Transient only, right (+) = Body only
-            else { ph.proc.undo.beginNewTransaction(); ph.setGesture (pid::band (band, "tb"), (float) tb.getValue()); }   // Option+click / double-click / wheel
-        };
-        addAndMakeVisible (tb);
-
-        setHelp (*this, "BAND", "左の色の丸でバンドのオン・オフ（塗り＝オン、輪＝オフ）。右クリックで浮き窓を隠す", "The coloured dot switches the band (filled = on, ring = off). Right-click hides the panel");
-        setHelp (type, "TYPE", "フィルターの種類。Bell・Shelf・Cut・Notch・All-pass", "Filter type: bell, shelf, cut, notch or all-pass");
-        setHelp (slope, "SLOPE", "カットの傾き。6 dB/oct 増えるごとに位相が 90° 多く回る", "Cut slope. Each extra 6 dB/oct turns the phase another 90°");
-        setHelp (fq, "FREQ", "中心（またはカットオフ）周波数。上下ドラッグ、Shift で微調整、ダブルクリックで入力（2.5k など）", "Centre or cutoff frequency. Drag up/down, Shift for fine, double-click to type (e.g. 2.5k)");
-        setHelp (gn, "GAIN", "ブースト・カット量。上下ドラッグ、Shift で微調整、ダブルクリックで入力", "Boost or cut. Drag up/down, Shift for fine, double-click to type");
-        setHelp (qv, "Q", "帯域の幅。大きいほど狭い。Q 1 ≒ 1.4 オクターブ", "Bandwidth: higher is narrower. Q 1 ≈ 1.4 octaves");
-        setHelp (soloBtn, "BAND SOLO", "このバンドの帯域だけを聴く（グラフ上で Alt＋ドラッグ中も）。注意：音量が大きく変わるので、モニターを下げてから",
-                 "Hear only this band's region (also while Alt-dragging in the graph). Careful: the level changes a lot, turn the monitors down first");
-        setHelp (phaseSeg, "PHASE Min / Lin", "Min：最小位相（遅れなし、位相が回る）／Lin：リニア位相（位相は回らないが、プリリンギングが出る）。注意：Lin のバンドが1つでもあると全体が FIR 分遅れる。低域・高い Q・急なカットは Min 推奨",
-                 "Min: minimum phase (no delay, the phase turns) / Lin: linear phase (no phase shift, but pre-ringing). Careful: one Lin band delays everything by the FIR. Keep lows, high Q and steep cuts on Min");
-        setHelp (chSeg, "CH St / M / S", "St：左右両方／M：中央（Mid）だけ／S：左右の差（Side）だけ。注意：Side を持ち上げすぎるとモノラル再生で消える成分が増える。右の CORR が 0 を下回ったら控えめに",
-                 "St: both / M: centre (mid) only / S: the difference (side) only. Careful: big side boosts vanish in mono — back off if CORR on the right drops below 0");
-        setHelp (dynBtn, "DYN", "ダイナミック EQ。この帯域のレベルに合わせてゲインが動く。注意：Min のバンドで、Zero latency の時だけ働く", "Dynamic EQ: the gain follows this band's level. Careful: Min bands in Zero latency only");
-        setHelp (srcSeg, "DETECT In / SC / M / S", "何を聞いて動くか。In：入力（バンドの CH が Side なら Side、それ以外は Mid）／SC：ホストのサイドチェーン入力（例：ボーカルが入った時だけギターの 2〜4 kHz を下げる）／M：入力の Mid／S：入力の Side（例：Side が大きい時だけ効かせる）。M・S はバンドの CH 設定に関係なくその成分を聞く。注意：SC は Ableton ではデバイスのサイドチェーン欄で入力元を指定する。つないでいない間は灰色で、In と同じ動き",
-                 "What the band listens to. In: the input (the Side if the band's CH is Side, otherwise the Mid) / SC: the host's sidechain (e.g. dip guitars at 2–4 kHz only while the vocal sings) / M: the input's Mid / S: the input's Side (e.g. act only when the sides are loud). M and S ignore the band's CH setting. Careful: pick the SC source in the host's sidechain section; it is dimmed and acts like In until connected");
-        setHelp (th, "THR", "しきい値。ここを境に、上なら ABOVE、下なら BELOW の量だけ動く（KNEE の幅だけ離れると全量）。下の検出メーターの白い線をドラッグしても動かせる", "Threshold. Above it ABOVE applies, below it BELOW (full amount one KNEE width away). You can also drag the white line in the meter");
-        setHelp (at, "ATT", "検出器の立ち上がりの速さ（ms、0.5〜200、既定 5）。短いほどアタックにすぐ反応、長いほど短い音を見逃す。注意：短すぎると低域で波形に追従してゲインがひずむ", "How fast the detector rises (ms, 0.5–200, default 5). Short reacts to attacks at once, long lets short hits through. Careful: very short on lows follows the waveform and distorts the gain");
-        setHelp (rl, "REL", "検出器が下がる速さ（ms、5〜2000、既定 120）。長いほどゲインの戻りがゆっくり。注意：短いとポンピング、長いと次の音まで戻らない", "How fast the detector falls (ms, 5–2000, default 120). Long returns the gain slowly. Careful: short pumps, long may not recover before the next hit");
-        setHelp (kn, "KNEE", "しきい値から全量に達するまでの幅（dB、0〜24、既定 12）。0 はしきい値で一気に切り替わる（ハード）、大きいほどなだらか", "Distance from the threshold to the full amount (dB, 0–24, default 12). 0 switches hard at the threshold; larger is gentler");
-        setHelp (ta, "T/B ATTACK", "アタックと判定し始めてからマスクが上がり切るまでの速さ（ms、0.1〜2、既定 2）。小さいほどアタックの頭が Body 側に漏れにくい。下がる速さ（2 ms）は変わらない。全バンド共通。注意：小さすぎるとマスクが波形に反応してざらつくことがある",
-                 "How fast the mask rises once an attack is detected (ms, 0.1–2, default 2). Smaller keeps the front of the attack out of Body. The fall (2 ms) is unchanged. Shared by all bands. Careful: very small values can make the mask follow the waveform and sound grainy");
-        setHelp (sn, "T/B SENS", "Transient / Body の検出器の感度（dB、−12〜+12、既定 0）。＋にするとアタックと判定されやすく、−にすると本当に鋭い所だけがアタックになる。全バンド共通。スペアナの Trans / Body と SOLO T / B にも効く", "Sensitivity of the transient / body detector (dB, −12 to +12, default 0). Plus calls more of the sound attack; minus keeps only sharp hits. Shared by all bands; also affects the analyzer's Trans / Body and SOLO T / B");
-        setHelp (wd, "T/B WIDTH", "アタックとボディの境目の幅（dB、1〜18、既定 6）。小さいと 0 か 1 に切り替わる（ハード）、大きいと中間が増える。全バンド共通", "Width of the transition between body and attack (dB, 1–18, default 6). Small switches hard between 0 and 1; large keeps more in-between. Shared by all bands");
-        setHelp (rg, "ABOVE", "しきい値より大きい時の変化量。マイナス＝出過ぎた時だけ削る／プラス＝大きい時だけ持ち上げる", "Change when above the threshold. Negative: cut when it jumps out / positive: lift when loud");
-        setHelp (bl, "BELOW", "しきい値より小さい時の変化量。プラス＝小さい時だけ持ち上げる（アップワード）／マイナス＝小さい時は下げる（エキスパンダー的）。注意：プラスにすると無音部分のノイズも上がる。−60 dB 以下では反応しない",
-                 "Change when below the threshold. Positive lifts quiet passages (upward) / negative pushes them down (expander-like). Careful: positive also lifts noise; it ignores levels under −60 dB");
-        setHelp (tb, "TRANSIENT / BODY", "EQ の効きをアタックと余韻に配分する。左（TRANSIENT）に寄せるとアタックだけに効き、右（BODY）に寄せると余韻だけに効く。T・B の数字はそれぞれへの効きの割合（％）。ダブルクリックで中央。注意：差を極端にすると音量が揺れ、歪みやポンピングが出る。Min のバンド（Zero latency）だけ",
-                 "Splits the band's effect between attack and body. Left (TRANSIENT): the attack only; right (BODY): the body only. T and B show how much of the effect each gets (%). Double-click centres. Careful: extreme settings wobble the level and can pump. Min bands in Zero latency only");
-
+        kn.format = num;
         type.addItemList (typeNames(), 1);
-        slope.addItemList (slopeNames(), 1);
-        for (auto* c : { &type, &slope })
-        {
-            c->setColour (juce::ComboBox::backgroundColourId, theme::panel.withAlpha (0.33f));
-            c->setColour (juce::ComboBox::outlineColourId, theme::text.withAlpha (0.33f));
-            addAndMakeVisible (*c);
-        }
-        markReset (type); markReset (slope);
+        type.setColour (juce::ComboBox::backgroundColourId, theme::panel.withAlpha (0.33f));
+        type.setColour (juce::ComboBox::outlineColourId, theme::text.withAlpha (0.33f));
+        addAndMakeVisible (type);
+        markReset (type);
         type.onAlt = [this] { ph.resetDefault (pid::band (band, "type")); };
-        slope.onAlt = [this] { ph.resetDefault (pid::band (band, "slope")); };
         type.onChange  = [this] { ph.setGesture (pid::band (band, "type"), (float) (type.getSelectedId() - 1)); };
-        slope.onChange = [this] { ph.setGesture (pid::band (band, "slope"), (float) (slope.getSelectedId() - 1)); };
         fq.format = [] (float v) { return fmtHz (v); };  fq.parse = parseHz;
         gn.format = [] (float v) { return fmtDb (v); };
         qv.format = [] (float v) { return juce::String (v, v < 10 ? 2 : 1); };
-        for (auto* d : { &fq, &gn, &qv }) addAndMakeVisible (*d);
+        for (auto* d : { &fq, &gn, &qv }) { d->compact = full; addAndMakeVisible (*d); }
+        if (full)
+        {
+            for (auto* d : { &th, &rg, &bl, &at, &rl, &kn }) { d->compact = true; addAndMakeVisible (*d); }
+            for (auto* s : { &phaseSeg, &srcSeg }) addAndMakeVisible (*s);
+            addAndMakeVisible (dynBtn); addAndMakeVisible (scopeBtn);
+            srcSeg.itemOn = [this] (int i) { return i != 1 || ph.proc.sidechainConnected(); };   // SC needs the host's sidechain; Mid / Side always work
+            tb.setSliderStyle (juce::Slider::LinearHorizontal); tb.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
+            tb.setRange (-100.0, 100.0, 1.0); tb.setDoubleClickReturnValue (true, 0.0); markReset (tb);
+            tb.onDragStart = [this] { tbDrag = true; ph.proc.undo.beginNewTransaction(); ph.begin (pid::band (band, "tb")); };
+            tb.onDragEnd = [this] { tbDrag = false; ph.end (pid::band (band, "tb")); };
+            tb.onValueChange = [this]
+            {
+                if (refreshing) return;
+                if (tbDrag) ph.set (pid::band (band, "tb"), (float) tb.getValue());      // left (−) = Transient only, right (+) = Body only
+                else { ph.proc.undo.beginNewTransaction(); ph.setGesture (pid::band (band, "tb"), (float) tb.getValue()); }   // Option+click / double-click / wheel
+            };
+            addAndMakeVisible (tb);
+        }
+
+        if (full)
+            setHelp (*this, "BAND PANEL", "選択中のバンドのすべての設定。上の 1〜6：クリックで選択（選択中ならもう一度で浮き窓の表示切替）、ダブルクリックでオン・オフ（塗り＝オン、輪＝オフ）。キー 1〜6 でも選べる",
+                     "Every setting of the selected band. Tabs 1–6: click to select (click the selected one again to show or hide the floating panel), double-click to switch on/off (filled = on, ring = off). Keys 1–6 select too");
+        else
+            setHelp (*this, "BAND", "左の色の丸でバンドのオン・オフ（塗り＝オン、輪＝オフ）。上の帯をドラッグで移動、ダブルクリックで点に付いて動く表示に戻す。右クリックで浮き窓を隠す",
+                     "The coloured dot switches the band (filled = on, ring = off). Drag the top strip to move the panel, double-click it to follow the dot again. Right-click hides the panel");
+        setHelp (type, "TYPE", "フィルターの種類。Bell・Shelf・Cut・Notch・All-pass", "Filter type: bell, shelf, cut, notch or all-pass");
+        setHelp (slopeBtn, "SLOPE", "傾き。カット：6〜48 dB/oct（6 dB/oct 増えるごとに位相が 90° 多く回る）／シェルフ：6 dB/oct（1次。なだらかで位相の回りが小さい。Q は効かない）か 12 dB/oct（2次。従来のシェルフ、Q で肩が出る）。Bell・Notch・All-pass にはない",
+                 "Slope. Cuts: 6–48 dB/oct (each extra 6 dB/oct turns the phase another 90°) / shelves: 6 dB/oct (first order: gentle, less phase shift, Q has no effect) or 12 dB/oct (second order: the original shelf, Q adds a shoulder). Not used by bell, notch or all-pass");
+        setHelp (fq, "FREQ", "中心（またはカットオフ）周波数。上下ドラッグ、Shift で微調整、ダブルクリックで入力（2.5k など）", "Centre or cutoff frequency. Drag up/down, Shift for fine, double-click to type (e.g. 2.5k)");
+        setHelp (gn, "GAIN", "ブースト・カット量（±30 dB）。上下ドラッグ、Shift で微調整、ダブルクリックで入力", "Boost or cut (±30 dB). Drag up/down, Shift for fine, double-click to type");
+        setHelp (qv, "Q", "帯域の幅。大きいほど狭い。Q 1 ≒ 1.4 オクターブ", "Bandwidth: higher is narrower. Q 1 ≈ 1.4 octaves");
+        setHelp (soloBtn, "BAND SOLO", "このバンドの帯域だけを聴く（グラフ上で Alt＋ドラッグ中も）。注意：音量が大きく変わるので、モニターを下げてから",
+                 "Hear only this band's region (also while Alt-dragging in the graph). Careful: the level changes a lot, turn the monitors down first");
+        setHelp (chBtn, "CH Stereo / Mid / Side", "どのチャンネルに掛けるか。Stereo：左右両方／Mid：中央だけ／Side：左右の差だけ。注意：Side を持ち上げすぎるとモノラル再生で消える成分が増える。右の CORR が 0 を下回ったら控えめに",
+                 "Which channel the band acts on. Stereo: both / Mid: the centre only / Side: the difference only. Careful: big side boosts vanish in mono — back off if CORR on the right drops below 0");
+        setHelp (phaseSeg, "PHASE Min / Lin", "Min：最小位相（遅れなし、位相が回る）／Lin：リニア位相（位相は回らないが、プリリンギングが出る）。注意：Lin のバンドが1つでもあると全体が FIR 分遅れる。低域・高い Q・急なカットは Min 推奨",
+                 "Min: minimum phase (no delay, the phase turns) / Lin: linear phase (no phase shift, but pre-ringing). Careful: one Lin band delays everything by the FIR. Keep lows, high Q and steep cuts on Min");
+        setHelp (dynBtn, "DYN", "ダイナミック EQ。この帯域のレベルに合わせてゲインが動く。注意：Min のバンドで、Zero latency の時だけ働く", "Dynamic EQ: the gain follows this band's level. Careful: Min bands in Zero latency only");
+        setHelp (srcSeg, "DETECT In / SC / M / S", "何を聞いて動くか。In：入力（バンドの CH が Side なら Side、それ以外は Mid）／SC：ホストのサイドチェーン入力（例：ボーカルが入った時だけギターの 2〜4 kHz を下げる）／M：入力の Mid／S：入力の Side（例：Side が大きい時だけ効かせる）。M・S はバンドの CH 設定に関係なくその成分を聞く。注意：SC は Ableton ではデバイスのサイドチェーン欄で入力元を指定する。つないでいない間は灰色で、In と同じ動き",
+                 "What the band listens to. In: the input (the Side if the band's CH is Side, otherwise the Mid) / SC: the host's sidechain (e.g. dip guitars at 2–4 kHz only while the vocal sings) / M: the input's Mid / S: the input's Side (e.g. act only when the sides are loud). M and S ignore the band's CH setting. Careful: pick the SC source in the host's sidechain section; it is dimmed and acts like In until connected");
+        setHelp (th, "THR", "しきい値。ここを境に、上なら ABOVE、下なら BELOW の量だけ動く（KNEE の幅だけ離れると全量）。上の検出メーターの白い線をドラッグしても動かせる", "Threshold. Above it ABOVE applies, below it BELOW (full amount one KNEE width away). You can also drag the white line in the meter");
+        setHelp (at, "ATT", "検出器の立ち上がりの速さ（ms、0.5〜200、既定 5）。短いほどアタックにすぐ反応、長いほど短い音を見逃す。注意：短すぎると低域で波形に追従してゲインがひずむ", "How fast the detector rises (ms, 0.5–200, default 5). Short reacts to attacks at once, long lets short hits through. Careful: very short on lows follows the waveform and distorts the gain");
+        setHelp (rl, "REL", "検出器が下がる速さ（ms、5〜2000、既定 120）。長いほどゲインの戻りがゆっくり。注意：短いとポンピング、長いと次の音まで戻らない", "How fast the detector falls (ms, 5–2000, default 120). Long returns the gain slowly. Careful: short pumps, long may not recover before the next hit");
+        setHelp (kn, "KNEE", "しきい値から全量に達するまでの幅（dB、0〜24、既定 12）。0 はしきい値で一気に切り替わる（ハード）、大きいほどなだらか", "Distance from the threshold to the full amount (dB, 0–24, default 12). 0 switches hard at the threshold; larger is gentler");
+        setHelp (rg, "ABOVE", "しきい値より大きい時の変化量。マイナス＝出過ぎた時だけ削る／プラス＝大きい時だけ持ち上げる", "Change when above the threshold. Negative: cut when it jumps out / positive: lift when loud");
+        setHelp (bl, "BELOW", "しきい値より小さい時の変化量。プラス＝小さい時だけ持ち上げる（アップワード）／マイナス＝小さい時は下げる（エキスパンダー的）。注意：プラスにすると無音部分のノイズも上がる。−60 dB 以下では反応しない",
+                 "Change when below the threshold. Positive lifts quiet passages (upward) / negative pushes them down (expander-like). Careful: positive also lifts noise; it ignores levels under −60 dB");
+        setHelp (tb, "TRANSIENT / BODY", "EQ の効きをアタックと余韻に配分する。左（TRANS）に寄せるとアタックだけに効き、右（BODY）に寄せると余韻だけに効く。T・B の数字はそれぞれへの効きの割合（％）。ダブルクリックで中央。注意：差を極端にすると音量が揺れ、歪みやポンピングが出る。Min のバンド（Zero latency）だけ",
+                 "Splits the band's effect between attack and body. Left (TRANS): the attack only; right (BODY): the body only. T and B show how much of the effect each gets (%). Double-click centres. Careful: extreme settings wobble the level and can pump. Min bands in Zero latency only");
+        setHelp (scopeBtn, "T/B SCOPE", "入力をアタック（Transient）と胴（Body）に色分けしてスクロール表示し、検出器の SENS・WIDTH・ATTACK・方式・検出用 EQ を調整する（全バンド共通）。開くとグラフは自動で Split になり、閉じると元の表示に戻る",
+                 "Scrolls the input coloured by attack (Transient) and body, and holds the detector's SENS, WIDTH, ATTACK, method and detector EQ (shared by all bands). Opening it switches the graph to Split; closing it restores the previous view");
     }
+
     void refresh (int b)
     {
         refreshing = true;
@@ -304,47 +313,68 @@ public:
         const int t = (int) ph.value (pid::band (b, "type"));
         if (type.getSelectedId() != t + 1) type.setSelectedId (t + 1, juce::dontSendNotification);
         const int s = (int) ph.value (pid::band (b, "slope"));
-        if (slope.getSelectedId() != s + 1) slope.setSelectedId (s + 1, juce::dontSendNotification);
         const bool cut = t == (int) eqcore::Type::LowCut || t == (int) eqcore::Type::HighCut;
+        const bool shelf = t == (int) eqcore::Type::LowShelf || t == (int) eqcore::Type::HighShelf;
         const bool noGain = cut || t == (int) eqcore::Type::Notch || t == (int) eqcore::Type::AllPass;
-        slope.setVisible (cut); gn.setVisible (! noGain);
+        static const char* shortSlope[] = { "6 dB", "12 dB", "18 dB", "24 dB", "36 dB", "48 dB" };
+        const juce::String sv = cut ? (full ? juce::String (shortSlope[juce::jlimit (0, 5, s)]) : slopeNames()[juce::jlimit (0, 5, s)])
+                              : shelf ? juce::String (s == 0 ? (full ? "6 dB" : "6 dB/oct") : (full ? "12 dB" : "12 dB/oct"))
+                              : juce::String::fromUTF8 ("\xe2\x80\x94");
+        slopeBtn.setButtonText ((full ? juce::String() : juce::String ("SLOPE  ")) + sv + (cut || shelf ? juce::String::fromUTF8 (" \xe2\x96\xb8") : juce::String()));
+        slopeBtn.setEnabled (cut || shelf);
+        static const char* chLong[] = { "Stereo", "Mid", "Side" };
+        static const char* chShort[] = { "St", "M", "S" };
+        const int ch = juce::jlimit (0, 2, (int) ph.value (pid::band (b, "ch")));
+        chBtn.setButtonText (juce::String ("CH  ") + (full ? chShort[ch] : chLong[ch]) + juce::String::fromUTF8 (" \xe2\x96\xb8"));
+        gn.setAlpha (noGain ? 0.35f : 1.0f); gn.setEnabled (! noGain);
         fq.setParam (pid::band (b, "freq")); gn.setParam (pid::band (b, "gain")); qv.setParam (pid::band (b, "q"));
+        qv.setAlpha (shelf && s == 0 ? 0.35f : 1.0f);         // a first-order shelf has no Q
         gn.valueColour = theme::bandColour (b);
         const bool bandOn = ph.value (pid::band (b, "on")) > 0.5f;
-        for (auto* c : { (juce::Component*) &fq, (juce::Component*) &gn, (juce::Component*) &qv, (juce::Component*) &type, (juce::Component*) &slope })
+        for (auto* c : { (juce::Component*) &fq, (juce::Component*) &type, (juce::Component*) &slopeBtn, (juce::Component*) &chBtn })
             c->setAlpha (bandOn ? 1.0f : 0.45f);
-        phaseSeg.setParam (pid::band (b, "phase")); chSeg.setParam (pid::band (b, "ch")); srcSeg.setParam (pid::band (b, "src"));
-        for (auto* sg : { &phaseSeg, &chSeg, &srcSeg }) sg->onColour = theme::bandColour (b);
-        const bool linForced = ph.proc.currentMode() == eqcore::Mode::Linear;
-        phaseSeg.enabled = [linForced] { return ! linForced; };
-        // dynamics and transient/body: bells and shelves, zero-latency min bands
-        dynType = t == (int) eqcore::Type::Bell || t == (int) eqcore::Type::LowShelf || t == (int) eqcore::Type::HighShelf;
-        const bool avail = ph.proc.dynAvailable (b);
-        const bool dOn = ph.value (pid::band (b, "dyn")) > 0.5f;
-        dynBtn.setToggleState (dOn, juce::dontSendNotification);
-        th.setParam (pid::band (b, "thr")); rg.setParam (pid::band (b, "range")); bl.setParam (pid::band (b, "below"));
-        at.setParam (pid::band (b, "att")); rl.setParam (pid::band (b, "rel")); kn.setParam (pid::band (b, "knee"));
-        for (auto* c : { (juce::Component*) &dynBtn, (juce::Component*) &th, (juce::Component*) &rg, (juce::Component*) &bl, (juce::Component*) &srcSeg,
-                         (juce::Component*) &at, (juce::Component*) &rl, (juce::Component*) &kn })
-        { c->setVisible (dynType); c->setAlpha (dOn && avail ? 1.0f : 0.45f); }
-        for (auto* c : { (juce::Component*) &sn, (juce::Component*) &wd }) { c->setVisible (dynType); c->setAlpha (avail ? 1.0f : 0.45f); }
-        dynBtn.setAlpha (avail ? 1.0f : 0.45f);
-        tb.setAlpha (avail ? 1.0f : 0.4f);
-        tb.setColour (juce::Slider::thumbColourId, theme::bandColour (b));
-        tb.setColour (juce::Slider::trackColourId, theme::bandColour (b).withAlpha (0.4f));
-        if (! tb.isMouseButtonDown()) tb.setValue (ph.value (pid::band (b, "tb")), juce::dontSendNotification);
+        if (! bandOn) { gn.setAlpha (0.45f); qv.setAlpha (0.45f); }
+        if (! (cut || shelf)) slopeBtn.setAlpha (0.35f);
         soloBtn.setToggleState (ph.proc.soloBand.load() == b, juce::dontSendNotification);
         soloBtn.setColour (juce::TextButton::buttonOnColourId, theme::pre);
-        for (auto* c : { &type, &slope })
-        { c->setColour (juce::ComboBox::backgroundColourId, theme::panel.withAlpha (0.33f)); c->setColour (juce::ComboBox::outlineColourId, theme::text.withAlpha (0.33f)); }
+        type.setColour (juce::ComboBox::backgroundColourId, theme::panel.withAlpha (0.33f)); type.setColour (juce::ComboBox::outlineColourId, theme::text.withAlpha (0.33f));
+        if (full)
+        {
+            phaseSeg.setParam (pid::band (b, "phase")); srcSeg.setParam (pid::band (b, "src"));
+            for (auto* sg : { &phaseSeg, &srcSeg }) sg->onColour = theme::bandColour (b);
+            const bool linForced = ph.proc.currentMode() == eqcore::Mode::Linear;
+            phaseSeg.enabled = [linForced] { return ! linForced; };
+            // dynamics and transient/body: bells and shelves, zero-latency min bands
+            dynType = t == (int) eqcore::Type::Bell || t == (int) eqcore::Type::LowShelf || t == (int) eqcore::Type::HighShelf;
+            const bool avail = ph.proc.dynAvailable (b);
+            const bool dOn = ph.value (pid::band (b, "dyn")) > 0.5f;
+            dynBtn.setToggleState (dOn, juce::dontSendNotification);
+            th.setParam (pid::band (b, "thr")); rg.setParam (pid::band (b, "range")); bl.setParam (pid::band (b, "below"));
+            at.setParam (pid::band (b, "att")); rl.setParam (pid::band (b, "rel")); kn.setParam (pid::band (b, "knee"));
+            for (auto* c : { (juce::Component*) &dynBtn, (juce::Component*) &th, (juce::Component*) &rg, (juce::Component*) &bl, (juce::Component*) &srcSeg,
+                             (juce::Component*) &at, (juce::Component*) &rl, (juce::Component*) &kn, (juce::Component*) &tb })
+                c->setVisible (dynType);
+            for (auto* c : { (juce::Component*) &th, (juce::Component*) &rg, (juce::Component*) &bl, (juce::Component*) &srcSeg,
+                             (juce::Component*) &at, (juce::Component*) &rl, (juce::Component*) &kn })
+                c->setAlpha (dOn && avail ? 1.0f : 0.45f);
+            dynBtn.setAlpha (avail ? 1.0f : 0.45f);
+            tb.setAlpha (avail ? 1.0f : 0.4f);
+            tb.setColour (juce::Slider::thumbColourId, theme::bandColour (b));
+            tb.setColour (juce::Slider::trackColourId, theme::bandColour (b).withAlpha (0.4f));
+            if (! tb.isMouseButtonDown()) tb.setValue (ph.value (pid::band (b, "tb")), juce::dontSendNotification);
+            scopeBtn.setToggleState ((bool) ph.proc.uiState.getProperty ("scope", false), juce::dontSendNotification);
+            for (auto* d : { &th, &rg, &bl, &at, &rl, &kn }) d->repaint();
+            for (auto* sg : { &phaseSeg, &srcSeg }) sg->repaint();
+        }
         resized();
-        for (auto* d : { &fq, &gn, &qv, &th, &rg, &bl, &at, &rl, &kn, &sn, &wd }) d->repaint();
-        for (auto* sg : { &phaseSeg, &chSeg, &srcSeg }) sg->repaint();
+        for (auto* d : { &fq, &gn, &qv }) d->repaint();
         repaint();
         refreshing = false;
     }
-    juce::Rectangle<int> dotArea() const { return { 12, 12, 13, 13 }; }
-    void hidePanel() { ph.proc.uiState.setProperty ("popup", false, nullptr); }
+    juce::Rectangle<int> dotArea() const { return full ? juce::Rectangle<int>() : juce::Rectangle<int> { 22, 7, 12, 12 }; }
+    juce::Rectangle<int> stripArea() const { return { 0, 0, getWidth(), 26 }; }
+    juce::Rectangle<int> tabArea (int i) const { return { 7 + i * 25, 4, 22, 18 }; }
+    void hidePanel() { if (! full) ph.proc.uiState.setProperty ("popup", false, nullptr); }
     // the white threshold line in the detector meter can be dragged (±5 px wide hit area, one gesture per drag)
     float thrX() const
     {
@@ -353,18 +383,28 @@ public:
     }
     bool overThr (juce::Point<int> p) const
     {
-        return dynType && meterArea.expanded (0, 5).contains (p) && std::abs ((float) p.x - thrX()) <= 5.0f;
+        return full && dynType && meterArea.expanded (0, 5).contains (p) && std::abs ((float) p.x - thrX()) <= 5.0f;
     }
     void mouseDown (const juce::MouseEvent& e) override
     {
         if (e.mods.isPopupMenu()) { hidePanel(); return; }
+        if (full)
+        {
+            for (int i = 0; i < 6; ++i)
+                if (tabArea (i).contains (e.getPosition()))
+                {
+                    if (e.getNumberOfClicks() >= 2) return;            // the double-click handles it
+                    ph.proc.undo.beginNewTransaction();
+                    clickTab (i); return;
+                }
+        }
         if (overThr (e.getPosition()))
         {
             if (auto* p = ph.get (pid::band (band, "thr")))
             { p->beginChangeGesture(); thrDrag = true; thrStartDb = ph.value (pid::band (band, "thr")); thrStartX = e.getScreenPosition().x; repaint(); }
             return;
         }
-        if (dotArea().expanded (5).contains (e.getPosition()))
+        if (! full && dotArea().expanded (5).contains (e.getPosition()))
         {
             const bool on = ph.value (pid::band (band, "on")) > 0.5f;
             ph.proc.undo.beginNewTransaction();
@@ -372,10 +412,29 @@ public:
             if (e.mods.isAltDown()) ph.resetDefault (pid::band (band, "on")); else
             ph.setGesture (pid::band (band, "on"), on ? 0.0f : 1.0f);
             repaint();
+            return;
+        }
+        if (! full && stripArea().contains (e.getPosition()))
+        {
+            // move the panel: screen coordinates, so the panel's own movement does not feed back
+            moving = true; moveStart = getPosition(); moveFrom = e.getScreenPosition();
+            setMouseCursor (juce::MouseCursor::DraggingHandCursor);
         }
     }
     void mouseDrag (const juce::MouseEvent& e) override
     {
+        if (moving)
+        {
+            if (auto* p = getParentComponent())
+            {
+                const auto d = e.getScreenPosition() - moveFrom;
+                const int x = juce::jlimit (4, p->getWidth() - getWidth() - 4, moveStart.x + d.x), y = juce::jlimit (4, p->getHeight() - getHeight() - 4, moveStart.y + d.y);
+                setTopLeftPosition (x, y);
+                auto& ui = ph.proc.uiState;
+                ui.setProperty ("popPinned", true, nullptr); ui.setProperty ("popX", x, nullptr); ui.setProperty ("popY", y, nullptr);
+            }
+            return;
+        }
         if (! thrDrag) return;
         // screen coordinates, like DragValue: the panel must not feed back into the measurement
         const float db = juce::jlimit (-60.0f, 0.0f, thrStartDb + (float) (e.getScreenPosition().x - thrStartX) * 60.0f / (float) std::max (1, meterArea.getWidth()));
@@ -383,42 +442,103 @@ public:
     }
     void mouseUp (const juce::MouseEvent&) override
     {
+        if (moving) { moving = false; setMouseCursor (juce::MouseCursor::NormalCursor); return; }
         if (! thrDrag) return;
         ph.end (pid::band (band, "thr")); thrDrag = false; repaint();
+    }
+    void mouseDoubleClick (const juce::MouseEvent& e) override
+    {
+        if (full)
+        {
+            for (int i = 0; i < 6; ++i)
+                if (tabArea (i).contains (e.getPosition()))
+                {
+                    auto& ui = ph.proc.uiState;
+                    if (toggledPopup) ui.setProperty ("popup", ! (bool) ui.getProperty ("popup", true), nullptr);   // undo the first click's toggle
+                    toggledPopup = false;
+                    const bool on = ph.value (pid::band (i, "on")) > 0.5f;
+                    if (on) ui.setProperty ("keepOff", i, nullptr);
+                    ph.setGesture (pid::band (i, "on"), on ? 0.0f : 1.0f);
+                    repaint(); return;
+                }
+            return;
+        }
+        // double-click the strip: follow the dot again
+        if (stripArea().contains (e.getPosition()) && ! dotArea().expanded (5).contains (e.getPosition()))
+            ph.proc.uiState.setProperty ("popPinned", false, nullptr);
     }
     void mouseMove (const juce::MouseEvent& e) override
     {
         const bool o = dotArea().expanded (5).contains (e.getPosition()), t = overThr (e.getPosition());
-        setMouseCursor (o ? juce::MouseCursor::PointingHandCursor : t ? juce::MouseCursor::LeftRightResizeCursor : juce::MouseCursor::NormalCursor);
+        const bool strip = ! full && ! o && stripArea().contains (e.getPosition());
+        setMouseCursor (o ? juce::MouseCursor::PointingHandCursor : t ? juce::MouseCursor::LeftRightResizeCursor
+                          : strip ? juce::MouseCursor::DraggingHandCursor : juce::MouseCursor::NormalCursor);
         if (o != dotOver || t != thrOver) { dotOver = o; thrOver = t; repaint(); }
     }
     void mouseExit (const juce::MouseEvent&) override { if (dotOver || thrOver) { dotOver = thrOver = false; repaint(); } }
-    bool isBusy() const { return thrDrag || fq.isBusy() || gn.isBusy() || qv.isBusy() || th.isBusy() || rg.isBusy() || bl.isBusy()
-                              || at.isBusy() || rl.isBusy() || kn.isBusy() || sn.isBusy() || wd.isBusy() || tb.isMouseButtonDown(); }
-    int idealHeight() const { return dynType ? 268 : 112; }
+    bool isBusy() const { return moving || thrDrag || fq.isBusy() || gn.isBusy() || qv.isBusy() || th.isBusy() || rg.isBusy() || bl.isBusy()
+                              || at.isBusy() || rl.isBusy() || kn.isBusy() || tb.isMouseButtonDown(); }
+    static constexpr int compactW = 270, compactH = 100;
+    int idealHeight() const { return compactH; }
     void paint (juce::Graphics& g) override
     {
         auto r = getLocalBounds().toFloat().reduced (0.5f);
-        g.setColour (theme::popup.withAlpha (0.86f)); g.fillRoundedRectangle (r, 8.0f);
-        g.setColour (theme::text.withAlpha (0.18f)); g.drawRoundedRectangle (r, 8.0f, 1.0f);
         const bool bandOn = ph.value (pid::band (band, "on")) > 0.5f;
-        const auto d = dotArea().toFloat();
-        if (dotOver) { g.setColour (theme::hilite (0.13f)); g.fillEllipse (d.expanded (4.0f)); }
-        g.setColour (theme::bandColour (band));
-        if (bandOn) g.fillEllipse (d); else g.drawEllipse (d.reduced (0.75f), 1.5f);
-        g.setColour (bandOn ? theme::text : theme::muted); g.setFont (theme::ui (12.0f, true));
-        g.drawText ("B" + juce::String (band + 1), 30, 8, 30, 20, juce::Justification::centredLeft);
+        if (! full)
+        {
+            g.setColour (theme::popup.withAlpha (0.86f)); g.fillRoundedRectangle (r, 8.0f);
+            // the drag strip
+            juce::Path strip; strip.addRoundedRectangle (r.getX(), r.getY(), r.getWidth(), 26.0f, 8.0f, 8.0f, true, true, false, false);
+            g.setColour (theme::hilite (0.06f)); g.fillPath (strip);
+            g.setColour (theme::text.withAlpha (0.12f)); g.drawHorizontalLine (26, 1.0f, r.getRight() - 1.0f);
+            g.setColour (theme::text.withAlpha (0.18f)); g.drawRoundedRectangle (r, 8.0f, 1.0f);
+            g.setColour (theme::faint);
+            for (int k = 0; k < 3; ++k) for (int c = 0; c < 2; ++c) g.fillEllipse (8.0f + c * 4.0f, 8.0f + k * 4.0f, 2.0f, 2.0f);
+            const auto d = dotArea().toFloat();
+            if (dotOver) { g.setColour (theme::hilite (0.13f)); g.fillEllipse (d.expanded (4.0f)); }
+            g.setColour (theme::bandColour (band));
+            if (bandOn) g.fillEllipse (d); else g.drawEllipse (d.reduced (0.75f), 1.5f);
+            g.setColour (bandOn ? theme::text : theme::muted); g.setFont (theme::ui (12.0f, true));
+            g.drawText ("B" + juce::String (band + 1), 38, 3, 24, 20, juce::Justification::centredLeft);
+            return;
+        }
+        // ---- detail panel
+        g.setColour (theme::panel); g.fillRoundedRectangle (r, 6.0f);
+        g.setColour (theme::line); g.drawRoundedRectangle (r, 6.0f, 1.0f);
+        for (int i = 0; i < 6; ++i)
+        {
+            const auto a = tabArea (i).toFloat();
+            const bool on = ph.value (pid::band (i, "on")) > 0.5f, sel = i == band;
+            if (sel) { g.setColour (theme::bandColour (i).withAlpha (0.18f)); g.fillRoundedRectangle (a, 3.0f); }
+            g.setColour (sel ? theme::bandColour (i) : theme::line); g.drawRoundedRectangle (a.reduced (0.5f), 3.0f, sel ? 1.5f : 1.0f);
+            const juce::Rectangle<float> dd (a.getX() + 3, a.getY() + 3, 5, 5);
+            g.setColour (theme::bandColour (i));
+            if (on) g.fillEllipse (dd); else g.drawEllipse (dd, 1.0f);
+            g.setColour (sel ? theme::text : on ? theme::text.withAlpha (0.8f) : theme::muted); g.setFont (theme::mono (10.5f, true));
+            g.drawText (juce::String (i + 1), a.withTrimmedLeft (5), juce::Justification::centred);
+        }
+        {
+            // tags of the selected band, right of the tabs
+            juce::StringArray tg;
+            if (bandOn && ph.proc.bandIsLin (band)) tg.add ("Lin");
+            if (bandOn && ph.value (pid::band (band, "dyn")) > 0.5f) tg.add ("D");
+            if (bandOn && std::abs (ph.value (pid::band (band, "tb"))) > 0.5f) tg.add ("T/B");
+            g.setColour (bandOn ? theme::bandColour (band) : theme::muted); g.setFont (theme::mono (9.0f, true));
+            g.drawText (bandOn ? tg.joinIntoString (" ") : juce::String ("off"), 158, 4, getWidth() - 214, 18, juce::Justification::centredRight);
+        }
+        g.setColour (theme::text.withAlpha (0.12f)); g.drawHorizontalLine (rowSep, 7.0f, (float) getWidth() - 7.0f);
         g.setColour (theme::muted); g.setFont (theme::ui (9.5f));
-        g.drawText ("PHASE", 10, rowPhase, 40, 22, juce::Justification::centredLeft);
-        g.drawText ("CH", 152, rowPhase, 24, 22, juce::Justification::centredLeft);
-        if (! dynType) return;
-        g.drawText ("TRANSIENT", 10, rowTB, 60, 20, juce::Justification::centredLeft);
-        g.drawText ("BODY", getWidth() - 46, rowTB, 36, 20, juce::Justification::centredRight);
-        g.setColour (theme::text.withAlpha (0.14f)); g.drawHorizontalLine (rowDet - 5, 10.0f, (float) getWidth() - 10.0f);
-        g.setColour (theme::muted); g.setFont (theme::ui (9.5f));
-        g.drawText ("T/B DETECTOR", 10, rowDet, 80, 30, juce::Justification::centredLeft);
-        g.setColour (theme::faint);
-        g.drawText ("all bands", 272, rowDet, getWidth() - 282, 30, juce::Justification::centredLeft);
+        g.drawText ("PHASE", 7, rowPhase, 38, 20, juce::Justification::centredLeft);
+        if (! dynType)
+        {
+            g.setColour (theme::faint); g.setFont (theme::ui (9.5f));
+            g.drawFittedText (ph.tr ("DYN と TRANSIENT / BODY は Bell と Shelf のバンドだけ", "DYN and TRANSIENT / BODY: bell and shelf bands only"),
+                              juce::Rectangle<int> (7, meterArea.getY(), getWidth() - 14, 30), juce::Justification::centredLeft, 2);
+            return;
+        }
+        g.setColour (theme::muted); g.setFont (theme::ui (9.0f));
+        g.drawText ("TRANS", 7, rowTB, 34, 22, juce::Justification::centredLeft);
+        g.drawText ("BODY", tb.getRight() + 2, rowTB, 30, 22, juce::Justification::centredLeft);
         // detector meter: this band's level vs threshold, and the gain it is applying now
         auto m = meterArea.toFloat();
         const bool dOn = ph.value (pid::band (band, "dyn")) > 0.5f, live = dOn && ph.proc.dynAvailable (band);
@@ -428,59 +548,101 @@ public:
         {
             const float lv = ph.proc.detLevelDb[(size_t) band].load();
             g.setColour (theme::bandColour (band).withAlpha (0.8f));
-            g.fillRoundedRectangle (m.withRight (xOfDb (lv)).reduced (0, 3), 2.0f);
+            g.fillRoundedRectangle (m.withRight (xOfDb (lv)).reduced (0, 2), 2.0f);
         }
         const float tx = xOfDb (ph.value (pid::band (band, "thr")));
         const bool grab = thrOver || thrDrag;
         g.setColour (theme::text); g.fillRect (tx - (grab ? 1.5f : 1.0f), m.getY(), grab ? 3.0f : 2.0f, m.getHeight());
         g.fillRoundedRectangle (tx - 2.5f, m.getY() - 2.0f, 5.0f, 3.0f, 1.0f);                       // a small grip: this line is draggable
         g.fillRoundedRectangle (tx - 2.5f, m.getBottom() - 1.0f, 5.0f, 3.0f, 1.0f);
-        g.setFont (theme::mono (9.5f));
+        g.setFont (theme::mono (8.5f));
+        const auto txtR = meterArea.withY (meterArea.getBottom() + 1).withHeight (10);
         if (! ph.proc.dynAvailable (band))
-        { g.setColour (theme::pre); g.drawText (juce::String ("ZL + Min only"), meterArea.translated (0, 14).withHeight (12), juce::Justification::centredLeft); }
+        { g.setColour (theme::pre); g.drawText (juce::String ("ZL + Min only"), txtR, juce::Justification::centredRight); }
         else
         {
             g.setColour (theme::muted);
-            g.drawText (live ? juce::String ("now ") + fmtDb (ph.proc.dynGainDb[(size_t) band].load()) + " dB" : juce::String ("detector"),
-                        meterArea.translated (0, 14).withHeight (12), juce::Justification::centredLeft);
+            g.drawText (live ? juce::String ("now ") + fmtDb (ph.proc.dynGainDb[(size_t) band].load()) + " dB" : juce::String ("detector"), txtR, juce::Justification::centredRight);
         }
         const float v = ph.value (pid::band (band, "tb"));
-        g.setColour (theme::text); g.setFont (theme::mono (9.5f, true));
+        g.setColour (theme::text); g.setFont (theme::mono (8.5f, true));
         g.drawText ("T" + juce::String ((int) std::round (v > 0 ? 100 - v : 100)) + " / B" + juce::String ((int) std::round (v < 0 ? 100 + v : 100)),
-                    getWidth() - 110, rowTB - 12, 100, 12, juce::Justification::centredRight);
+                    txtR.withX (7).withWidth (100), juce::Justification::centredLeft);
     }
     void resized() override
     {
-        type.setBounds (64, 8, slope.isVisible() ? 104 : 168, 22);
-        slope.setBounds (172, 8, 72, 22);
-        soloBtn.setBounds (getWidth() - 58, 8, 48, 22);
-        const int w = (getWidth() - 26) / 3, y = 36, h = 40;
-        fq.setBounds (10, y, w, h);
-        if (gn.isVisible()) { gn.setBounds (13 + w, y, w, h); qv.setBounds (16 + 2 * w, y, w, h); }
-        else qv.setBounds (13 + w, y, w, h);
-        rowPhase = 82;
-        phaseSeg.setBounds (52, rowPhase, 90, 22);
-        chSeg.setBounds (176, rowPhase, getWidth() - 186, 22);
-        // DYN: row 4 = on / detector input / level meter; row 5 = the six numbers
-        const int y4 = 112, y5 = 148;
-        dynBtn.setBounds (10, y4 + 2, 40, 24);
-        srcSeg.setBounds (54, y4 + 3, 112, 22);
-        meterArea = { 174, y4 + 2, getWidth() - 184, 14 };
-        const int cw = 46, gap = (getWidth() - 20 - 6 * cw) / 5;
+        if (! full)
+        {
+            type.setBounds (64, 3, 132, 20);
+            soloBtn.setBounds (getWidth() - 60, 3, 52, 20);
+            const int w = (getWidth() - 24) / 3, y = 31, h = 38;
+            fq.setBounds (8, y, w, h); gn.setBounds (12 + w, y, w, h); qv.setBounds (16 + 2 * w, y, w, h);
+            const int bw = (getWidth() - 20) / 2;
+            slopeBtn.setBounds (8, 74, bw, 20); chBtn.setBounds (12 + bw, 74, bw, 20);
+            return;
+        }
+        // detail panel, 248 × 218
+        soloBtn.setBounds (getWidth() - 50, 4, 44, 18);
+        type.setBounds (7, 26, 96, 20);
+        slopeBtn.setBounds (106, 26, 64, 20);
+        chBtn.setBounds (173, 26, getWidth() - 180, 20);
+        const int w = (getWidth() - 20) / 3;
+        fq.setBounds (7, 50, w, 30); gn.setBounds (10 + w, 50, w, 30); qv.setBounds (13 + 2 * w, 50, w, 30);
+        rowSep = 85; rowPhase = 89;
+        phaseSeg.setBounds (44, rowPhase, 62, 20);
+        dynBtn.setBounds (112, rowPhase - 1, 38, 22);
+        srcSeg.setBounds (154, rowPhase, getWidth() - 161, 20);
+        meterArea = { 7, 113, getWidth() - 14, 8 };
         DragValue* dv[] = { &th, &rg, &bl, &at, &rl, &kn };
-        for (int k = 0; k < 6; ++k) dv[k]->setBounds (10 + k * (cw + gap), y5, cw, 36);
-        // TRANSIENT / BODY slider, then the detector that feeds it (shared by all bands)
-        rowTB = 204; rowDet = 232;
-        tb.setBounds (70, rowTB, getWidth() - 70 - 50, 20);
-        sn.setBounds (92, rowDet, 56, 30); wd.setBounds (152, rowDet, 56, 30); ta.setBounds (212, rowDet, 56, 30);
+        for (int k = 0; k < 6; ++k) dv[k]->setBounds (7 + (k % 3) * (w + 3), 134 + (k / 3) * 30, w, 28);
+        rowTB = 192;
+        tb.setBounds (40, rowTB, getWidth() - 40 - 112, 22);
+        scopeBtn.setBounds (getWidth() - 74, rowTB + 1, 67, 20);
     }
 private:
-    ParamHelp& ph; int band = 0;
-    ResetCombo type, slope; DragValue fq, gn, qv, th, rg, bl, at, rl, kn, sn, wd, ta;
-    Seg phaseSeg, chSeg, srcSeg;
-    juce::TextButton dynBtn, soloBtn; juce::Slider tb;
-    bool tbDrag = false, dynType = true, dotOver = false, thrOver = false, thrDrag = false, refreshing = false; juce::Rectangle<int> meterArea; int rowPhase = 82, rowTB = 202, rowDet = 230;
+    void clickTab (int i)
+    {
+        auto& ui = ph.proc.uiState;
+        toggledPopup = false;
+        if (ph.selected() != i) { ph.select (i); ui.setProperty ("popup", true, nullptr); }
+        else { ui.setProperty ("popup", ! (bool) ui.getProperty ("popup", true), nullptr); toggledPopup = true; }
+        if (ph.value (pid::band (i, "on")) < 0.5f) ui.setProperty ("keepOff", i, nullptr);   // show the floating panel for an off band too
+        repaint();
+    }
+    void slopeMenu()
+    {
+        const int t = (int) ph.value (pid::band (band, "type")), s = (int) ph.value (pid::band (band, "slope"));
+        const bool cut = t == (int) eqcore::Type::LowCut || t == (int) eqcore::Type::HighCut;
+        const bool shelf = t == (int) eqcore::Type::LowShelf || t == (int) eqcore::Type::HighShelf;
+        juce::PopupMenu m;
+        if (cut) for (int i = 0; i < 6; ++i) m.addItem (i + 1, slopeNames()[i], true, i == s);
+        else if (shelf) { m.addItem (1, "6 dB/oct", true, s == 0); m.addItem (2, "12 dB/oct", true, s != 0); }
+        else return;
+        m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&slopeBtn), [this, b = band] (int r)
+        {
+            if (r <= 0) return;
+            ph.proc.undo.beginNewTransaction(); ph.setGesture (pid::band (b, "slope"), (float) (r - 1));
+        });
+    }
+    void chMenu()
+    {
+        const int ch = (int) ph.value (pid::band (band, "ch"));
+        juce::PopupMenu m;
+        m.addItem (1, "Stereo", true, ch == 0); m.addItem (2, "Mid", true, ch == 1); m.addItem (3, "Side", true, ch == 2);
+        m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&chBtn), [this, b = band] (int r)
+        {
+            if (r <= 0) return;
+            ph.proc.undo.beginNewTransaction(); ph.setGesture (pid::band (b, "ch"), (float) (r - 1));
+        });
+    }
+    ParamHelp& ph; const bool full; int band = 0;
+    ResetCombo type; DragValue fq, gn, qv, th, rg, bl, at, rl, kn;
+    Seg phaseSeg, srcSeg;
+    juce::TextButton dynBtn, soloBtn, slopeBtn, chBtn, scopeBtn; juce::Slider tb;
+    bool tbDrag = false, dynType = true, dotOver = false, thrOver = false, thrDrag = false, refreshing = false, moving = false, toggledPopup = false;
+    juce::Rectangle<int> meterArea; int rowPhase = 89, rowTB = 192, rowSep = 85;
     float thrStartDb = 0; int thrStartX = 0;
+    juce::Point<int> moveStart, moveFrom;
 };
 
 // =============================================================================
@@ -533,17 +695,17 @@ public:
     void resized() override
     {
         int x = 8; const int y = 5, h = getHeight() - 10;
-        onBtn.setBounds (x, y + 3, 46, h - 6); x += 50;
-        type.setBounds (x, y + 3, 100, h - 6); x += 104;
-        lo.setBounds (x, y, 78, h); x += 82;
-        hi.setBounds (x, y, 78, h); x += 82;
-        drive.setBounds (x, y, 70, h); x += 74;
-        mix.setBounds (x, y, 56, h); x += 60;
-        os.setBounds (x, y + 5, 84, h - 10); x += 88;
-        deltaBtn.setBounds (x, y + 3, 56, h - 6); x += 60;
-        autoBtn.setBounds (x, y + 3, 64, h - 6); x += 68;
-        makeupArea = { x, y, 50, h }; x += 54;
-        curveArea = { x, y, 52, h }; x += 58;
+        onBtn.setBounds (x, y + 3, 44, h - 6); x += 48;
+        type.setBounds (x, y + 3, 92, h - 6); x += 96;
+        lo.setBounds (x, y, 74, h); x += 78;
+        hi.setBounds (x, y, 74, h); x += 78;
+        drive.setBounds (x, y, 66, h); x += 70;
+        mix.setBounds (x, y, 54, h); x += 58;
+        os.setBounds (x, y + 5, 72, h - 10); x += 76;
+        deltaBtn.setBounds (x, y + 3, 52, h - 6); x += 56;
+        autoBtn.setBounds (x, y + 3, 66, h - 6); x += 70;
+        makeupArea = { x, y, 46, h }; x += 50;
+        curveArea = { x, y, 44, h }; x += 50;
         textArea = { x, y, getWidth() - x - 8, h };
     }
     void paint (juce::Graphics& g) override
@@ -631,18 +793,11 @@ public:
         setHelp (scSens, "T/B SENS", "検出器の感度（dB）。＋で帯が下がり、アタックと判定されやすくなる。全バンド共通", "Detector sensitivity (dB). Plus lowers the band, so more counts as attack. Shared by all bands");
         setHelp (scWidth, "T/B WIDTH", "マスクが 0→1 に上がる幅（dB）。小さいほどハード", "Width over which the mask rises 0 → 1 (dB). Smaller is harder");
         setHelp (scAtt, "T/B ATTACK", "マスクが上がる速さ（ms、既定 2）。小さいほどアタックの頭が Body に漏れにくい", "How fast the mask rises (ms, default 2). Smaller keeps the front of the attack out of Body");
-        for (auto* b : { &phaseBtn, &gdBtn, &overlayBtn, &splitBtn }) { b->setClickingTogglesState (false); addAndMakeVisible (*b); }
-        overlayBtn.setButtonText ("Overlay"); splitBtn.setButtonText ("Split");
-        overlayBtn.onClick = [this] { ph.proc.uiState.setProperty ("split", false, nullptr); resized(); };
-        splitBtn.onClick   = [this] { ph.proc.uiState.setProperty ("split", true, nullptr); resized(); };
-        setHelp (overlayBtn, "OVERLAY", "位相（群遅延）を振幅カーブに重ねて表示", "Draw phase (or group delay) over the magnitude curve");
-        setHelp (splitBtn, "SPLIT", "位相（群遅延）を下の別枠に分けて表示。±360° 回る急なカットも読みやすい。振幅の表示は縦が約 2/3 になる",
-                 "Phase (or group delay) in its own panel below; easier to read for steep cuts. The magnitude view gets about 2/3 as tall");
-        phaseBtn.onClick = [this] { ph.proc.uiState.setProperty ("view", 0, nullptr); };
+        // one button each: it shows the current choice and a click switches to the other one (its help says which)
+        for (auto* b : { &phaseBtn, &overlayBtn }) { b->setClickingTogglesState (false); b->setToggleState (true, juce::dontSendNotification); addAndMakeVisible (*b); }
+        overlayBtn.onClick = [this] { ph.proc.uiState.setProperty ("split", ! (bool) ph.proc.uiState.getProperty ("split", false), nullptr); resized(); };
+        phaseBtn.onClick = [this] { ph.proc.uiState.setProperty ("view", (int) ph.proc.uiState.getProperty ("view", 0) == 1 ? 0 : 1, nullptr); };
         setHelp (*this, "MOUSE", mouseHelpJa(), mouseHelpEn());
-        setHelp (phaseBtn, "PHASE", "黄色の点線を位相表示に。±360°", "Show phase as the yellow dotted line (±360°)");
-        setHelp (gdBtn, "GROUP DELAY", "黄色の点線を群遅延（周波数ごとの遅れ、ms）表示に", "Show group delay — the delay at each frequency, in ms");
-        gdBtn.onClick    = [this] { ph.proc.uiState.setProperty ("view", 1, nullptr); };
         for (int i = 0; i <= 400; ++i) fr.push_back (20.0 * std::pow (1000.0, i / 400.0));
         spectrum.assign (fr.size(), -140.0f); spectrumB.assign (fr.size(), -140.0f);
 
@@ -677,16 +832,25 @@ public:
             const bool sc = (bool) ph.proc.uiState.getProperty ("scope", false) && ! ph.proc.earActive();
             scopeBtn.setToggleState (sc, juce::dontSendNotification);
             ph.proc.scopeNeed = sc;
+            if (sc != lastScope)
+            {
+                auto& ui = ph.proc.uiState;
+                if (sc) { ui.setProperty ("splitBeforeScope", (bool) ui.getProperty ("split", false), nullptr); ui.setProperty ("split", true, nullptr); }
+                else if (ui.hasProperty ("splitBeforeScope")) { ui.setProperty ("split", (bool) ui.getProperty ("splitBeforeScope"), nullptr); ui.removeProperty ("splitBeforeScope", nullptr); }
+            }
             if (sc != lastScope) { lastScope = sc; if (sc) { scEnableW = ph.proc.scopeRawW.load(); scSig = {}; } else if (scPaused) setPaused (false); resized(); }
             if (sc) scopeTick();
         }
         if (specDbB.size() == spectrumB.size()) spectrumB = specDbB;
         const bool gd = (int) ph.proc.uiState.getProperty ("view", 0) == 1;
-        phaseBtn.setToggleState (! gd, juce::dontSendNotification); gdBtn.setToggleState (gd, juce::dontSendNotification);
-        phaseBtn.setButtonText (juce::String ("Phase")); gdBtn.setButtonText (juce::String ("GD"));
+        phaseBtn.setButtonText (gd ? juce::String ("GD") : juce::String ("Phase"));
+        if (gd) setHelp (phaseBtn, "GROUP DELAY", "いまは黄色の点線が群遅延（周波数ごとの遅れ、ms）。クリックで位相（±360°）に切り替え", "The yellow dotted line now shows group delay (the delay at each frequency, ms). Click to switch to phase (±360°)");
+        else    setHelp (phaseBtn, "PHASE", "いまは黄色の点線が位相（±360°）。クリックで群遅延（周波数ごとの遅れ、ms）に切り替え", "The yellow dotted line now shows phase (±360°). Click to switch to group delay (the delay at each frequency, ms)");
         // recompute curves only when something changed
         const bool split = (bool) ph.proc.uiState.getProperty ("split", false);
-        overlayBtn.setToggleState (! split, juce::dontSendNotification); splitBtn.setToggleState (split, juce::dontSendNotification);
+        overlayBtn.setButtonText (split ? juce::String ("Split") : juce::String ("Overlay"));
+        if (split) setHelp (overlayBtn, "SPLIT", "いまは位相（群遅延）を下の別枠に表示（±360° 回る急なカットも読みやすい）。クリックで振幅カーブに重ねる Overlay に切り替え", "Phase (or group delay) is now in its own panel below (easier for steep cuts). Click to switch to Overlay, drawn over the magnitude curve");
+        else       setHelp (overlayBtn, "OVERLAY", "いまは位相（群遅延）を振幅カーブに重ねて表示。クリックで下の別枠に分ける Split に切り替え（振幅の表示は縦が約 2/3 になる）", "Phase (or group delay) is now drawn over the magnitude curve. Click to switch to Split, a panel of its own below (the magnitude view gets about 2/3 as tall)");
         if (split != lastSplit) { lastSplit = split; resized(); }
         juce::String sig; sig << (int) ph.proc.currentMode() << (int) ph.proc.currentQMode();
         const auto bands = ph.proc.currentBands();
@@ -733,10 +897,8 @@ public:
 
     void resized() override
     {
-        gdBtn.setBounds (getWidth() - 50, 6, 42, 20);
-        phaseBtn.setBounds (getWidth() - 96, 6, 46, 20);
-        splitBtn.setBounds (getWidth() - 150, 6, 46, 20);
-        overlayBtn.setBounds (getWidth() - 206, 6, 56, 20);
+        phaseBtn.setBounds (getWidth() - 58, 6, 50, 20);
+        overlayBtn.setBounds (getWidth() - 124, 6, 62, 20);
         anaA.setBounds (42, 6, 84, 20); anaB.setBounds (130, 6, 84, 20);
         scopeBtn.setBounds (220, 6, 74, 20);
         {
@@ -1009,7 +1171,7 @@ public:
         const juce::String ptxt = gd ? juce::String ("Group delay") : juce::String ("Phase");
         if (autoAna) { g.setColour (theme::accent); g.setFont (theme::ui (9.5f, true)); g.drawText ("SOLO auto", 300, 6, 70, 20, juce::Justification::centredLeft); g.setColour (theme::phase.withAlpha (0.85f)); g.setFont (theme::ui (10.5f, true)); }
         if (split && ! lastScope) g.drawText (ptxt, (int) phasePlot().getX() + 6, (int) phasePlot().getY() + 2, 200, 14, juce::Justification::centredLeft);
-        else g.drawText (ptxt + " (right, dotted)", getWidth() - 420, 8, 210, 16, juce::Justification::centredRight);
+        else g.drawText (ptxt + " (right, dotted)", getWidth() - 340, 8, 210, 16, juce::Justification::centredRight);
     }
 
     // ---- mouse ----
@@ -1366,7 +1528,13 @@ private:
         const int s = ph.selected();
         const auto bands = ph.proc.currentBands();
         const auto c = nodePos (s, bands[(size_t) s]);
-        const int w = 316, h = popup.idealHeight();
+        const int w = BandPopup::compactW, h = popup.idealHeight();
+        auto& ui = ph.proc.uiState;
+        if ((bool) ui.getProperty ("popPinned", false))       // parked where the user dragged it
+        {
+            popup.setBounds (juce::jlimit (4, getWidth() - w - 4, (int) ui.getProperty ("popX", 40)), juce::jlimit (4, getHeight() - h - 4, (int) ui.getProperty ("popY", 40)), w, h);
+            return;
+        }
         int x = (int) c.x + 22, y = (int) c.y - h - 14;
         if (x + w > getWidth() - 8) x = (int) c.x - w - 22;
         if (y < 32) y = (int) c.y + 22;
@@ -1376,7 +1544,7 @@ private:
 
     ParamHelp& ph;
     BandPopup popup;
-    juce::TextButton phaseBtn, gdBtn, overlayBtn, splitBtn;
+    juce::TextButton phaseBtn, overlayBtn;     // Phase ⇄ GD, Overlay ⇄ Split
     std::vector<double> fr; eqcore::CurvesV2 cur, curS; eqcore::Curves ghost; std::vector<double> selCurve, liveMag;
     bool anyMS = false, lastSplit = false, altSolo = false;
     std::vector<float> spectrum, spectrumB; juce::String lastSig;

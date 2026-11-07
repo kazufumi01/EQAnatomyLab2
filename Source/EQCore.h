@@ -75,7 +75,7 @@ inline double effectiveF (const Band& b, QMode qm)
 }
 
 // ---- analog sections ----
-enum class Sec { Bell, LS, HS, Notch, AP, HP2, LP2, HP1, LP1 };
+enum class Sec { Bell, LS, HS, Notch, AP, HP2, LP2, HP1, LP1, LS1, HS1 };   // LS1 / HS1: first-order shelves (6 dB/oct)
 struct Section { Sec k; double A = 1, Q = 0.7071, f0 = 1000; };
 
 inline void sectionsFor (const Band& b, QMode qm, std::vector<Section>& out)
@@ -84,8 +84,9 @@ inline void sectionsFor (const Band& b, QMode qm, std::vector<Section>& out)
     switch (b.type)
     {
         case Type::Bell:      out.push_back ({ Sec::Bell, A, Q, F }); break;
-        case Type::LowShelf:  out.push_back ({ Sec::LS, A, Q, F }); break;
-        case Type::HighShelf: out.push_back ({ Sec::HS, A, Q, F }); break;
+        // shelves: slope index 0 = first order (6 dB/oct, Q has no effect); any other value = the second-order shelf (12 dB/oct, as before)
+        case Type::LowShelf:  out.push_back ({ b.slope == 0 ? Sec::LS1 : Sec::LS, A, Q, F }); break;
+        case Type::HighShelf: out.push_back ({ b.slope == 0 ? Sec::HS1 : Sec::HS, A, Q, F }); break;
         case Type::Notch:     out.push_back ({ Sec::Notch, 1, Q, b.f }); break;
         case Type::AllPass:   out.push_back ({ Sec::AP, 1, Q, b.f }); break;
         case Type::LowCut: case Type::HighCut:
@@ -121,6 +122,9 @@ inline cplx analogSection (const Section& s, double w)   // w = f / f0
         case Sec::LP2:   return 1.0 / (s2 + jw / Q + 1.0);
         case Sec::HP1:   return jw / (1.0 + jw);
         case Sec::LP1:   return 1.0 / (1.0 + jw);
+        // first-order shelves, gain A^2 at the shelf, A (half the dB) at f0
+        case Sec::LS1:   return (jw + A) / (jw + 1.0 / A);
+        case Sec::HS1:   return (A * jw + 1.0) / (jw / A + 1.0);
     }
     return 1.0;
 }
@@ -150,6 +154,15 @@ inline Biquad digitalSection (const Section& s, double fs)
             const double K = std::tan (w0 / 2), d = 1 + K;
             Biquad c; if (s.k == Sec::HP1) { c.b0 = 1 / d; c.b1 = -1 / d; } else { c.b0 = K / d; c.b1 = K / d; }
             c.a1 = (K - 1) / d; return c;
+        }
+        case Sec::LS1: case Sec::HS1:
+        {
+            // bilinear transform of (n1 s + n0) / (d1 s + d0), pre-warped at f0
+            const double K = std::tan (w0 / 2);
+            const double n1 = s.k == Sec::LS1 ? 1.0 : A, n0 = s.k == Sec::LS1 ? A : 1.0;
+            const double d1 = s.k == Sec::LS1 ? 1.0 : 1.0 / A, d0 = s.k == Sec::LS1 ? 1.0 / A : 1.0;
+            const double e0 = d1 / K + d0;
+            Biquad c; c.b0 = (n1 / K + n0) / e0; c.b1 = (n0 - n1 / K) / e0; c.a1 = (d0 - d1 / K) / e0; return c;
         }
     }
     return { b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0 };

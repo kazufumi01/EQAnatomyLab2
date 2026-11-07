@@ -40,7 +40,7 @@ public:
             const bool on = x.on && x.mask != 0;
             if (b.on != on) return false;
             if (! on) continue;
-            if (b.type != x.type || b.mask != x.mask || (b.slope != x.slope && (x.type == eqcore::Type::LowCut || x.type == eqcore::Type::HighCut))) return false;
+            if (b.type != x.type || b.mask != x.mask || (b.slope != x.slope && x.type != eqcore::Type::Bell && x.type != eqcore::Type::Notch && x.type != eqcore::Type::AllPass)) return false;
         }
         return true;
     }

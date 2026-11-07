@@ -32,7 +32,8 @@ private:
     ParamHelp ph { proc };
 
     // header
-    juce::TextButton modeZero, modeAnalog, modeLinear, resBtn, learnBtn, langBtn, resetBtn, undoBtn, redoBtn, earBtn, morphTo;
+    ResetCombo modeBox;            // Zero latency / Analog / Linear in one menu
+    juce::TextButton resBtn, learnBtn, langBtn, resetBtn, undoBtn, redoBtn, earBtn, morphTo;
     juce::TextButton slotBtn[4];
     ResetCombo curveBox;
     juce::Slider morph;
@@ -43,7 +44,7 @@ private:
     // body
     GraphView graph { ph };
     SatStrip satStrip { ph };
-    BandChips chips { ph };
+    BandPopup detail { ph, true };     // the selected band's detail panel (replaces the band cards)
     IRView irView { ph };
     OutputDrag outDrag { ph };
     SoloView viewSolo { ph };

@@ -25,9 +25,10 @@ EQAnatomyView::EQAnatomyView (EQAnatomyProcessor& p) : proc (p)
         markReset (b);
         addAndMakeVisible (b);
     };
-    modeZero.onClick   = [this] { ph.setGesture (pid::mode, 0); };
-    modeAnalog.onClick = [this] { ph.setGesture (pid::mode, 1); };
-    modeLinear.onClick = [this] { ph.setGesture (pid::mode, 2); };
+    modeBox.addItemList ({ "Zero latency", "Analog", "Linear" }, 1);
+    markReset (modeBox); modeBox.onAlt = [this] { ph.resetDefault (pid::mode); };
+    modeBox.onChange = [this] { proc.undo.beginNewTransaction(); ph.setGesture (pid::mode, (float) (modeBox.getSelectedId() - 1)); };
+    addAndMakeVisible (modeBox);
     resBtn.onClick     = [this] { ph.setGesture (pid::res, (float) (((int) ph.value (pid::res) + 1) % 3)); };
     for (int i = 0; i < 7; ++i) curveBox.addItem (eqcore::curveName (i), i + 1);
     markReset (curveBox); curveBox.onAlt = [this] { ph.resetDefault (pid::qmode); };
@@ -84,7 +85,7 @@ EQAnatomyView::EQAnatomyView (EQAnatomyProcessor& p) : proc (p)
             morph.setValue (0.0, juce::dontSendNotification);
         });
     };
-    for (auto* b : { &modeZero, &modeAnalog, &modeLinear, &resBtn, &learnBtn, &langBtn, &resetBtn, &undoBtn, &redoBtn, &earBtn, &morphTo })
+    for (auto* b : { &resBtn, &learnBtn, &langBtn, &resetBtn, &undoBtn, &redoBtn, &earBtn, &morphTo })
         addAndMakeVisible (*b);
     addAndMakeVisible (curveBox); addAndMakeVisible (morph);
     paramToggle (autoBtn, pid::autoGain);
@@ -93,16 +94,12 @@ EQAnatomyView::EQAnatomyView (EQAnatomyProcessor& p) : proc (p)
     paramToggle (soloBtn, pid::preSolo);
     soloBtn.setColour (juce::TextButton::buttonOnColourId, theme::pre);
 
-    addAndMakeVisible (graph); addAndMakeVisible (satStrip); addAndMakeVisible (chips); addAndMakeVisible (irView);
+    addAndMakeVisible (graph); addAndMakeVisible (satStrip); addAndMakeVisible (detail); addAndMakeVisible (irView);
     addAndMakeVisible (outDrag); addAndMakeVisible (viewSolo); addAndMakeVisible (lesson); addAndMakeVisible (io); addChildComponent (earCard);
 
     addAndMakeVisible (zoom);
-    setHelp (modeZero, "ZERO LATENCY", "全体の既定。Min のバンドはデジタル IIR（遅れゼロ、位相が回る、ナイキスト付近は形が詰まる）。Lin にしたバンドだけ FIR になり、そのときは全体が FIR 分遅れる。DYN と TRANSIENT/BODY はこのモードの Min バンドだけ",
-             "Default for all bands. Min bands run as digital IIR (no delay, phase turns, cramping near Nyquist). Bands set to Lin become FIR, which delays everything. DYN and TRANSIENT/BODY work on Min bands in this mode only");
-    setHelp (modeAnalog, "ANALOG", "Min のバンドを、アナログ回路と同じ振幅と位相の最小位相 FIR で処理。高域も形が崩れない。Lin のバンドがなければレイテンシーなし",
-             "Min bands become a minimum-phase FIR with the analog magnitude and phase. Highs keep their shape. No latency unless a band is Lin");
-    setHelp (modeLinear, "LINEAR", "全バンドをリニア位相にする（バンドごとの Min/Lin は無視）。位相は回らないが、全体が遅れ、アタックの前にプリリンギングが出る",
-             "All bands linear phase (per-band Min/Lin is ignored). No phase shift, but everything is delayed and pre-ringing appears before the attack");
+    setHelp (modeBox, "MODE", "処理の方式。Zero latency：全体の既定。Min のバンドはデジタル IIR（遅れゼロ、位相が回る、ナイキスト付近は形が詰まる）。Lin にしたバンドだけ FIR になり、そのときは全体が FIR 分遅れる。DYN と TRANSIENT/BODY はこのモードの Min バンドだけ／Analog：Min のバンドを、アナログ回路と同じ振幅と位相の最小位相 FIR で処理。高域も形が崩れない。Lin のバンドがなければレイテンシーなし／Linear：全バンドをリニア位相にする（バンドごとの Min/Lin は無視）。位相は回らないが、全体が遅れ、アタックの前にプリリンギングが出る",
+             "Processing mode. Zero latency: the default. Min bands run as digital IIR (no delay, phase turns, cramping near Nyquist); bands set to Lin become FIR, which delays everything. DYN and TRANSIENT/BODY work on Min bands in this mode only / Analog: Min bands become a minimum-phase FIR with the analog magnitude and phase; highs keep their shape; no latency unless a band is Lin / Linear: all bands linear phase (per-band Min/Lin is ignored); no phase shift, but everything is delayed and pre-ringing appears before the attack");
     setHelp (resBtn, "RESOLUTION", "リニア位相の FIR の長さ（Low / Mid / High）。長いほど低域が正確だが、レイテンシーとプリリンギングも伸びる", "Linear-phase FIR length. Longer is more accurate in the lows, with more latency and pre-ringing");
     setHelp (curveBox, "CURVE", "全バンドのカーブの性格。Clean Const／Clean Prop：従来の一定 Q と比例 Q／British A：広いベルと肩の盛り上がり／US 500：強い比例 Q／Console E：比例寄りのベルとくっきりしたシェルフ／Tube Passive：ブーストとカットが干渉する低域／Precision：色付けのない一定 Q。注意：カーブの形の傾向だけで機材の音そのものではない。質感まで比べるなら SAT の Transformer・Tube・Class A と組み合わせる。名称は一般名",
              "Curve character for all bands. Clean Const/Prop: the original constant and proportional Q / British A: broad bells, shelf shoulders / US 500: strongly proportional / Console E: mildly proportional bells, crisp shelves / Tube Passive: interacting low boost and cut / Precision: uncoloured constant Q. Careful: shape tendencies only, not the sound of the hardware; pair with SAT Transformer / Tube / Class A for texture. Generic names");
@@ -178,12 +175,7 @@ void EQAnatomyView::setEar (bool on)
 void EQAnatomyView::refreshTexts()
 {
     const int mode = (int) ph.value (pid::mode);
-    modeZero.setButtonText (juce::String ("Zero latency"));
-    modeAnalog.setButtonText (juce::String ("Analog"));
-    modeLinear.setButtonText (juce::String ("Linear"));
-    modeZero.setToggleState (mode == 0, juce::dontSendNotification);
-    modeAnalog.setToggleState (mode == 1, juce::dontSendNotification);
-    modeLinear.setToggleState (mode == 2, juce::dontSendNotification);
+    if (modeBox.getSelectedId() != mode + 1) modeBox.setSelectedId (mode + 1, juce::dontSendNotification);
     static const char* re[] = { "Res Low", "Res Mid", "Res High" };
     const int r = (int) ph.value (pid::res);
     resBtn.setButtonText (re[r]);
@@ -213,7 +205,7 @@ void EQAnatomyView::refreshTexts()
     langBtn.setButtonText (ph.ja() ? "EN" : juce::String::fromUTF8 ("日本語"));
     {
         const int pi = (int) proc.uiState.getProperty ("preset", -1);
-        resetBtn.setButtonText ((pi >= 0 && pi < (int) presets().size() ? juce::String (presets()[(size_t) pi].nameEn) : juce::String ("Preset"))
+        resetBtn.setButtonText ((pi >= 0 && pi < (int) presets().size() ? juce::String (presets()[(size_t) pi].nameEn) : juce::String::fromUTF8 ("\xe2\x80\x94"))
                                 + juce::String::fromUTF8 (" \xe2\x96\xbe"));
     }
     autoBtn.getProperties().set ("fontPx", 11.0);
@@ -249,6 +241,10 @@ void EQAnatomyView::paint (juce::Graphics& g)
     g.drawText ("LAT " + (lat > 0 ? juce::String (lat * 1000.0 / fs, 1) + " ms" : juce::String ("0 ms")), 718, 6, 60, 16, juce::Justification::centredLeft);
     g.setColour (theme::muted); g.setFont (theme::ui (8.5f));
     g.drawText ("MORPH", 918, 2, 80, 10, juce::Justification::centredLeft);
+    // captions for the two menus whose text is a name (curve character, preset)
+    g.setColour (theme::muted); g.setFont (theme::ui (8.5f, true));
+    g.drawText ("CURVE", curveBox.getX() - 38, 10, 35, 24, juce::Justification::centredRight);
+    g.drawText ("PRESET", resetBtn.getX() - 42, 10, 39, 24, juce::Justification::centredRight);
 }
 
 void EQAnatomyView::resized()
@@ -256,12 +252,10 @@ void EQAnatomyView::resized()
     zoom.setBounds (104, 12, 42, 20);
     undoBtn.setBounds (150, 11, 26, 22); redoBtn.setBounds (178, 11, 26, 22);
     int x = 210;
-    modeZero.setBounds (x, 10, 92, 24); x += 94;
-    modeAnalog.setBounds (x, 10, 58, 24); x += 60;
-    modeLinear.setBounds (x, 10, 54, 24); x += 58;
+    modeBox.setBounds (x, 10, 112, 24); x += 116;
     resBtn.setBounds (x, 10, 60, 24); x += 64;
-    curveBox.setBounds (x, 10, 104, 24); x += 108;
-    resetBtn.setBounds (x, 10, 116, 24);
+    x += 38; curveBox.setBounds (x, 10, 108, 24); x += 112;      // "CURVE" caption on the left
+    x += 42; resetBtn.setBounds (x, 10, 712 - x, 24);           // "PRESET" caption on the left
     for (int i = 0; i < 4; ++i) slotBtn[i].setBounds (778 + i * 26, 10, 24, 24);
     morphTo.setBounds (884, 12, 30, 20);
     morph.setBounds (916, 10, 70, 26);
@@ -271,16 +265,16 @@ void EQAnatomyView::resized()
 
     graph.setBounds (12, 54, 1076, 470);
     io.setBounds (1096, 54, 52, 470);
-    satStrip.setBounds (12, 530, 1136, 44);
+    satStrip.setBounds (268, 530, 880, 44);
 
     const int y = 582, h = 166;
     const bool ear = proc.earActive();
-    for (auto* c : { (juce::Component*) &chips, (juce::Component*) &irView, (juce::Component*) &outDrag, (juce::Component*) &autoBtn,
+    for (auto* c : { (juce::Component*) &detail, (juce::Component*) &irView, (juce::Component*) &outDrag, (juce::Component*) &autoBtn,
                      (juce::Component*) &deltaBtn, (juce::Component*) &viewSolo, (juce::Component*) &bypassBtn, (juce::Component*) &soloBtn, (juce::Component*) &lesson })
         c->setVisible (! ear);
     earCard.setVisible (ear);
     earCard.setBounds (12, y, getWidth() - 24, h);
-    chips.setBounds (12, y, 248, h);
+    detail.setBounds (12, 530, 248, y + h - 530);     // grows up into the SAT row
     irView.setBounds (268, y, 196, h);
     const int bx = 472, bw = 104, bh = (h - 20) / 6;
     outDrag.setBounds (bx, y, bw, bh);
@@ -404,7 +398,7 @@ void EQAnatomyView::timerCallback()
     refreshTexts();
     graph.update (spec, specB);
     satStrip.refresh();
-    chips.repaint();
+    if (detail.isVisible()) detail.refresh (ph.selected());
     irView.refresh();
     outDrag.repaint();
     viewSolo.repaint();
