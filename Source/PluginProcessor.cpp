@@ -56,11 +56,11 @@ bool EQAnatomyProcessor::dynAvailable (int band) const
     return currentMode() == eqcore::Mode::ZeroLatency && ! bandIsLin (band);
 }
 
-std::array<IIRChain::Target, 6> EQAnatomyProcessor::targets() const
+std::array<IIRChain::Target, eqcore::kBands> EQAnatomyProcessor::targets() const
 {
-    std::array<IIRChain::Target, 6> t {};
+    std::array<IIRChain::Target, eqcore::kBands> t {};
     const bool zero = currentMode() == eqcore::Mode::ZeroLatency;
-    for (int i = 0; i < 6; ++i)
+    for (int i = 0; i < eqcore::kBands; ++i)
     {
         auto v = [&] (const char* w) { return apvts.getRawParameterValue (pid::band (i, w))->load(); };
         const int ch = (int) v ("ch");
@@ -70,10 +70,10 @@ std::array<IIRChain::Target, 6> EQAnatomyProcessor::targets() const
     return t;
 }
 
-std::array<eqcore::Band, 6> EQAnatomyProcessor::currentBands() const
+std::array<eqcore::Band, eqcore::kBands> EQAnatomyProcessor::currentBands() const
 {
-    std::array<eqcore::Band, 6> b {};
-    for (int i = 0; i < 6; ++i)
+    std::array<eqcore::Band, eqcore::kBands> b {};
+    for (int i = 0; i < eqcore::kBands; ++i)
     {
         auto v = [&] (const char* w) { return apvts.getRawParameterValue (pid::band (i, w))->load(); };
         auto& x = b[(size_t) i];
@@ -119,7 +119,7 @@ void EQAnatomyProcessor::setEar (bool on, EarQuestion q)
     { const juce::SpinLock::ScopedLockType l (earLock); earQ = q; earDirty = true; }
     // level-match the question so loudness does not give the answer away
     eqcore::Band b; b.on = true; b.type = eqcore::Type::Bell; b.f = q.f; b.g = q.g; b.q = q.q;
-    std::array<eqcore::Band, 6> bs {}; bs[0] = b;
+    std::array<eqcore::Band, eqcore::kBands> bs {}; bs[0] = b;
     earGainComp = (float) eqcore::matchGain (eqcore::Model (bs, eqcore::QMode::Constant, getSampleRateOrDefault()), eqcore::Mode::ZeroLatency);
     earOn = on;
 }
@@ -192,16 +192,16 @@ void EQAnatomyProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     for (int i = 0; i < n; ++i) { const float l = L[i], r = R ? R[i] : l; M[i] = 0.5f * (l + r); S[i] = 0.5f * (l - r); }
 
     // per-band dynamics and transient / body weighting (zero-latency min bands only)
-    std::array<bool, 6> dynOn {}; std::array<int, 6> dynCh {}; std::array<bool, 6> dynSC {}; std::array<int, 6> dynSrc {};
-    std::array<float, 6> thr {}, above {}, below {}, tbT {}, tbB {}; bool anyDyn = false, anyTB = false;
-    std::array<double, 6> attC {}, relC {}, kneeDb {};      // per-band detector speed and soft-knee width
+    std::array<bool, eqcore::kBands> dynOn {}; std::array<int, eqcore::kBands> dynCh {}; std::array<bool, eqcore::kBands> dynSC {}; std::array<int, eqcore::kBands> dynSrc {};
+    std::array<float, eqcore::kBands> thr {}, above {}, below {}, tbT {}, tbB {}; bool anyDyn = false, anyTB = false;
+    std::array<double, eqcore::kBands> attC {}, relC {}, kneeDb {};      // per-band detector speed and soft-knee width
     // A skewed range does not round-trip its default exactly (5 ms comes back as 4.9999995). Snapping to 0.01 makes the default
     // exactly the old fixed value, so sessions made before these controls existed sound bit-for-bit the same.
     auto snap = [] (float v) { return std::round ((double) v * 100.0) / 100.0; };
     trans.sens = snap (P (pid::tbSens)); trans.width = snap (P (pid::tbWidth)); trans.setAttack (snap (P (pid::tbAtt)));
     trans.method = (int) P (pid::tbMethod);
     detEq.set (P (pid::tbLc), P (pid::tbE1f), P (pid::tbE1g), P (pid::tbE1q), P (pid::tbE2f), P (pid::tbE2g), P (pid::tbE2q));
-    for (int b = 0; b < 6; ++b)
+    for (int b = 0; b < eqcore::kBands; ++b)
     {
         auto v = [&] (const char* w) { return apvts.getRawParameterValue (pid::band (b, w))->load(); };
         const auto ty = (eqcore::Type) (int) v ("type");
@@ -247,13 +247,13 @@ void EQAnatomyProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
         }
     }
 
-    std::array<double, 6> w; w.fill (1.0);
+    std::array<double, eqcore::kBands> w; w.fill (1.0);
     if (activeMode == 0)
     {
         for (int i = 0; i < n; ++i)
         {
             if (anyDyn)
-                for (int b = 0; b < 6; ++b)
+                for (int b = 0; b < eqcore::kBands; ++b)
                     if (dynOn[(size_t) b])
                     {
                         // detector input: sidechain, or the input's Mid / Side (a fixed one for Mid / Side, else the band's own channel)
@@ -266,7 +266,7 @@ void EQAnatomyProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
             if (anyTB)
             {
                 const double m = maskBuf[(size_t) i];
-                for (int b = 0; b < 6; ++b) w[(size_t) b] = tbB[(size_t) b] + (tbT[(size_t) b] - tbB[(size_t) b]) * m;
+                for (int b = 0; b < eqcore::kBands; ++b) w[(size_t) b] = tbB[(size_t) b] + (tbT[(size_t) b] - tbB[(size_t) b]) * m;
             }
             if (subCounter++ % 32 == 0)
             {
@@ -274,7 +274,7 @@ void EQAnatomyProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
                 {
                     // ramp ("knee"): nothing at the threshold, the full range one knee width beyond it (12 dB by default; 0 = hard switch).
                     // Below the threshold: fades out under −60 dB so silence is not pulled up.
-                    for (int b = 0; b < 6; ++b)
+                    for (int b = 0; b < eqcore::kBands; ++b)
                         if (dynOn[(size_t) b])
                         {
                             const double lv = det[(size_t) b].levelDb(), th = thr[(size_t) b], kn = kneeDb[(size_t) b];
@@ -300,7 +300,7 @@ void EQAnatomyProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
         }
     }
     else cur->updateCoefficients (true);    // keep following the knobs so a switch back is seamless
-    for (int b = 0; b < 6; ++b)
+    for (int b = 0; b < eqcore::kBands; ++b)
     {
         dynGainDb[(size_t) b] = (float) dynNow[(size_t) b];
         detLevelDb[(size_t) b] = dynOn[(size_t) b] ? (float) det[(size_t) b].levelDb() : -120.0f;
@@ -459,7 +459,7 @@ void EQAnatomyProcessor::computeLatency()
 {
     const auto mode = currentMode();
     bool lin = mode == eqcore::Mode::Linear;
-    if (! lin) for (int i = 0; i < 6; ++i) lin = lin || (apvts.getRawParameterValue (pid::band (i, "on"))->load() > 0.5f && bandIsLin (i));
+    if (! lin) for (int i = 0; i < eqcore::kBands; ++i) lin = lin || (apvts.getRawParameterValue (pid::band (i, "on"))->load() > 0.5f && bandIsLin (i));
     const int k = lin ? eqcore::linearTaps (currentRes()) / 2 : 0;
     const bool satOn = apvts.getRawParameterValue (pid::satOn)->load() > 0.5f;
     sat.setOversampling ((int) apvts.getRawParameterValue (pid::satOS)->load());
@@ -662,7 +662,7 @@ void EQAnatomyProcessor::applyLesson (int index)
     {
         if (auto* p = apvts.getParameter (id)) { p->beginChangeGesture(); p->setValueNotifyingHost (p->convertTo0to1 (v)); p->endChangeGesture(); }
     };
-    for (int i = 0; i < 6; ++i)
+    for (int i = 0; i < eqcore::kBands; ++i)
     {
         set (pid::band (i, "phase"), 0); set (pid::band (i, "ch"), 0); set (pid::band (i, "tb"), 0);
         set (pid::band (i, "below"), 0); set (pid::band (i, "src"), 0);

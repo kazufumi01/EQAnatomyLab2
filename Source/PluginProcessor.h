@@ -19,10 +19,10 @@ class IIRChain
 public:
     struct Target { bool on; eqcore::Type type; int slope; double f, g, q; int mask; };
 
-    void configure (const std::array<Target, 6>& t, eqcore::QMode qm, double fs)
+    void configure (const std::array<Target, eqcore::kBands>& t, eqcore::QMode qm, double fs)
     {
         qmode = qm; sampleRate = fs;
-        for (int i = 0; i < 6; ++i)
+        for (int i = 0; i < eqcore::kBands; ++i)
         {
             auto& b = bands[(size_t) i]; const auto& x = t[(size_t) i];
             b.on = x.on && x.mask != 0; b.type = x.type; b.slope = x.slope; b.mask = x.mask;
@@ -31,10 +31,10 @@ public:
         }
         updateCoefficients (false);
     }
-    bool sameStructure (const std::array<Target, 6>& t, eqcore::QMode qm) const
+    bool sameStructure (const std::array<Target, eqcore::kBands>& t, eqcore::QMode qm) const
     {
         if (qm != qmode) return false;
-        for (int i = 0; i < 6; ++i)
+        for (int i = 0; i < eqcore::kBands; ++i)
         {
             const auto& b = bands[(size_t) i]; const auto& x = t[(size_t) i];
             const bool on = x.on && x.mask != 0;
@@ -44,15 +44,15 @@ public:
         }
         return true;
     }
-    void setTargets (const std::array<Target, 6>& t)
+    void setTargets (const std::array<Target, eqcore::kBands>& t)
     {
-        for (int i = 0; i < 6; ++i)
+        for (int i = 0; i < eqcore::kBands; ++i)
         {
             auto& b = bands[(size_t) i];
             b.tlf = std::log2 (t[(size_t) i].f); b.tg = t[(size_t) i].g; b.tlq = std::log2 (t[(size_t) i].q);
         }
     }
-    void setDyn (const std::array<double, 6>& d) { dyn = d; }
+    void setDyn (const std::array<double, eqcore::kBands>& d) { dyn = d; }
     void updateCoefficients (bool smooth)
     {
         const double k = smooth ? 1.0 - std::exp (-32.0 / (sampleRate * 0.012)) : 1.0;
@@ -71,7 +71,7 @@ public:
         }
     }
     // v[0] = mid, v[1] = side; w = per-band weight (1 = full effect)
-    inline void process (double* v, const std::array<double, 6>& w)
+    inline void process (double* v, const std::array<double, eqcore::kBands>& w)
     {
         for (size_t bi = 0; bi < bands.size(); ++bi)
         {
@@ -97,8 +97,8 @@ private:
     struct B { bool on = false; eqcore::Type type = eqcore::Type::Bell; int slope = 3; int mask = 3;
                double lf = 10, g = 0, lq = 0, tlf = 10, tg = 0, tlq = 0;
                std::vector<eqcore::Biquad> coefs; std::vector<std::array<double, 4>> z; };
-    std::array<B, 6> bands;
-    std::array<double, 6> dyn {};
+    std::array<B, eqcore::kBands> bands;
+    std::array<double, eqcore::kBands> dyn {};
     std::vector<eqcore::Section> scratch;
     eqcore::QMode qmode = eqcore::QMode::Constant;
     double sampleRate = 48000;
@@ -242,7 +242,7 @@ public:
     juce::AudioProcessorValueTreeState apvts;
 
     // ---- editor helpers ----
-    std::array<eqcore::Band, 6> currentBands() const;
+    std::array<eqcore::Band, eqcore::kBands> currentBands() const;
     eqcore::Mode currentMode() const;
     eqcore::QMode currentQMode() const;
     int currentRes() const;
@@ -256,7 +256,7 @@ public:
     bool sidechainConnected() const { return scConnected.load(); }
 
     // Dynamic EQ readouts for the editor (dB)
-    std::array<std::atomic<float>, 6> dynGainDb {}, detLevelDb {};
+    std::array<std::atomic<float>, eqcore::kBands> dynGainDb {}, detLevelDb {};
     std::atomic<float> satMakeupDb { 0.0f };
     // Meters: peak (dBFS, max since last read), RMS (300 ms), output correlation
     std::array<std::atomic<float>, 2> inPeak {}, outPeak {}, inRms {}, outRms {};
@@ -312,7 +312,7 @@ private:
     void parameterChanged (const juce::String&, float) override { dirty = true; }
     void timerCallback() override;
     void run() override;                 // builds FIR kernels off the audio thread
-    std::array<IIRChain::Target, 6> targets() const;
+    std::array<IIRChain::Target, eqcore::kBands> targets() const;
     void computeLatency();
 
     double sr = 0; int blockSize = 512;
@@ -323,7 +323,7 @@ private:
     Delay dryDelay[2], postDelay[2];
     juce::LinearSmoothedValue<float> outGain, autoGain;
     BandSaturator sat; bool satWasOn = false;
-    std::array<DynDetector, 6> det; std::array<double, 6> dynNow {}; double detAtt = 0.1, detRel = 0.01;
+    std::array<DynDetector, eqcore::kBands> det; std::array<double, eqcore::kBands> dynNow {}; double detAtt = 0.1, detRel = 0.01;
     TransientDetector trans;
     std::vector<double> maskBuf, maskDel;     // per-block transient mask, and the same delayed to match the output
     Delay maskDelay;

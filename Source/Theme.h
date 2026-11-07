@@ -19,7 +19,7 @@ inline juce::Colour bg, header, panel, well, line, grid, zero, text, muted, fain
                     lessonBg, lessonLn, sat, ok, side, analyzer, popup, live, splitWell, curve;
 inline bool lightPanels = false;
 inline int current = 0;
-inline std::array<juce::uint32, 6> bands { 0xff8f86e6, 0xff55b7c5, 0xff7cc66f, 0xffe48f5c, 0xffef7a6e, 0xffde8fbd };
+inline std::array<juce::uint32, 8> bands { 0xff8f86e6, 0xff55b7c5, 0xff7cc66f, 0xffe48f5c, 0xffef7a6e, 0xffde8fbd, 0xffc9b458, 0xff8aa0d8 };
 
 inline int numSkins() { return 10; }
 inline const char* skinName (int i)
@@ -33,9 +33,9 @@ inline void setSkin (int i)
 {
     current = juce::jlimit (0, 9, i);
     struct P { juce::uint32 bg, header, panel, well, line, grid, zero, text, muted, faint, accent, onAccent, pre, phase,
-               lessonBg, lessonLn, sat, ok, side, analyzer, popup, live, splitWell; bool light; std::array<juce::uint32, 6> b; };
-    static const std::array<juce::uint32, 6> darkBands { 0xff8f86e6, 0xff55b7c5, 0xff7cc66f, 0xffe48f5c, 0xffef7a6e, 0xffde8fbd };
-    static const std::array<juce::uint32, 6> inkBands  { 0xff6b5bb5, 0xff0d7385, 0xff3c8a3a, 0xffc47410, 0xffb83f36, 0xffa3487e };
+               lessonBg, lessonLn, sat, ok, side, analyzer, popup, live, splitWell; bool light; std::array<juce::uint32, 8> b; };
+    static const std::array<juce::uint32, 8> darkBands { 0xff8f86e6, 0xff55b7c5, 0xff7cc66f, 0xffe48f5c, 0xffef7a6e, 0xffde8fbd, 0xffc9b458, 0xff8aa0d8 };
+    static const std::array<juce::uint32, 8> inkBands  { 0xff6b5bb5, 0xff0d7385, 0xff3c8a3a, 0xffc47410, 0xffb83f36, 0xffa3487e, 0xff8a7414, 0xff3d5aa8 };
     static const P p[] = {
         { 0xff121417, 0xff191c21, 0xff191c21, 0xff0d0f12, 0xff2a2e35, 0xff1d2126, 0xff353a42, 0xffe4e1da, 0xff8d929a, 0xff6c727b, 0xfff0b34a, 0xff1a1306, 0xffef7a6e, 0xffe9cf6a,
           0xff1b1a16, 0xff5a4620, 0xffe8a33a, 0xff8fc779, 0xff6fc3d6, 0xff2a2e35, 0xff1c2026, 0xfffff1d6, 0xff0b0d10, false, darkBands },
@@ -174,7 +174,7 @@ inline juce::Colour onWell() { return well.getPerceivedBrightness() > 0.6f ? juc
 inline juce::Colour shade (float a)  { return lightPanels ? juce::Colours::black.withAlpha (a * 0.25f) : juce::Colours::black.withAlpha (a); }
 inline juce::Colour hilite (float a) { return lightPanels ? juce::Colours::black.withAlpha (a * 0.6f) : juce::Colours::white.withAlpha (a); }
 
-inline juce::Colour bandColour (int i) { return juce::Colour (bands[(size_t) juce::jlimit (0, 5, i)]); }
+inline juce::Colour bandColour (int i) { return juce::Colour (bands[(size_t) juce::jlimit (0, 7, i)]); }
 
 inline juce::Font ui (float size, bool bold = false)
 {

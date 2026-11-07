@@ -51,9 +51,52 @@ inline const BandDefault& bandDefault (int i)
 {
     static const BandDefault d[] = { { eqcore::Type::LowCut, 30, 0.707 }, { eqcore::Type::LowShelf, 100, 0.707 },
                                      { eqcore::Type::Bell, 400, 1.0 },   { eqcore::Type::Bell, 1500, 1.0 },
-                                     { eqcore::Type::HighShelf, 6000, 0.707 }, { eqcore::Type::HighCut, 18000, 0.707 } };
-    return d[juce::jlimit (0, 5, i)];
+                                     { eqcore::Type::HighShelf, 6000, 0.707 }, { eqcore::Type::HighCut, 18000, 0.707 },
+                                     { eqcore::Type::Bell, 250, 1.0 },   { eqcore::Type::Bell, 4000, 1.0 } };   // 7, 8 (0.1.1)
+    return d[juce::jlimit (0, eqcore::kBands - 1, i)];
 }
+
+inline void addBandMain (juce::AudioProcessorValueTreeState::ParameterLayout& l, int i, int ver)
+{
+    using namespace juce;
+    auto freqRange = NormalisableRange<float> (20.0f, 20000.0f, 0.0f, 1.0f);
+    freqRange.setSkewForCentre (632.0f);
+    auto qRange = NormalisableRange<float> (0.1f, 18.0f, 0.0f, 1.0f);
+    qRange.setSkewForCentre (1.0f);
+        const auto& d = bandDefault (i);
+        const String n = "Band " + String (i + 1) + " ";
+        l.add (std::make_unique<AudioParameterBool> (ParameterID { pid::band (i, "on"), ver }, n + "On", false));
+        l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::band (i, "type"), ver }, n + "Type", typeNames(), (int) d.type));
+        l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::band (i, "freq"), ver }, n + "Freq", freqRange, (float) d.f,
+                                                      AudioParameterFloatAttributes().withLabel ("Hz")));
+        l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::band (i, "gain"), ver }, n + "Gain",
+                                                      NormalisableRange<float> (-30.0f, 30.0f, 0.01f), 0.0f,
+                                                      AudioParameterFloatAttributes().withLabel ("dB")));
+        l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::band (i, "q"), ver }, n + "Q", qRange, (float) d.q));
+        l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::band (i, "slope"), ver }, n + "Slope", slopeNames(), 3));
+        l.add (std::make_unique<AudioParameterBool> (ParameterID { pid::band (i, "dyn"), ver }, n + "Dynamic", false));
+        l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::band (i, "thr"), ver }, n + "Threshold",
+                                                      NormalisableRange<float> (-60.0f, 0.0f, 0.1f), -24.0f, AudioParameterFloatAttributes().withLabel ("dB")));
+        l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::band (i, "range"), ver }, n + "Range",
+                                                      NormalisableRange<float> (-18.0f, 18.0f, 0.1f), -6.0f, AudioParameterFloatAttributes().withLabel ("dB")));
+        l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::band (i, "below"), ver }, n + "Below range",
+                                                      NormalisableRange<float> (-18.0f, 18.0f, 0.1f), 0.0f, AudioParameterFloatAttributes().withLabel ("dB")));
+        l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::band (i, "src"), ver }, n + "Detector", StringArray { "Input", "Sidechain", "Mid", "Side" }, 0));
+        l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::band (i, "phase"), ver }, n + "Phase", StringArray { "Min", "Lin" }, 0));
+        l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::band (i, "ch"), ver }, n + "Channel", StringArray { "Stereo", "Mid", "Side" }, 0));
+        l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::band (i, "tb"), ver }, n + "Transient/Body",
+                                                      NormalisableRange<float> (-100.0f, 100.0f, 1.0f), 0.0f));
+    }
+inline void addBandDyn (juce::AudioProcessorValueTreeState::ParameterLayout& l, int i, int ver)
+{
+    using namespace juce;
+        const String n = "Band " + String (i + 1) + " ";
+        auto attRange = NormalisableRange<float> (0.5f, 200.0f, 0.0f, 1.0f);   attRange.setSkewForCentre (10.0f);
+        auto relRange = NormalisableRange<float> (5.0f, 2000.0f, 0.0f, 1.0f);  relRange.setSkewForCentre (100.0f);
+        l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::band (i, "att"), ver }, n + "Dyn attack", attRange, 5.0f, AudioParameterFloatAttributes().withLabel ("ms")));
+        l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::band (i, "rel"), ver }, n + "Dyn release", relRange, 120.0f, AudioParameterFloatAttributes().withLabel ("ms")));
+        l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::band (i, "knee"), ver }, n + "Dyn knee", NormalisableRange<float> (0.0f, 24.0f, 0.1f), 12.0f, AudioParameterFloatAttributes().withLabel ("dB")));
+    }
 
 inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
 {
@@ -63,32 +106,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     freqRange.setSkewForCentre (632.0f);
     auto qRange = NormalisableRange<float> (0.1f, 18.0f, 0.0f, 1.0f);
     qRange.setSkewForCentre (1.0f);
-    for (int i = 0; i < 6; ++i)
-    {
-        const auto& d = bandDefault (i);
-        const String n = "Band " + String (i + 1) + " ";
-        l.add (std::make_unique<AudioParameterBool> (ParameterID { pid::band (i, "on"), 1 }, n + "On", false));
-        l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::band (i, "type"), 1 }, n + "Type", typeNames(), (int) d.type));
-        l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::band (i, "freq"), 1 }, n + "Freq", freqRange, (float) d.f,
-                                                      AudioParameterFloatAttributes().withLabel ("Hz")));
-        l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::band (i, "gain"), 1 }, n + "Gain",
-                                                      NormalisableRange<float> (-30.0f, 30.0f, 0.01f), 0.0f,
-                                                      AudioParameterFloatAttributes().withLabel ("dB")));
-        l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::band (i, "q"), 1 }, n + "Q", qRange, (float) d.q));
-        l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::band (i, "slope"), 1 }, n + "Slope", slopeNames(), 3));
-        l.add (std::make_unique<AudioParameterBool> (ParameterID { pid::band (i, "dyn"), 1 }, n + "Dynamic", false));
-        l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::band (i, "thr"), 1 }, n + "Threshold",
-                                                      NormalisableRange<float> (-60.0f, 0.0f, 0.1f), -24.0f, AudioParameterFloatAttributes().withLabel ("dB")));
-        l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::band (i, "range"), 1 }, n + "Range",
-                                                      NormalisableRange<float> (-18.0f, 18.0f, 0.1f), -6.0f, AudioParameterFloatAttributes().withLabel ("dB")));
-        l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::band (i, "below"), 1 }, n + "Below range",
-                                                      NormalisableRange<float> (-18.0f, 18.0f, 0.1f), 0.0f, AudioParameterFloatAttributes().withLabel ("dB")));
-        l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::band (i, "src"), 1 }, n + "Detector", StringArray { "Input", "Sidechain", "Mid", "Side" }, 0));
-        l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::band (i, "phase"), 1 }, n + "Phase", StringArray { "Min", "Lin" }, 0));
-        l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::band (i, "ch"), 1 }, n + "Channel", StringArray { "Stereo", "Mid", "Side" }, 0));
-        l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::band (i, "tb"), 1 }, n + "Transient/Body",
-                                                      NormalisableRange<float> (-100.0f, 100.0f, 1.0f), 0.0f));
-    }
+    for (int i = 0; i < 6; ++i) addBandMain (l, i, 1);
     l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::mode, 1 }, "Mode", StringArray { "Zero latency", "Analog", "Linear" }, 0));
     l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::res, 1 }, "Linear resolution", StringArray { "Low", "Mid", "High" }, 1));
     l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::qmode, 1 }, "Curve", StringArray { "Clean Const", "Clean Prop", "British A", "US 500", "Console E", "Tube Passive", "Precision" }, 0));
@@ -112,15 +130,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::satOS, 1 }, "Sat oversampling", StringArray { "1x", "2x", "4x" }, 0));
 
     // ---- added later: always appended, and every default equals the old fixed behaviour ----
-    for (int i = 0; i < 6; ++i)
-    {
-        const String n = "Band " + String (i + 1) + " ";
-        auto attRange = NormalisableRange<float> (0.5f, 200.0f, 0.0f, 1.0f);   attRange.setSkewForCentre (10.0f);
-        auto relRange = NormalisableRange<float> (5.0f, 2000.0f, 0.0f, 1.0f);  relRange.setSkewForCentre (100.0f);
-        l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::band (i, "att"), 2 }, n + "Dyn attack", attRange, 5.0f, AudioParameterFloatAttributes().withLabel ("ms")));
-        l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::band (i, "rel"), 2 }, n + "Dyn release", relRange, 120.0f, AudioParameterFloatAttributes().withLabel ("ms")));
-        l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::band (i, "knee"), 2 }, n + "Dyn knee", NormalisableRange<float> (0.0f, 24.0f, 0.1f), 12.0f, AudioParameterFloatAttributes().withLabel ("dB")));
-    }
+    for (int i = 0; i < 6; ++i) addBandDyn (l, i, 2);
     l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::tbSens, 2 }, "Transient sensitivity", NormalisableRange<float> (-12.0f, 12.0f, 0.1f), 0.0f, AudioParameterFloatAttributes().withLabel ("dB")));
     l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::tbWidth, 2 }, "Transient width", NormalisableRange<float> (1.0f, 18.0f, 0.1f), 6.0f, AudioParameterFloatAttributes().withLabel ("dB")));
     l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::tbAtt, 2 }, "Transient attack", NormalisableRange<float> (0.1f, 2.0f, 0.01f), 2.0f, AudioParameterFloatAttributes().withLabel ("ms")));
@@ -133,5 +143,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
         l.add (std::make_unique<AudioParameterFloat> (ParameterID { k == 1 ? pid::tbE1g : pid::tbE2g, 2 }, "Detector EQ " + n + " gain", NormalisableRange<float> (-18.0f, 18.0f, 0.1f), 0.0f, AudioParameterFloatAttributes().withLabel ("dB")));
         l.add (std::make_unique<AudioParameterFloat> (ParameterID { k == 1 ? pid::tbE1q : pid::tbE2q, 2 }, "Detector EQ " + n + " Q", NormalisableRange<float> (0.3f, 8.0f, 0.01f, 0.5f), 1.0f));
     }
+    // ---- 0.1.1: bands 7 and 8, appended (off by default) ----
+    for (int i = 6; i < eqcore::kBands; ++i) { addBandMain (l, i, 3); addBandDyn (l, i, 3); }
     return l;
 }

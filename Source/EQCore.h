@@ -14,6 +14,7 @@
 // =============================================================================
 namespace eqcore
 {
+constexpr int kBands = 8;      // bands 7 and 8 were added in 0.1.1 (parameters appended)
 constexpr double kPi  = 3.14159265358979323846;
 constexpr double kTau = 2.0 * kPi;
 
@@ -185,9 +186,9 @@ struct Model
     Model() = default;
     // include: which bands to build (default: all that are on)
     template <class Pred>
-    Model (const std::array<Band, 6>& bands, QMode qm, double sampleRate, Pred include) : fs (sampleRate)
+    Model (const std::array<Band, kBands>& bands, QMode qm, double sampleRate, Pred include) : fs (sampleRate)
     {
-        for (int i = 0; i < 6; ++i)
+        for (int i = 0; i < kBands; ++i)
         {
             const auto& b = bands[(size_t) i];
             if (! b.on || ! include (i, b)) continue;
@@ -201,7 +202,7 @@ struct Model
             }
         }
     }
-    Model (const std::array<Band, 6>& bands, QMode qm, double sampleRate)
+    Model (const std::array<Band, kBands>& bands, QMode qm, double sampleRate)
         : Model (bands, qm, sampleRate, [] (int, const Band&) { return true; }) {}
     bool empty() const { return analog.empty(); }
     cplx analogResponse (double f) const { cplx h = 1.0; for (auto& s : analog) h *= analogSection (s, f / s.f0); return h; }
@@ -385,7 +386,7 @@ struct ChannelModel
 };
 
 // ch: 1 = mid, 2 = side. Stereo bands go into both.
-inline ChannelModel channelModel (const std::array<Band, 6>& bands, QMode qm, double fs, Mode mode, int ch)
+inline ChannelModel channelModel (const std::array<Band, kBands>& bands, QMode qm, double fs, Mode mode, int ch)
 {
     ChannelModel cm; cm.mode = mode;
     auto inCh = [ch] (const Band& b) { return b.ch == 0 || b.ch == ch; };

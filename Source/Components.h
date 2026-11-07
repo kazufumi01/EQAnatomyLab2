@@ -29,7 +29,7 @@ struct ParamHelp
     void toggleGesture (const juce::String& id) const { if (altDown()) resetDefault (id); else setGesture (id, value (id) > 0.5f ? 0.0f : 1.0f); }
     bool ja() const { return proc.uiState.getProperty ("lang", "ja").toString() == "ja"; }
     juce::String tr (const char* j, const char* e) const { return juce::String::fromUTF8 (ja() ? j : e); }
-    int selected() const { return juce::jlimit (0, 5, (int) proc.uiState.getProperty ("selected", 2)); }
+    int selected() const { return juce::jlimit (0, eqcore::kBands - 1, (int) proc.uiState.getProperty ("selected", 2)); }
     void select (int i) const { proc.uiState.setProperty ("selected", i, nullptr); }
     // hover help, filled by the editor from the component under the mouse
     juce::String hoverTitle, hoverText;
@@ -273,8 +273,8 @@ public:
         }
 
         if (full)
-            setHelp (*this, "BAND PANEL", "選択中のバンドのすべての設定。上の 1〜6：クリックで選択（選択中ならもう一度で浮き窓の表示切替）、ダブルクリックでオン・オフ（塗り＝オン、輪＝オフ）。キー 1〜6 でも選べる",
-                     "Every setting of the selected band. Tabs 1–6: click to select (click the selected one again to show or hide the floating panel), double-click to switch on/off (filled = on, ring = off). Keys 1–6 select too");
+            setHelp (*this, "BAND PANEL", "選択中のバンドのすべての設定。上の 1〜8：クリックで選択（選択中ならもう一度で浮き窓の表示切替）、ダブルクリックでオン・オフ（塗り＝オン、輪＝オフ）。キー 1〜8 でも選べる",
+                     "Every setting of the selected band. Tabs 1–8: click to select (click the selected one again to show or hide the floating panel), double-click to switch on/off (filled = on, ring = off). Keys 1–8 select too");
         else
             setHelp (*this, "BAND", "左の色の丸でバンドのオン・オフ（塗り＝オン、輪＝オフ）。上の帯をドラッグで移動、ダブルクリックで点に付いて動く表示に戻す。右クリックで浮き窓を隠す",
                      "The coloured dot switches the band (filled = on, ring = off). Drag the top strip to move the panel, double-click it to follow the dot again. Right-click hides the panel");
@@ -373,7 +373,7 @@ public:
     }
     juce::Rectangle<int> dotArea() const { return full ? juce::Rectangle<int>() : juce::Rectangle<int> { 22, 7, 12, 12 }; }
     juce::Rectangle<int> stripArea() const { return { 0, 0, getWidth(), 26 }; }
-    juce::Rectangle<int> tabArea (int i) const { return { 7 + i * 25, 4, 22, 18 }; }
+    juce::Rectangle<int> tabArea (int i) const { return { 7 + i * 23, 4, 21, 18 }; }
     void hidePanel() { if (! full) ph.proc.uiState.setProperty ("popup", false, nullptr); }
     // the white threshold line in the detector meter can be dragged (±5 px wide hit area, one gesture per drag)
     float thrX() const
@@ -390,7 +390,7 @@ public:
         if (e.mods.isPopupMenu()) { hidePanel(); return; }
         if (full)
         {
-            for (int i = 0; i < 6; ++i)
+            for (int i = 0; i < eqcore::kBands; ++i)
                 if (tabArea (i).contains (e.getPosition()))
                 {
                     if (e.getNumberOfClicks() >= 2) return;            // the double-click handles it
@@ -450,7 +450,7 @@ public:
     {
         if (full)
         {
-            for (int i = 0; i < 6; ++i)
+            for (int i = 0; i < eqcore::kBands; ++i)
                 if (tabArea (i).contains (e.getPosition()))
                 {
                     auto& ui = ph.proc.uiState;
@@ -505,7 +505,7 @@ public:
         // ---- detail panel
         g.setColour (theme::panel); g.fillRoundedRectangle (r, 6.0f);
         g.setColour (theme::line); g.drawRoundedRectangle (r, 6.0f, 1.0f);
-        for (int i = 0; i < 6; ++i)
+        for (int i = 0; i < eqcore::kBands; ++i)
         {
             const auto a = tabArea (i).toFloat();
             const bool on = ph.value (pid::band (i, "on")) > 0.5f, sel = i == band;
@@ -524,7 +524,7 @@ public:
             if (bandOn && ph.value (pid::band (band, "dyn")) > 0.5f) tg.add ("D");
             if (bandOn && std::abs (ph.value (pid::band (band, "tb"))) > 0.5f) tg.add ("T/B");
             g.setColour (bandOn ? theme::bandColour (band) : theme::muted); g.setFont (theme::mono (9.0f, true));
-            g.drawText (bandOn ? tg.joinIntoString (" ") : juce::String ("off"), 158, 4, getWidth() - 214, 18, juce::Justification::centredRight);
+            g.drawText (bandOn ? tg.joinIntoString (" ") : juce::String ("off"), 192, 4, getWidth() - 199, 18, juce::Justification::centredRight);
         }
         g.setColour (theme::text.withAlpha (0.12f)); g.drawHorizontalLine (rowSep, 7.0f, (float) getWidth() - 7.0f);
         g.setColour (theme::muted); g.setFont (theme::ui (9.5f));
@@ -871,13 +871,13 @@ public:
                 ghost = eqcore::curves (eqcore::channelModel (allMin, qm, fs, eqcore::Mode::Analog, 1), fr);
             }
             const int s = ph.selected();
-            std::array<eqcore::Band, 6> one {}; one[0] = bands[(size_t) s]; one[0].ch = 0;
+            std::array<eqcore::Band, eqcore::kBands> one {}; one[0] = bands[(size_t) s]; one[0].ch = 0;
             selCurve = bands[(size_t) s].on ? eqcore::curves (eqcore::channelModel (one, qm, fs, mode, 1), fr).mag : std::vector<double>();
         }
         // dynamic EQ: the curve as it is right now
         {
             auto live = bands; bool moving = false;
-            for (int i = 0; i < 6; ++i)
+            for (int i = 0; i < eqcore::kBands; ++i)
             {
                 const float d = ph.proc.dynGainDb[(size_t) i].load();
                 if (std::abs (d) > 0.05f) { live[(size_t) i].g += d; moving = true; }
@@ -1099,7 +1099,7 @@ public:
         // dynamic bands: range bar from the static gain to gain + range, dot = now
         {
             const auto bs = ph.proc.currentBands();
-            for (int i = 0; i < 6; ++i)
+            for (int i = 0; i < eqcore::kBands; ++i)
             {
                 const auto& b = bs[(size_t) i];
                 if (! b.on || ph.value (pid::band (i, "dyn")) < 0.5f) continue;
@@ -1127,7 +1127,7 @@ public:
         // nodes, with Lin / M / S / D tags underneath
         const auto bands = ph.proc.currentBands();
         const int solo = ph.proc.soloBand.load();
-        for (int i = 0; i < 6; ++i)
+        for (int i = 0; i < eqcore::kBands; ++i)
         {
             const auto c = nodePos (i, bands[(size_t) i]);
             const float rad = i == s ? 11.0f : 8.0f;
@@ -1265,7 +1265,7 @@ public:
         const auto p = pick (e.position);
         if (p.what >= 3) return;
         if (p.band >= 0 && p.what == 0) { const int b = p.band; ph.setGesture (pid::band (b, "on"), ph.value (pid::band (b, "on")) > 0.5f ? 0.0f : 1.0f); return; }
-        for (int i = 0; i < 6; ++i)
+        for (int i = 0; i < eqcore::kBands; ++i)
             if (ph.value (pid::band (i, "on")) < 0.5f)
             {
                 const auto pr = plot();
@@ -1477,7 +1477,7 @@ public:
     {
         if (scaleHold) return;
         float need = 0.0f;
-        for (int i = 0; i < 6; ++i)
+        for (int i = 0; i < eqcore::kBands; ++i)
         {
             if (ph.value (pid::band (i, "on")) < 0.5f) continue;
             const int t = (int) ph.value (pid::band (i, "type"));
@@ -1520,7 +1520,7 @@ private:
             if (std::abs (h->second.x - p.x) < 9 && std::abs (h->second.y - p.y) < 14) return { ph.selected(), 2 };
         }
         const auto bands = ph.proc.currentBands(); int best = -1; float bd = 16.0f;
-        for (int i = 0; i < 6; ++i) { const float d = nodePos (i, bands[(size_t) i]).getDistanceFrom (p); if (d < bd) { bd = d; best = i; } }
+        for (int i = 0; i < eqcore::kBands; ++i) { const float d = nodePos (i, bands[(size_t) i]).getDistanceFrom (p); if (d < bd) { bd = d; best = i; } }
         return { best, 0 };
     }
     void placePopup()
@@ -1570,13 +1570,13 @@ class BandChips : public juce::Component
 public:
     explicit BandChips (ParamHelp& h) : ph (h)
     {
-        setHelp (*this, "BANDS", "クリック：選択して浮き窓を表示（選択中なら表示の切り替え）／ダブルクリック・色の丸：オン・オフ／周波数やゲインの数字：上下ドラッグで変更（Shift で微調整）。右端の印は L＝Lin、M・S＝チャンネル、D＝ダイナミック。キー 1〜6 でも選べる",
-                 "Click: select and show the panel (on the selected band: show/hide) / double-click or the dot: on/off / drag the frequency or gain number up/down to change it (Shift for fine). Tags: L = Lin, M/S = channel, D = dynamic. Keys 1–6 select too");
+        setHelp (*this, "BANDS", "クリック：選択して浮き窓を表示（選択中なら表示の切り替え）／ダブルクリック・色の丸：オン・オフ／周波数やゲインの数字：上下ドラッグで変更（Shift で微調整）。右端の印は L＝Lin、M・S＝チャンネル、D＝ダイナミック。キー 1〜8 でも選べる",
+                 "Click: select and show the panel (on the selected band: show/hide) / double-click or the dot: on/off / drag the frequency or gain number up/down to change it (Shift for fine). Tags: L = Lin, M/S = channel, D = dynamic. Keys 1–8 select too");
     }
     void paint (juce::Graphics& g) override
     {
         const int s = ph.selected();
-        for (int i = 0; i < 6; ++i)
+        for (int i = 0; i < eqcore::kBands; ++i)
         {
             auto r = cell (i).toFloat();
             const bool on = ph.value (pid::band (i, "on")) > 0.5f;
@@ -1610,7 +1610,7 @@ public:
     void mouseDown (const juce::MouseEvent& e) override
     {
         dragBand = -1;
-        for (int i = 0; i < 6; ++i)
+        for (int i = 0; i < eqcore::kBands; ++i)
             if (cell (i).contains (e.getPosition()))
             {
                 ph.proc.undo.beginNewTransaction();
@@ -1651,12 +1651,12 @@ public:
     void mouseMove (const juce::MouseEvent& e) override
     {
         int k = 0;
-        for (int i = 0; i < 6 && k == 0; ++i) if (cell (i).contains (e.getPosition()) && e.x >= cell (i).getX() + 22) k = zoneAt (i, e.x);
+        for (int i = 0; i < eqcore::kBands && k == 0; ++i) if (cell (i).contains (e.getPosition()) && e.x >= cell (i).getX() + 22) k = zoneAt (i, e.x);
         setMouseCursor (k > 0 ? juce::MouseCursor::UpDownResizeCursor : juce::MouseCursor::NormalCursor);
     }
     void mouseDoubleClick (const juce::MouseEvent& e) override
     {
-        for (int i = 0; i < 6; ++i)
+        for (int i = 0; i < eqcore::kBands; ++i)
             if (cell (i).contains (e.getPosition()) && e.x >= cell (i).getX() + 22)
             {
                 auto& ui = ph.proc.uiState;

@@ -180,7 +180,7 @@ void EQAnatomyView::refreshTexts()
     const int r = (int) ph.value (pid::res);
     resBtn.setButtonText (re[r]);
     bool anyLin = mode == 2;
-    for (int i = 0; i < 6; ++i) anyLin = anyLin || (ph.value (pid::band (i, "on")) > 0.5f && proc.bandIsLin (i));
+    for (int i = 0; i < eqcore::kBands; ++i) anyLin = anyLin || (ph.value (pid::band (i, "on")) > 0.5f && proc.bandIsLin (i));
     resBtn.setAlpha (anyLin ? 1.0f : 0.4f);
     const int cv = (int) ph.value (pid::qmode);
     if (curveBox.getSelectedId() != cv + 1) curveBox.setSelectedId (cv + 1, juce::dontSendNotification);
@@ -291,7 +291,7 @@ bool EQAnatomyView::keyPressed (const juce::KeyPress& k)
     const auto c = k.getTextCharacter();
     if (k == juce::KeyPress ('z', juce::ModifierKeys::commandModifier, 0)) { proc.undo.undo(); return true; }
     if (k == juce::KeyPress ('z', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0)) { proc.undo.redo(); return true; }
-    if (c >= '1' && c <= '6') { ph.select (c - '1'); return true; }
+    if (c >= '1' && c <= '0' + eqcore::kBands) { ph.select (c - '1'); return true; }
     if (k == juce::KeyPress::deleteKey || k == juce::KeyPress::backspaceKey)
     { ph.setGesture (pid::band (ph.selected(), "on"), 0.0f); return true; }
     return false;
