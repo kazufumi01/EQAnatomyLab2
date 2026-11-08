@@ -53,8 +53,8 @@ private:
 };
 inline void markReset (juce::Component& c) { c.getProperties().set ("resettable", true); }
 
-inline const char* mouseHelpJa() { return "点をドラッグ：周波数とゲイン／Cmd＋ドラッグ：縦か横に固定／Alt＋ドラッグ：そのバンドだけを試聴／幅ハンドル・Shift＋上下・ホイール：Q／ダブルクリック：追加・オフ／右クリック：浮き窓の表示切替／上部の SAT タブ：サチュレーターの帯域／Cmd＋Z：元に戻す"; }
-inline const char* mouseHelpEn() { return "Drag a dot: frequency and gain / Cmd + drag: lock to one axis / Alt + drag: solo that band / width handles, Shift + drag or wheel: Q / double-click: add or switch off / right-click: show or hide the floating panel / SAT tabs: saturator band / Cmd + Z: undo"; }
+inline const char* mouseHelpJa() { return "点をドラッグ：周波数とゲイン／Cmd＋ドラッグ：縦か横に固定／Alt＋ドラッグ：そのバンドだけを試聴／幅ハンドル・Shift＋上下・ホイール：Q／ダブルクリック：追加・オフ／右クリック：浮き窓の表示切替／DYN の▲▼（塗り＝ABOVE、輪＝BELOW）：上下ドラッグで可動範囲、Option＋クリックで初期値／上部の SAT タブ：サチュレーターの帯域／Cmd＋Z：元に戻す"; }
+inline const char* mouseHelpEn() { return "Drag a dot: frequency and gain / Cmd + drag: lock to one axis / Alt + drag: solo that band / width handles, Shift + drag or wheel: Q / double-click: add or switch off / right-click: show or hide the floating panel / DYN triangles (filled = ABOVE, ring = BELOW): drag up/down for the range, Option+click resets / SAT tabs: saturator band / Cmd + Z: undo"; }
 
 inline juce::String fmtHz (double f)
 {
@@ -859,6 +859,7 @@ public:
         const auto bands = ph.proc.currentBands();
         for (auto& b : bands) sig << (int) b.on << (int) b.type << b.slope << "_" << b.f << "_" << b.g << "_" << b.q << (int) b.lin << b.ch;
         sig << ph.selected();
+        for (int i = 0; i < eqcore::kBands; ++i) sig << "d" << (int) (ph.value (pid::band (i, "dyn")) > 0.5f) << ph.value (pid::band (i, "range")) << "_" << ph.value (pid::band (i, "below"));
         if (sig != lastSig)
         {
             lastSig = sig;
@@ -878,6 +879,26 @@ public:
             const int s = ph.selected();
             std::array<eqcore::Band, eqcore::kBands> one {}; one[0] = bands[(size_t) s]; one[0].ch = 0;
             selCurve = bands[(size_t) s].on ? eqcore::curves (eqcore::channelModel (one, qm, fs, mode, 1), fr).mag : std::vector<double>();
+            // dynamic EQ range (0.1.1): the band alone at gain + ABOVE and at gain + BELOW; the area between is where it can move
+            for (auto& d : dynArea) { d.lo.clear(); d.hi.clear(); d.st.clear(); d.u.clear(); }
+            for (int i = 0; i < eqcore::kBands; ++i)
+            {
+                const auto& b = bands[(size_t) i];
+                if (! b.on || ph.value (pid::band (i, "dyn")) < 0.5f) continue;
+                if (! (b.type == eqcore::Type::Bell || b.type == eqcore::Type::LowShelf || b.type == eqcore::Type::HighShelf)) continue;
+                const double a = ph.value (pid::band (i, "range")), bl = ph.value (pid::band (i, "below"));
+                std::array<eqcore::Band, eqcore::kBands> e {}; e[0] = b; e[0].ch = 0;
+                e[0].g = juce::jlimit (-30.0, 30.0, b.g + std::min ({ 0.0, a, bl }));
+                auto lo = eqcore::curves (eqcore::channelModel (e, qm, fs, mode, 1), fr).mag;
+                e[0].g = juce::jlimit (-30.0, 30.0, b.g + std::max ({ 0.0, a, bl }));
+                auto hi = eqcore::curves (eqcore::channelModel (e, qm, fs, mode, 1), fr).mag;
+                e[0].g = juce::jlimit (-30.0, 30.0, b.g);
+                auto st = eqcore::curves (eqcore::channelModel (e, qm, fs, mode, 1), fr).mag;
+                e[0].g = b.g >= 29.0 ? b.g - 1.0 : b.g + 1.0;
+                auto u = eqcore::curves (eqcore::channelModel (e, qm, fs, mode, 1), fr).mag;
+                for (size_t k = 0; k < u.size(); ++k) u[k] = std::abs (u[k] - st[k]);   // dB of curve per dB of gain
+                dynArea[(size_t) i] = { std::move (lo), std::move (hi), std::move (st), std::move (u) };
+            }
         }
         // dynamic EQ: the curve as it is right now
         {
@@ -1006,6 +1027,17 @@ public:
         }
         if (cur.mag.empty()) return;
         const int s = ph.selected();
+        for (int i = 0; i < eqcore::kBands; ++i)
+        {
+            const auto& d = dynArea[(size_t) i];
+            if (d.lo.size() != fr.size() || d.hi.size() != fr.size()) continue;
+            auto y = [&] (double v) { return yOf (juce::jlimit (-(double) dbRange, (double) dbRange, v)); };
+            juce::Path p; p.startNewSubPath (xOf (fr.front()), y (d.hi.front()));
+            for (size_t k = 1; k < fr.size(); ++k) p.lineTo (xOf (fr[k]), y (d.hi[k]));
+            for (size_t k = fr.size(); k-- > 0;) p.lineTo (xOf (fr[k]), y (d.lo[k]));
+            p.closeSubPath();
+            g.setColour (theme::bandColour (i).withAlpha (i == s ? 0.22f : 0.13f)); g.fillPath (p);
+        }
         if (! selCurve.empty())
         {
             juce::Path p; p.startNewSubPath (xOf (fr.front()), yOf (0));
@@ -1101,22 +1133,20 @@ public:
                                      "Where the phase turns more than 60°, or a boost exceeds +6 dB, the difference is louder than the input (0 dB). That is expected"),
                               box.reduced (8, 4).withTrimmedTop (14).toNearestInt(), juce::Justification::centredLeft, 2, 0.9f);
         }
-        // dynamic bands: range bar from the static gain to gain + range, dot = now
-        {
-            const auto bs = ph.proc.currentBands();
-            for (int i = 0; i < eqcore::kBands; ++i)
-            {
-                const auto& b = bs[(size_t) i];
-                if (! b.on || ph.value (pid::band (i, "dyn")) < 0.5f) continue;
-                if (! (b.type == eqcore::Type::Bell || b.type == eqcore::Type::LowShelf || b.type == eqcore::Type::HighShelf)) continue;
-                const float a = ph.value (pid::band (i, "range")), bl = ph.value (pid::band (i, "below"));
-                const float x = xOf (b.f) + 16;
-                const float y0 = yOf (juce::jlimit (-(double) dbRange, (double) dbRange, b.g + std::min (0.0f, std::min (a, bl)))), y1 = yOf (juce::jlimit (-(double) dbRange, (double) dbRange, b.g + std::max (0.0f, std::max (a, bl))));
-                g.setColour (theme::bandColour (i).withAlpha (0.35f)); g.fillRoundedRectangle (x - 2, std::min (y0, y1), 4, std::abs (y1 - y0) + 1, 2);
-                const float yn = yOf (juce::jlimit (-(double) dbRange, (double) dbRange, b.g + (double) ph.proc.dynGainDb[(size_t) i].load()));
-                g.setColour (theme::bandColour (i)); g.fillEllipse (x - 4, yn - 4, 8, 8);
-            }
-        }
+        // dynamic bands: ABOVE (filled) / BELOW (ring) marks on the edges of the range area, drag up/down
+        for (int i = 0; i < eqcore::kBands; ++i)
+            for (int w = 0; w < 2; ++w)
+                if (auto pt = dynMark (i, w))
+                {
+                    const bool hot = dynHover == i * 2 + w || dynDrag == i * 2 + w;
+                    const float r = hot ? 6.0f : 4.5f;
+                    juce::Path tri;   // points away from the static curve: up for +, down for −
+                    const float v = ph.value (pid::band (i, w == 0 ? "range" : "below")), dir = v >= 0 ? -1.0f : 1.0f;
+                    tri.addTriangle (pt->x - r, pt->y - dir * r * 0.55f, pt->x + r, pt->y - dir * r * 0.55f, pt->x, pt->y + dir * r * 0.75f);
+                    g.setColour (theme::well); g.strokePath (tri, juce::PathStrokeType (2.5f));
+                    g.setColour (theme::bandColour (i));
+                    if (w == 0) g.fillPath (tri); else { g.setColour (theme::well); g.fillPath (tri); g.setColour (theme::bandColour (i)); g.strokePath (tri, juce::PathStrokeType (1.4f)); }
+                }
         // width handles
         if (auto h = handles (s); h.has_value())
         {
@@ -1195,6 +1225,13 @@ public:
             scDrag = k; scStartY = e.position.y; scStartSens = ph.value (pid::tbSens); scStartWidth = ph.value (pid::tbWidth);
             ph.proc.undo.beginNewTransaction(); ph.begin (k == 1 ? pid::tbSens : pid::tbWidth); return;
         }
+        if (const int m = dynHit (e.position); m >= 0)
+        {
+            const juce::String id = pid::band (m / 2, (m % 2) == 0 ? "range" : "below");
+            ph.select (m / 2);
+            if (e.mods.isAltDown()) { ph.proc.undo.beginNewTransaction(); ph.resetDefault (id); return; }
+            dynDrag = m; ph.proc.undo.beginNewTransaction(); ph.begin (id); repaint(); return;
+        }
         drag = pick (e.position);
         if (drag.what >= 3) { ph.begin (drag.what == 3 ? pid::satLo : pid::satHi); return; }
         if (drag.band < 0) return;
@@ -1214,6 +1251,18 @@ public:
             const float dd = (scStartY - e.position.y) / dbPx() * (e.mods.isShiftDown() ? 0.2f : 1.0f);   // dB moved, up = +
             if (scDrag == 1) ph.set (pid::tbSens, juce::jlimit (-12.0f, 12.0f, std::round ((scStartSens - dd) * 10.0f) / 10.0f));   // lower line = −Sens
             else ph.set (pid::tbWidth, juce::jlimit (1.0f, 18.0f, std::round ((scStartWidth + dd) * 10.0f) / 10.0f));
+            return;
+        }
+        if (dynDrag >= 0)
+        {
+            // the mark follows the mouse along the area's edge: value = (mouse dB − static curve) / sensitivity
+            const int i = dynDrag / 2; const auto& d = dynArea[(size_t) i];
+            if (d.st.size() != fr.size()) return;
+            const size_t k = frIndex (fOf (xOf (ph.value (pid::band (i, "freq"))) + 22.0f));
+            const auto pr = plot();
+            const double db = juce::jmap ((double) e.position.y, (double) pr.getBottom(), (double) pr.getY(), -(double) dbRange, (double) dbRange);
+            const double v = (db - d.st[k]) / std::max (0.05, d.u[k]);
+            ph.set (pid::band (i, (dynDrag % 2) == 0 ? "range" : "below"), (float) juce::jlimit (-18.0, 18.0, std::round (v * 10.0) / 10.0));
             return;
         }
         if (drag.what >= 3)
@@ -1259,6 +1308,7 @@ public:
     {
         if (scaleHold) { scaleHold = false; repaint(); }
         if (scDrag != 0) { ph.end (scDrag == 1 ? pid::tbSens : pid::tbWidth); scDrag = 0; return; }
+        if (dynDrag >= 0) { ph.end (pid::band (dynDrag / 2, (dynDrag % 2) == 0 ? "range" : "below")); dynDrag = -1; repaint(); return; }
         if (drag.what >= 3) ph.end (drag.what == 3 ? pid::satLo : pid::satHi);
         else if (drag.band >= 0) for (auto w : { "freq", "gain", "q" }) ph.end (pid::band (drag.band, w));
         drag = {}; axis = 0;
@@ -1296,6 +1346,12 @@ public:
     void mouseMove (const juce::MouseEvent& e) override
     {
         if (scopeHit (e.position) != 0) { setMouseCursor (juce::MouseCursor::UpDownResizeCursor); return; }
+        if (const int m = dynHit (e.position); m != dynHover) { dynHover = m; repaint(); }
+        if (dynHover >= 0)
+        {
+            setMouseCursor (juce::MouseCursor::UpDownResizeCursor);
+            return;
+        }
         const auto p = pick (e.position);
         setMouseCursor (p.what >= 1 ? juce::MouseCursor::LeftRightResizeCursor
                         : p.band < 0 ? juce::MouseCursor::CrosshairCursor
@@ -1303,6 +1359,25 @@ public:
     }
 
 private:
+    // dynamic range marks: w 0 = ABOVE (range), 1 = BELOW. They sit 22 px right of the node, on the area's edge.
+    size_t frIndex (double f) const { const auto it = std::lower_bound (fr.begin(), fr.end(), f); return (size_t) juce::jlimit<long> (0, (long) fr.size() - 1, (long) (it - fr.begin())); }
+    std::optional<juce::Point<float>> dynMark (int i, int w) const
+    {
+        const auto& d = dynArea[(size_t) i];
+        if (d.st.size() != fr.size() || fr.empty()) return std::nullopt;
+        const float x = xOf (ph.value (pid::band (i, "freq"))) + 22.0f;
+        const size_t k = frIndex (fOf (x));
+        const double v = d.st[k] + ph.value (pid::band (i, w == 0 ? "range" : "below")) * d.u[k];
+        return juce::Point<float> (x, yOf (juce::jlimit (-(double) dbRange, (double) dbRange, v)));
+    }
+    int dynHit (juce::Point<float> p) const
+    {
+        for (int i = eqcore::kBands; --i >= 0;)
+            for (int w = 0; w < 2; ++w)
+                if (auto m = dynMark (i, w)) if (m->getDistanceFrom (p) < 8.0f) return i * 2 + w;
+        return -1;
+    }
+    int dynHover = -1, dynDrag = -1;
     struct Pick { int band = -1; int what = 0; };   // what: 0 node, 1/2 width handles, 3/4 saturator band edges
     juce::Rectangle<float> fullPlot() const { return getLocalBounds().toFloat().withTrimmedLeft (34).withTrimmedRight (8).withTrimmedTop (30).withTrimmedBottom (18); }
     float splitFrac() const { return lastScope ? 0.46f : 0.64f; }       // the scope needs more room in the lower panel
@@ -1551,6 +1626,7 @@ private:
     BandPopup popup;
     juce::TextButton phaseBtn, overlayBtn;     // Phase ⇄ GD, Overlay ⇄ Split
     std::vector<double> fr; eqcore::CurvesV2 cur, curS; eqcore::Curves ghost; std::vector<double> selCurve, liveMag;
+    struct DynArea { std::vector<double> lo, hi, st, u; }; std::array<DynArea, eqcore::kBands> dynArea;   // dynamic EQ: where each band can move
     bool anyMS = false, anyLR = false, lastSplit = false, altSolo = false;
     std::vector<float> spectrum, spectrumB; juce::String lastSig;
     juce::ComboBox anaA, anaB;
