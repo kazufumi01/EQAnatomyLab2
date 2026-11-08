@@ -415,6 +415,10 @@ void EQAnatomyProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
                 analyzerS[(size_t) (start + i)] = s;
                 analyzerT[(size_t) (start + i)] = tb ? m * k : 0.0f;
                 analyzerB[(size_t) (start + i)] = tb ? m * (1.0f - k) : 0.0f;
+                const float il = dryD.getSample (0, from + i), ir = dryD.getSample (1, from + i);
+                analyzerInM[(size_t) (start + i)] = 0.5f * (il + ir);
+                analyzerInS[(size_t) (start + i)] = 0.5f * (il - ir);
+                analyzerSC[(size_t) (start + i)] = scL != nullptr ? 0.5f * (scL[from + i] + scR[from + i]) : 0.0f;
             }
         };
         feed (s1, n1, 0); feed (s2, n2, n1);

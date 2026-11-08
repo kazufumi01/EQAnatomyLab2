@@ -805,16 +805,16 @@ public:
         spectrum.assign (fr.size(), -140.0f); spectrumB.assign (fr.size(), -140.0f);
 
         // analyzer layers: A is filled, B (optional) is a line on top
-        static const char* names[] = { "Stereo", "Mid", "Side", "Trans", "Body" };
+        static const char* names[] = { "Stereo", "Mid", "Side", "Trans", "Body", "Input", "SC" };
         anaB.addItem ("B off", 1);
-        for (int i = 0; i < 5; ++i) { anaA.addItem (juce::String ("A ") + names[i], i + 1); anaB.addItem (juce::String ("B ") + names[i], i + 2); }
-        anaA.setSelectedId (1 + juce::jlimit (0, 4, (int) ph.proc.uiState.getProperty ("anA", 0)), juce::dontSendNotification);
-        anaB.setSelectedId (1 + juce::jlimit (0, 5, (int) ph.proc.uiState.getProperty ("anB", 0)), juce::dontSendNotification);
+        for (int i = 0; i < 7; ++i) { anaA.addItem (juce::String ("A ") + names[i], i + 1); anaB.addItem (juce::String ("B ") + names[i], i + 2); }
+        anaA.setSelectedId (1 + juce::jlimit (0, 6, (int) ph.proc.uiState.getProperty ("anA", 0)), juce::dontSendNotification);
+        anaB.setSelectedId (1 + juce::jlimit (0, 7, (int) ph.proc.uiState.getProperty ("anB", 0)), juce::dontSendNotification);
         anaA.onChange = [this] { ph.proc.uiState.setProperty ("anA", anaA.getSelectedId() - 1, nullptr); };
         anaB.onChange = [this] { ph.proc.uiState.setProperty ("anB", anaB.getSelectedId() - 1, nullptr); };
         addAndMakeVisible (anaA); addAndMakeVisible (anaB);
-        const char* hj = "スペアナに出す音を選ぶ。A は塗り、B は線で重なる（B off で非表示）。Stereo＝Mid と Side のパワー和（L/R の平均）／Mid・Side＝出力の M/S／Trans・Body＝検出器が聞いている「アタック／胴」の音。注意：Trans・Body は検出器の見立てを出力に掛けた表示で、厳密な分離ではない（掛け算なので、元の音との合計は一致しない）";
-        const char* he = "Choose what the analyzer shows. A is filled, B is a line on top (B off hides it). Stereo = power sum of Mid and Side (mean of L and R) / Mid, Side = the output's M/S / Trans, Body = the part the detector hears as attack or body. Careful: Trans and Body show the detector's guess applied to the output, not a strict separation";
+        const char* hj = "スペアナに出す音を選ぶ。A は塗り、B は線で重なる（B off で非表示）。Stereo＝Mid と Side のパワー和（L/R の平均）／Mid・Side＝出力の M/S／Trans・Body＝検出器が聞いている「アタック／胴」の音／Input＝EQ 前の入力（出力と同じ遅れに揃えてある。B に出すと前後比較）／SC＝サイドチェインの入力（ホストで接続した時だけ。キックとベースの帯域の重なりなどを見る）。注意：Trans・Body は検出器の見立てを出力に掛けた表示で、厳密な分離ではない（掛け算なので、元の音との合計は一致しない）";
+        const char* he = "Choose what the analyzer shows. A is filled, B is a line on top (B off hides it). Stereo = power sum of Mid and Side (mean of L and R) / Mid, Side = the output's M/S / Trans, Body = the part the detector hears as attack or body / Input = the input before the EQ (delayed to line up with the output; put it on B for a before/after view) / SC = the sidechain input (only when connected in the host; e.g. see where kick and bass overlap). Careful: Trans and Body show the detector's guess applied to the output, not a strict separation";
         setHelp (anaA, "ANALYZER A", hj, he); setHelp (anaB, "ANALYZER B", hj, he);
     }
 
@@ -822,7 +822,8 @@ public:
     {
         {
             // SOLO M / S → Mid + Side, SOLO T / B → Trans + Body, shown but not stored; the saved choice returns after the solo
-            int a = juce::jlimit (0, 4, (int) ph.proc.uiState.getProperty ("anA", 0)), b = juce::jlimit (0, 5, (int) ph.proc.uiState.getProperty ("anB", 0));
+            int a = juce::jlimit (0, 6, (int) ph.proc.uiState.getProperty ("anA", 0)), b = juce::jlimit (0, 7, (int) ph.proc.uiState.getProperty ("anB", 0));
+            { const bool sc = ph.proc.sidechainConnected(); anaA.setItemEnabled (7, sc); anaB.setItemEnabled (8, sc); }   // SC needs the host's sidechain
             const int sv = ph.proc.soloViewEffective();
             autoAna = sv != 0;
             if (sv == 1 || sv == 2) { a = 1; b = 3; } else if (sv >= 3) { a = 3; b = 5; }

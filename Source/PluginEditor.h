@@ -57,12 +57,15 @@ private:
     juce::dsp::FFT fft { 13 };
     juce::dsp::WindowingFunction<float> window { 8192, juce::dsp::WindowingFunction<float>::hann };
     // four rings (Mid, Side, Transient, Body), written in step; only the layers on screen are transformed
-    std::array<std::vector<float>, 4> rings { std::vector<float> (8192, 0.0f), std::vector<float> (8192, 0.0f),
-                                              std::vector<float> (8192, 0.0f), std::vector<float> (8192, 0.0f) };
+    // + input Mid, input Side, sidechain (0.1.1)
+    std::array<std::vector<float>, 7> rings { std::vector<float> (8192, 0.0f), std::vector<float> (8192, 0.0f),
+                                              std::vector<float> (8192, 0.0f), std::vector<float> (8192, 0.0f),
+                                              std::vector<float> (8192, 0.0f), std::vector<float> (8192, 0.0f), std::vector<float> (8192, 0.0f) };
     int ringPos = 0;
-    std::array<std::vector<float>, 4> bins { std::vector<float> (16384, 0.0f), std::vector<float> (16384, 0.0f),
-                                             std::vector<float> (16384, 0.0f), std::vector<float> (16384, 0.0f) };
-    void layerSpectrum (int src, std::vector<float>& out);     // src: 0 Stereo, 1 Mid, 2 Side, 3 Trans, 4 Body
+    std::array<std::vector<float>, 7> bins { std::vector<float> (16384, 0.0f), std::vector<float> (16384, 0.0f),
+                                             std::vector<float> (16384, 0.0f), std::vector<float> (16384, 0.0f),
+                                             std::vector<float> (16384, 0.0f), std::vector<float> (16384, 0.0f), std::vector<float> (16384, 0.0f) };
+    void layerSpectrum (int src, std::vector<float>& out);     // src: 0 Stereo, 1 Mid, 2 Side, 3 Trans, 4 Body, 5 Input (before the EQ), 6 Sidechain
     std::vector<float> spec = std::vector<float> (401, -140.0f), specB = std::vector<float> (401, -140.0f);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EQAnatomyView)

@@ -304,25 +304,26 @@ void EQAnatomyView::pullAnalyzer()
     if (n <= 0) return;
     int s1, n1, s2, n2;
     f.prepareToRead (n, s1, n1, s2, n2);
-    const std::array<const std::vector<float>*, 4> srcBuf { &proc.analyzerBuffer, &proc.analyzerS, &proc.analyzerT, &proc.analyzerB };
+    const std::array<const std::vector<float>*, 7> srcBuf { &proc.analyzerBuffer, &proc.analyzerS, &proc.analyzerT, &proc.analyzerB,
+                                                            &proc.analyzerInM, &proc.analyzerInS, &proc.analyzerSC };
     const int ringN = (int) rings[0].size();
-    for (int k = 0; k < 4; ++k)
+    for (int k = 0; k < 7; ++k)
     {
         int pos = ringPos;
         auto push = [&] (const float* d, int cnt) { for (int i = 0; i < cnt; ++i) { rings[(size_t) k][(size_t) pos] = d[i]; pos = (pos + 1) % ringN; } };
         if (n1 > 0) push (srcBuf[(size_t) k]->data() + s1, n1);
         if (n2 > 0) push (srcBuf[(size_t) k]->data() + s2, n2);
-        if (k == 3) ringPos = pos;
+        if (k == 6) ringPos = pos;
     }
     f.finishedRead (n1 + n2);
 
     // layer A is always drawn; layer B is optional (0 = off, otherwise source + 1)
-    int a = juce::jlimit (0, 4, (int) proc.uiState.getProperty ("anA", 0));
-    int b = juce::jlimit (0, 5, (int) proc.uiState.getProperty ("anB", 0)) - 1;
+    int a = juce::jlimit (0, 6, (int) proc.uiState.getProperty ("anA", 0));
+    int b = juce::jlimit (0, 7, (int) proc.uiState.getProperty ("anB", 0)) - 1;
     // SOLO M / S shows Mid + Side, SOLO T / B shows Trans + Body; the saved choice comes back when the solo ends
     const int sv = proc.soloViewEffective();
     if (sv == 1 || sv == 2) { a = 1; b = 2; } else if (sv >= 3) { a = 3; b = 4; }
-    proc.analyzerNeedTB = a >= 3 || b >= 3;
+    proc.analyzerNeedTB = a == 3 || a == 4 || b == 3 || b == 4;
     layerSpectrum (a, spec);
     if (b >= 0) layerSpectrum (b, specB); else std::fill (specB.begin(), specB.end(), -140.0f);
 }
@@ -340,9 +341,11 @@ void EQAnatomyView::layerSpectrum (int src, std::vector<float>& out)
         window.multiplyWithWindowingTable (d.data(), (size_t) N);
         fft.performFrequencyOnlyForwardTransform (d.data());
     };
-    const int k0 = src == 0 ? 0 : src == 1 ? 0 : src == 2 ? 1 : src - 1;     // Mid, Side, Trans, Body → ring 0..3
+    // Stereo = rings 0 + 1, Mid 0, Side 1, Trans 2, Body 3, Input = rings 4 + 5 (power sum, like Stereo), Sidechain 6
+    const bool pair = src == 0 || src == 5;
+    const int k0 = src == 0 ? 0 : src == 1 ? 0 : src == 2 ? 1 : src == 3 ? 2 : src == 4 ? 3 : src == 5 ? 4 : 6, k1 = k0 + 1;
     transform (k0);
-    if (src == 0) transform (1);
+    if (pair) transform (k1);
 
     const double fs = proc.getSampleRateOrDefault();
     const float norm = 4.0f / (float) N;
@@ -353,7 +356,7 @@ void EQAnatomyView::layerSpectrum (int src, std::vector<float>& out)
         int b0 = (int) (fq * N / fs), b1 = std::max (b0 + 1, (int) (fq2 * N / fs));
         b0 = juce::jlimit (1, N / 2 - 1, b0); b1 = juce::jlimit (b0 + 1, N / 2, b1);
         float m = 0;
-        if (src == 0) for (int b = b0; b < b1; ++b) { const float x = bins[0][(size_t) b], y = bins[1][(size_t) b]; m = std::max (m, std::sqrt (x * x + y * y)); }
+        if (pair) for (int b = b0; b < b1; ++b) { const float x = bins[(size_t) k0][(size_t) b], y = bins[(size_t) k1][(size_t) b]; m = std::max (m, std::sqrt (x * x + y * y)); }
         else          for (int b = b0; b < b1; ++b) m = std::max (m, bins[(size_t) k0][(size_t) b]);
         // +3 dB/oct tilt around 1 kHz so music reads flat-ish, like most analyzers
         const float db = 20.0f * std::log10 (m * norm + 1e-9f) + 3.0f * (float) std::log2 (fq / 1000.0);

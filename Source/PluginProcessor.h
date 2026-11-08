@@ -291,6 +291,10 @@ public:
     std::vector<float> analyzerS = std::vector<float> (16384, 0.0f);
     std::vector<float> analyzerT = std::vector<float> (16384, 0.0f);
     std::vector<float> analyzerB = std::vector<float> (16384, 0.0f);
+    // 0.1.1: the input before the EQ (Mid / Side of the dry, delayed like the output) and the sidechain (mono sum)
+    std::vector<float> analyzerInM = std::vector<float> (16384, 0.0f);
+    std::vector<float> analyzerInS = std::vector<float> (16384, 0.0f);
+    std::vector<float> analyzerSC = std::vector<float> (16384, 0.0f);
     std::atomic<bool> analyzerNeedTB { false };      // the editor shows a Transient / Body layer
     // T/B scope: the raw input (Mid) while the scope is shown. The editor runs its own copy of the detector on it,
     // so it can change the time span and re-draw a paused picture with new Sens / Width / Attack values.
