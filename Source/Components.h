@@ -880,7 +880,7 @@ public:
             std::array<eqcore::Band, eqcore::kBands> one {}; one[0] = bands[(size_t) s]; one[0].ch = 0;
             selCurve = bands[(size_t) s].on ? eqcore::curves (eqcore::channelModel (one, qm, fs, mode, 1), fr).mag : std::vector<double>();
             // dynamic EQ range (0.1.1): the band alone at gain + ABOVE and at gain + BELOW; the area between is where it can move
-            for (auto& d : dynArea) { d.lo.clear(); d.hi.clear(); d.st.clear(); d.u.clear(); }
+            for (auto& d : dynArea) { d.lo.clear(); d.hi.clear(); d.st.clear(); d.u.clear(); d.peak = 0; }
             for (int i = 0; i < eqcore::kBands; ++i)
             {
                 const auto& b = bands[(size_t) i];
@@ -897,7 +897,15 @@ public:
                 e[0].g = b.g >= 29.0 ? b.g - 1.0 : b.g + 1.0;
                 auto u = eqcore::curves (eqcore::channelModel (e, qm, fs, mode, 1), fr).mag;
                 for (size_t k = 0; k < u.size(); ++k) u[k] = std::abs (u[k] - st[k]);   // dB of curve per dB of gain
-                dynArea[(size_t) i] = { std::move (lo), std::move (hi), std::move (st), std::move (u) };
+                size_t pk = 0; double best = -1.0, umax = 0.0;
+                for (auto x : u) umax = std::max (umax, x);
+                for (size_t k = 0; k < u.size(); ++k)
+                    if (u[k] >= umax * 0.97)
+                    {
+                        const double d = -std::abs (std::log2 (fr[k] / b.f));   // nearest to the knob among the near-maximum points
+                        if (best < -0.5 || d > best) { best = d; pk = k; }
+                    }
+                dynArea[(size_t) i] = { std::move (lo), std::move (hi), std::move (st), std::move (u), pk };
             }
         }
         // dynamic EQ: the curve as it is right now
@@ -1258,7 +1266,7 @@ public:
             // the mark follows the mouse along the area's edge: value = (mouse dB − static curve) / sensitivity
             const int i = dynDrag / 2; const auto& d = dynArea[(size_t) i];
             if (d.st.size() != fr.size()) return;
-            const size_t k = frIndex (fOf (xOf (ph.value (pid::band (i, "freq"))) + 22.0f));
+            const size_t k = juce::jlimit<size_t> (0, fr.size() - 1, d.peak);
             const auto pr = plot();
             const double db = juce::jmap ((double) e.position.y, (double) pr.getBottom(), (double) pr.getY(), -(double) dbRange, (double) dbRange);
             const double v = (db - d.st[k]) / std::max (0.05, d.u[k]);
@@ -1359,14 +1367,14 @@ public:
     }
 
 private:
-    // dynamic range marks: w 0 = ABOVE (range), 1 = BELOW. They sit 22 px right of the node, on the area's edge.
+    // dynamic range marks: w 0 = ABOVE (range), 1 = BELOW. They sit at the area's peak, on its edge.
     size_t frIndex (double f) const { const auto it = std::lower_bound (fr.begin(), fr.end(), f); return (size_t) juce::jlimit<long> (0, (long) fr.size() - 1, (long) (it - fr.begin())); }
     std::optional<juce::Point<float>> dynMark (int i, int w) const
     {
         const auto& d = dynArea[(size_t) i];
         if (d.st.size() != fr.size() || fr.empty()) return std::nullopt;
-        const float x = xOf (ph.value (pid::band (i, "freq"))) + 22.0f;
-        const size_t k = frIndex (fOf (x));
+        const size_t k = juce::jlimit<size_t> (0, fr.size() - 1, d.peak);
+        const float x = xOf (fr[k]);
         const double v = d.st[k] + ph.value (pid::band (i, w == 0 ? "range" : "below")) * d.u[k];
         return juce::Point<float> (x, yOf (juce::jlimit (-(double) dbRange, (double) dbRange, v)));
     }
@@ -1374,7 +1382,8 @@ private:
     {
         for (int i = eqcore::kBands; --i >= 0;)
             for (int w = 0; w < 2; ++w)
-                if (auto m = dynMark (i, w)) if (m->getDistanceFrom (p) < 8.0f) return i * 2 + w;
+                if (auto m = dynMark (i, w))
+                    if (m->getDistanceFrom (p) < 8.0f && nodePos (i, ph.proc.currentBands()[(size_t) i]).getDistanceFrom (p) > 9.0f) return i * 2 + w;
         return -1;
     }
     int dynHover = -1, dynDrag = -1;
@@ -1626,7 +1635,7 @@ private:
     BandPopup popup;
     juce::TextButton phaseBtn, overlayBtn;     // Phase ⇄ GD, Overlay ⇄ Split
     std::vector<double> fr; eqcore::CurvesV2 cur, curS; eqcore::Curves ghost; std::vector<double> selCurve, liveMag;
-    struct DynArea { std::vector<double> lo, hi, st, u; }; std::array<DynArea, eqcore::kBands> dynArea;   // dynamic EQ: where each band can move
+    struct DynArea { std::vector<double> lo, hi, st, u; size_t peak = 0; }; std::array<DynArea, eqcore::kBands> dynArea;   // dynamic EQ: where each band can move
     bool anyMS = false, anyLR = false, lastSplit = false, altSolo = false;
     std::vector<float> spectrum, spectrumB; juce::String lastSig;
     juce::ComboBox anaA, anaB;
