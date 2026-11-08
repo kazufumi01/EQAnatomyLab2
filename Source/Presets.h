@@ -29,7 +29,7 @@ inline const char* presetCategoryName (int c, bool ja)
     return (ja ? j : e)[c];
 }
 
-// types: 0 Bell 1 LowShelf 2 HighShelf 3 LowCut 4 HighCut 5 Notch 6 AllPass
+// types: 0 Bell 1 LowShelf 2 HighShelf 3 LowCut 4 HighCut 5 Notch 6 AllPass 7 Tilt 8 FlatTilt
 // slopes: 0 6 dB 1 12 dB 2 18 dB 3 24 dB 4 36 dB 5 48 dB
 inline const std::vector<PresetDef>& presetDefs()
 {

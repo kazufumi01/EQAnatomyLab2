@@ -36,7 +36,7 @@ static const char* tbE2f = "tb_e2f"; static const char* tbE2g = "tb_e2g"; static
 
 inline const juce::StringArray& typeNames()
 {
-    static const juce::StringArray t { "Bell", "Low shelf", "High shelf", "Low cut", "High cut", "Notch", "All-pass" };
+    static const juce::StringArray t { "Bell", "Low shelf", "High shelf", "Low cut", "High cut", "Notch", "All-pass", "Tilt shelf", "Flat tilt" };
     return t;
 }
 inline const juce::StringArray& slopeNames()

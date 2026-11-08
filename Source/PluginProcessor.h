@@ -40,7 +40,7 @@ public:
             const bool on = x.on && x.mask != 0;
             if (b.on != on) return false;
             if (! on) continue;
-            if (b.type != x.type || b.mask != x.mask || (b.slope != x.slope && x.type != eqcore::Type::Bell && x.type != eqcore::Type::Notch && x.type != eqcore::Type::AllPass)) return false;
+            if (b.type != x.type || b.mask != x.mask || (b.slope != x.slope && x.type != eqcore::Type::Bell && x.type != eqcore::Type::Notch && x.type != eqcore::Type::AllPass && x.type != eqcore::Type::Tilt && x.type != eqcore::Type::FlatTilt)) return false;
         }
         return true;
     }
@@ -91,7 +91,7 @@ public:
             }
         }
     }
-    void reserve() { scratch.reserve (8); for (auto& b : bands) { b.coefs.reserve (8); b.z.reserve (8); } }
+    void reserve() { scratch.reserve (24); for (auto& b : bands) { b.coefs.reserve (24); b.z.reserve (24); } }
 
 private:
     struct B { bool on = false; eqcore::Type type = eqcore::Type::Bell; int slope = 3; int mask = 3;

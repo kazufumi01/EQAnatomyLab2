@@ -328,7 +328,7 @@ public:
         chBtn.setButtonText (juce::String ("CH  ") + (full ? chShort[ch] : chLong[ch]) + juce::String::fromUTF8 (" \xe2\x96\xb8"));
         gn.setAlpha (noGain ? 0.35f : 1.0f); gn.setEnabled (! noGain);
         fq.setParam (pid::band (b, "freq")); gn.setParam (pid::band (b, "gain")); qv.setParam (pid::band (b, "q"));
-        qv.setAlpha (shelf && s == 0 ? 0.35f : 1.0f);         // a first-order shelf has no Q
+        qv.setAlpha ((shelf && s == 0) || t == (int) eqcore::Type::FlatTilt ? 0.35f : 1.0f);   // a first-order shelf / flat tilt has no Q
         gn.valueColour = theme::bandColour (b);
         const bool bandOn = ph.value (pid::band (b, "on")) > 0.5f;
         for (auto* c : { (juce::Component*) &fq, (juce::Component*) &type, (juce::Component*) &slopeBtn, (juce::Component*) &chBtn })

@@ -18,7 +18,7 @@ constexpr int kBands = 8;      // bands 7 and 8 were added in 0.1.1 (parameters 
 constexpr double kPi  = 3.14159265358979323846;
 constexpr double kTau = 2.0 * kPi;
 
-enum class Type { Bell = 0, LowShelf, HighShelf, LowCut, HighCut, Notch, AllPass };
+enum class Type { Bell = 0, LowShelf, HighShelf, LowCut, HighCut, Notch, AllPass, Tilt, FlatTilt };   // Tilt / FlatTilt: 0.1.1
 enum class Mode { ZeroLatency = 0, Analog, Linear };
 // Curve styles. 0/1 are the original Const / Prop Q; the rest copy the *tendencies*
 // of well-known analog EQ families (generic names, not models of specific units).
@@ -75,10 +75,48 @@ inline double effectiveF (const Band& b, QMode qm)
     return b.f;
 }
 
+using cplx = std::complex<double>;
 // ---- analog sections ----
-enum class Sec { Bell, LS, HS, Notch, AP, HP2, LP2, HP1, LP1, LS1, HS1 };   // LS1 / HS1: first-order shelves (6 dB/oct)
+enum class Sec { Bell, LS, HS, Notch, AP, HP2, LP2, HP1, LP1, LS1, HS1, TiltHS, Gain };   // TiltHS: high shelf / A (−G/2 … +G/2 about f0); Gain: constant A   // LS1 / HS1: first-order shelves (6 dB/oct)
 struct Section { Sec k; double A = 1, Q = 0.7071, f0 = 1000; };
 
+// Flat tilt: first-order high shelves half an octave apart; the last ones sit close to 20 kHz.
+// Their dB amounts are fitted to a straight 1 dB/oct line (small steps add in dB almost exactly).
+inline double flatTiltCentre (int k) { return 10.0 * std::pow (2.0, k * 0.5); }        // 10 Hz … 20.5 kHz (k = 0 … 22)
+inline const std::vector<double>& flatTiltWeights()
+{
+    static const std::vector<double> w = []
+    {
+        const int N = 23, U = N + 1;                             // + 1 for a free constant
+        std::vector<double> A ((size_t) (U * U), 0.0), r ((size_t) U, 0.0);
+        for (double fr = 20.0; fr <= 20000.0; fr *= std::pow (2.0, 1.0 / 12.0))
+        {
+            std::vector<double> row ((size_t) U, 1.0);
+            for (int k = 0; k < N; ++k)
+            {
+                // dB of a 1 dB high shelf (A = 10^(1/40)) at fr
+                const double a = std::pow (10.0, 1.0 / 40.0), x = fr / flatTiltCentre (k);
+                row[(size_t) k] = 20.0 * std::log10 (std::abs ((std::complex<double> (0, x) * a + 1.0) / (std::complex<double> (0, x) / a + 1.0)));
+            }
+            const double y = std::log2 (fr / 20.0);
+            for (int i = 0; i < U; ++i) { r[(size_t) i] += row[(size_t) i] * y; for (int j = 0; j < U; ++j) A[(size_t) (i * U + j)] += row[(size_t) i] * row[(size_t) j]; }
+        }
+        for (int i = 0; i < U; ++i) A[(size_t) (i * U + i)] += 1e-4;           // a little ridge keeps neighbours from fighting
+        for (int c = 0; c < U; ++c)                                            // Gauss–Jordan
+        {
+            const double d = A[(size_t) (c * U + c)];
+            for (int j = 0; j < U; ++j) A[(size_t) (c * U + j)] /= d; r[(size_t) c] /= d;
+            for (int i = 0; i < U; ++i)
+                if (i != c) { const double m = A[(size_t) (i * U + c)]; if (m == 0) continue;
+                              for (int j = 0; j < U; ++j) A[(size_t) (i * U + j)] -= m * A[(size_t) (c * U + j)]; r[(size_t) i] -= m * r[(size_t) c]; }
+        }
+        return std::vector<double> (r.begin(), r.begin() + N);
+    }();
+    return w;
+}
+
+inline cplx analogSection (const Section& s, double w);
+inline cplx analogSectionFwd (const Section& s, double w) { return analogSection (s, w); }
 inline void sectionsFor (const Band& b, QMode qm, std::vector<Section>& out)
 {
     const double A = std::pow (10.0, b.g / 40.0), Q = std::max (0.025, effectiveQ (b, qm)), F = effectiveF (b, qm);
@@ -90,6 +128,22 @@ inline void sectionsFor (const Band& b, QMode qm, std::vector<Section>& out)
         case Type::HighShelf: out.push_back ({ b.slope == 0 ? Sec::HS1 : Sec::HS, A, Q, F }); break;
         case Type::Notch:     out.push_back ({ Sec::Notch, 1, Q, b.f }); break;
         case Type::AllPass:   out.push_back ({ Sec::AP, 1, Q, b.f }); break;
+        // Tilt shelf: pivot at f (0 dB there), −G/2 below, +G/2 above; Q sets how sharp the turn is
+        case Type::Tilt:      out.push_back ({ Sec::TiltHS, A, Q, b.f }); break;
+        // Flat tilt: a constant dB/oct line, ±G at 20 Hz / 20 kHz around a 1 kHz centre (slope = 2G over 10 octaves),
+        // moved so the response is 0 dB at f. Built from first-order shelves one octave apart (ripple about ±0.15 dB).
+        case Type::FlatTilt:
+        {
+            // per-shelf dB weights for a 1 dB/oct line, fitted once (least squares, 20 Hz – 20 kHz, 1/12 oct grid)
+            const auto& W = flatTiltWeights();
+            const double slope = b.g / 5.0;                     // dB per octave: ±G at 20 Hz / 20 kHz around 632 Hz
+            const size_t first = out.size();
+            for (size_t k = 0; k < W.size(); ++k)
+                out.push_back ({ Sec::HS1, std::pow (10.0, slope * W[k] / 40.0), 0.7071, flatTiltCentre ((int) k) });
+            // normalise: 0 dB at the pivot
+            cplx h = 1.0; for (size_t s = first; s < out.size(); ++s) h *= analogSectionFwd (out[s], F / out[s].f0);
+            out.push_back ({ Sec::Gain, 1.0 / std::max (1e-9, std::abs (h)), 0.7071, 1000.0 });
+        } break;
         case Type::LowCut: case Type::HighCut:
         {
             const int n = slopeOrder (b.slope);
@@ -105,8 +159,6 @@ inline void sectionsFor (const Band& b, QMode qm, std::vector<Section>& out)
         } break;
     }
 }
-
-using cplx = std::complex<double>;
 
 inline cplx analogSection (const Section& s, double w)   // w = f / f0
 {
@@ -126,6 +178,8 @@ inline cplx analogSection (const Section& s, double w)   // w = f / f0
         // first-order shelves, gain A^2 at the shelf, A (half the dB) at f0
         case Sec::LS1:   return (jw + A) / (jw + 1.0 / A);
         case Sec::HS1:   return (A * jw + 1.0) / (jw / A + 1.0);
+        case Sec::TiltHS: { const double sa = std::sqrt (A); return (A * s2 + jw * (sa / Q) + 1.0) / (s2 + jw * (sa / Q) + A); }
+        case Sec::Gain:  return A;
     }
     return 1.0;
 }
@@ -143,8 +197,10 @@ inline Biquad digitalSection (const Section& s, double fs)
         case Sec::LS: { const double sa = 2 * std::sqrt (A) * al;
             b0 = A * ((A + 1) - (A - 1) * cw + sa); b1 = 2 * A * ((A - 1) - (A + 1) * cw); b2 = A * ((A + 1) - (A - 1) * cw - sa);
             a0 = (A + 1) + (A - 1) * cw + sa; a1 = -2 * ((A - 1) + (A + 1) * cw); a2 = (A + 1) + (A - 1) * cw - sa; } break;
-        case Sec::HS: { const double sa = 2 * std::sqrt (A) * al;
-            b0 = A * ((A + 1) + (A - 1) * cw + sa); b1 = -2 * A * ((A - 1) + (A + 1) * cw); b2 = A * ((A + 1) + (A - 1) * cw - sa);
+        case Sec::Gain: { Biquad c; c.b0 = A; return c; }
+        case Sec::TiltHS:
+        case Sec::HS: { const double sa = 2 * std::sqrt (A) * al; const double sc = s.k == Sec::TiltHS ? 1.0 / A : 1.0;
+            b0 = sc * A * ((A + 1) + (A - 1) * cw + sa); b1 = sc * -2 * A * ((A - 1) + (A + 1) * cw); b2 = sc * A * ((A + 1) + (A - 1) * cw - sa);
             a0 = (A + 1) - (A - 1) * cw + sa; a1 = 2 * ((A - 1) - (A + 1) * cw); a2 = (A + 1) - (A - 1) * cw - sa; } break;
         case Sec::Notch: b0 = 1; b1 = -2 * cw; b2 = 1; a0 = 1 + al; a1 = -2 * cw; a2 = 1 - al; break;
         case Sec::AP:    b0 = 1 - al; b1 = -2 * cw; b2 = 1 + al; a0 = 1 + al; a1 = -2 * cw; a2 = 1 - al; break;
