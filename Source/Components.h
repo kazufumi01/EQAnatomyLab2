@@ -286,8 +286,8 @@ public:
         setHelp (qv, "Q", "帯域の幅。大きいほど狭い。Q 1 ≒ 1.4 オクターブ", "Bandwidth: higher is narrower. Q 1 ≈ 1.4 octaves");
         setHelp (soloBtn, "BAND SOLO", "このバンドの帯域だけを聴く（グラフ上で Alt＋ドラッグ中も）。注意：音量が大きく変わるので、モニターを下げてから",
                  "Hear only this band's region (also while Alt-dragging in the graph). Careful: the level changes a lot, turn the monitors down first");
-        setHelp (chBtn, "CH Stereo / Mid / Side", "どのチャンネルに掛けるか。Stereo：左右両方／Mid：中央だけ／Side：左右の差だけ。注意：Side を持ち上げすぎるとモノラル再生で消える成分が増える。右の CORR が 0 を下回ったら控えめに",
-                 "Which channel the band acts on. Stereo: both / Mid: the centre only / Side: the difference only. Careful: big side boosts vanish in mono — back off if CORR on the right drops below 0");
+        setHelp (chBtn, "CH Stereo / Mid / Side / Left / Right", "どのチャンネルに掛けるか。Stereo：左右両方／Mid：中央だけ／Side：左右の差だけ／Left・Right：片側だけ（M/S のバンドの後に掛かる）。注意：Side を持ち上げすぎるとモノラル再生で消える成分が増える。右の CORR が 0 を下回ったら控えめに。L/R のバンドがあると、Linear・Analog と Lin バンドでは畳み込みが4系統になり CPU が約2倍になる",
+                 "Which channel the band acts on. Stereo: both / Mid: the centre only / Side: the difference only / Left, Right: one side only (applied after the M/S bands). Careful: big side boosts vanish in mono — back off if CORR on the right drops below 0. With an L/R band, Linear, Analog and Lin bands run four convolutions instead of two: about twice the CPU");
         setHelp (phaseSeg, "PHASE Min / Lin", "Min：最小位相（遅れなし、位相が回る）／Lin：リニア位相（位相は回らないが、プリリンギングが出る）。注意：Lin のバンドが1つでもあると全体が FIR 分遅れる。低域・高い Q・急なカットは Min 推奨",
                  "Min: minimum phase (no delay, the phase turns) / Lin: linear phase (no phase shift, but pre-ringing). Careful: one Lin band delays everything by the FIR. Keep lows, high Q and steep cuts on Min");
         setHelp (dynBtn, "DYN", "ダイナミック EQ。この帯域のレベルに合わせてゲインが動く。注意：Min のバンドで、Zero latency の時だけ働く", "Dynamic EQ: the gain follows this band's level. Careful: Min bands in Zero latency only");
@@ -322,9 +322,9 @@ public:
                               : juce::String::fromUTF8 ("\xe2\x80\x94");
         slopeBtn.setButtonText ((full ? juce::String() : juce::String ("SLOPE  ")) + sv + (cut || shelf ? juce::String::fromUTF8 (" \xe2\x96\xb8") : juce::String()));
         slopeBtn.setEnabled (cut || shelf);
-        static const char* chLong[] = { "Stereo", "Mid", "Side" };
-        static const char* chShort[] = { "St", "M", "S" };
-        const int ch = juce::jlimit (0, 2, (int) ph.value (pid::band (b, "ch")));
+        static const char* chLong[] = { "Stereo", "Mid", "Side", "Left", "Right" };
+        static const char* chShort[] = { "St", "M", "S", "L", "R" };
+        const int ch = juce::jlimit (0, 4, (int) ph.value (pid::band (b, "ch")));
         chBtn.setButtonText (juce::String ("CH  ") + (full ? chShort[ch] : chLong[ch]) + juce::String::fromUTF8 (" \xe2\x96\xb8"));
         gn.setAlpha (noGain ? 0.35f : 1.0f); gn.setEnabled (! noGain);
         fq.setParam (pid::band (b, "freq")); gn.setParam (pid::band (b, "gain")); qv.setParam (pid::band (b, "q"));
@@ -629,6 +629,9 @@ private:
         const int ch = (int) ph.value (pid::band (band, "ch"));
         juce::PopupMenu m;
         m.addItem (1, "Stereo", true, ch == 0); m.addItem (2, "Mid", true, ch == 1); m.addItem (3, "Side", true, ch == 2);
+        m.addSeparator();
+        m.addItem (4, "Left", true, ch == 3); m.addItem (5, "Right", true, ch == 4);
+        m.addSectionHeader (ph.tr ("L/R：Linear / Analog / Lin バンドでは畳み込みの CPU が約2倍", "L/R: about twice the convolution CPU in Linear / Analog / Lin bands"));
         m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&chBtn), [this, b = band] (int r)
         {
             if (r <= 0) return;
@@ -861,9 +864,11 @@ public:
             lastSig = sig;
             const double fs = ph.proc.getSampleRateOrDefault();
             const auto qm = ph.proc.currentQMode(); const auto mode = ph.proc.currentMode();
-            anyMS = false; for (auto& b : bands) anyMS = anyMS || (b.on && b.ch != 0);
-            cur = eqcore::curves (eqcore::channelModel (bands, qm, fs, mode, 1), fr);
-            curS = anyMS ? eqcore::curves (eqcore::channelModel (bands, qm, fs, mode, 2), fr) : eqcore::CurvesV2();
+            anyMS = false; anyLR = false;
+            for (auto& b : bands) { anyMS = anyMS || (b.on && b.ch != 0); anyLR = anyLR || (b.on && b.ch >= 3); }
+            // with L/R bands the two traces are Left / Right (stereo + that side's bands; M/S bands are left out of this view)
+            cur = eqcore::curves (eqcore::channelModel (bands, qm, fs, mode, anyLR ? 3 : 1), fr);
+            curS = anyMS ? eqcore::curves (eqcore::channelModel (bands, qm, fs, mode, anyLR ? 4 : 2), fr) : eqcore::CurvesV2();
             ghost = eqcore::Curves();
             if (mode == eqcore::Mode::ZeroLatency)
             {
@@ -1166,7 +1171,7 @@ public:
         // labels
         g.setFont (theme::ui (10.5f, true));
         g.setColour (theme::muted);
-        g.drawText (anyMS ? juce::String ("Magnitude dB  -  Mid (solid) / Side (dashed)") : juce::String ("Magnitude dB (left)"), (int) pr.getX() + 6, 8, 300, 16, juce::Justification::centredLeft);
+        g.drawText (anyLR ? juce::String ("Magnitude dB  -  Left (solid) / Right (dashed)") : anyMS ? juce::String ("Magnitude dB  -  Mid (solid) / Side (dashed)") : juce::String ("Magnitude dB (left)"), (int) pr.getX() + 6, 8, 300, 16, juce::Justification::centredLeft);
         g.setColour (theme::phase.withAlpha (0.85f));
         const juce::String ptxt = gd ? juce::String ("Group delay") : juce::String ("Phase");
         if (autoAna) { g.setColour (theme::accent); g.setFont (theme::ui (9.5f, true)); g.drawText ("SOLO auto", 300, 6, 70, 20, juce::Justification::centredLeft); g.setColour (theme::phase.withAlpha (0.85f)); g.setFont (theme::ui (10.5f, true)); }
@@ -1458,7 +1463,7 @@ private:
     {
         juce::StringArray t;
         if (ph.proc.bandIsLin (i)) t.add ("Lin");
-        if (b.ch == 1) t.add ("M"); else if (b.ch == 2) t.add ("S");
+        if (b.ch == 1) t.add ("M"); else if (b.ch == 2) t.add ("S"); else if (b.ch == 3) t.add ("Lt"); else if (b.ch == 4) t.add ("Rt");
         if (ph.value (pid::band (i, "dyn")) > 0.5f) t.add ("D");
         if (std::abs (ph.value (pid::band (i, "tb"))) > 0.5f) t.add ("T/B");
         return t.joinIntoString (juce::String::fromUTF8 (" \xc2\xb7 "));
@@ -1546,7 +1551,7 @@ private:
     BandPopup popup;
     juce::TextButton phaseBtn, overlayBtn;     // Phase ⇄ GD, Overlay ⇄ Split
     std::vector<double> fr; eqcore::CurvesV2 cur, curS; eqcore::Curves ghost; std::vector<double> selCurve, liveMag;
-    bool anyMS = false, lastSplit = false, altSolo = false;
+    bool anyMS = false, anyLR = false, lastSplit = false, altSolo = false;
     std::vector<float> spectrum, spectrumB; juce::String lastSig;
     juce::ComboBox anaA, anaB;
     juce::TextButton scopeBtn; DragValue scSens, scWidth, scAtt;
@@ -1594,7 +1599,7 @@ public:
             if (on)
             {
                 if (ph.proc.bandIsLin (i)) tag << "L";
-                const int ch = (int) ph.value (pid::band (i, "ch")); if (ch == 1) tag << "M"; else if (ch == 2) tag << "S";
+                const int ch = (int) ph.value (pid::band (i, "ch")); if (ch == 1) tag << "M"; else if (ch == 2) tag << "S"; else if (ch == 3) tag << "Lt"; else if (ch == 4) tag << "Rt";
                 if (ph.value (pid::band (i, "dyn")) > 0.5f) tag << "D";
             }
             g.setFont (theme::mono (10.0f)); g.setColour (on ? theme::text : theme::muted);

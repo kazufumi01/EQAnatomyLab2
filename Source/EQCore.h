@@ -42,7 +42,7 @@ inline int linearTaps (int resIndex)                 // low / mid / high
 constexpr int kMinPhaseLen = 16384;
 
 struct Band { bool on = false; Type type = Type::Bell; double f = 1000, g = 0, q = 1; int slope = 3;
-              bool lin = false; int ch = 0; };            // lin: linear-phase band; ch: 0 stereo, 1 mid, 2 side
+              bool lin = false; int ch = 0; };            // lin: linear-phase band; ch: 0 stereo, 1 mid, 2 side, 3 left, 4 right (0.1.1)
 
 inline double effectiveQ (const Band& b, QMode qm)
 {
@@ -441,11 +441,13 @@ struct ChannelModel
     bool hasLin() const { return mode == Mode::Linear || ! linM.empty(); }
 };
 
-// ch: 1 = mid, 2 = side. Stereo bands go into both.
-inline ChannelModel channelModel (const std::array<Band, kBands>& bands, QMode qm, double fs, Mode mode, int ch)
+// ch: 1 = mid, 2 = side (stereo bands go into both; L/R bands never).
+// ch: 3 = left, 4 = right. groupOnly: just the L or R bands (what the L/R stage processes);
+// otherwise stereo + that side's bands (a display approximation of that channel).
+inline ChannelModel channelModel (const std::array<Band, kBands>& bands, QMode qm, double fs, Mode mode, int ch, bool groupOnly = false)
 {
     ChannelModel cm; cm.mode = mode;
-    auto inCh = [ch] (const Band& b) { return b.ch == 0 || b.ch == ch; };
+    auto inCh = [ch, groupOnly] (const Band& b) { return (b.ch == 0 && ! (groupOnly && ch >= 3)) || b.ch == ch; };
     auto isLin = [mode] (const Band& b) { return mode == Mode::Linear || b.lin; };
     cm.minM = Model (bands, qm, fs, [&] (int, const Band& b) { return inCh (b) && ! isLin (b); });
     cm.linM = Model (bands, qm, fs, [&] (int, const Band& b) { return inCh (b) && isLin (b); });
@@ -544,6 +546,71 @@ inline Kernel buildKernel (const ChannelModel& cm, int resIndex)
     }
     if (! cm.minM.allpass.empty()) runBiquads (cm.minM.allpass, k.h);
     k.latency = L;
+    return k;
+}
+
+// =============================================================================
+//  L / R bands in the FIR (Linear, Analog, or Lin bands in Zero latency).
+//  Processing order: the M/S stage (stereo, mid, side bands) then the L/R stage.
+//  In the M/S domain the L/R stage is a 2x2 matrix, A = (L + R) / 2, B = (L - R) / 2:
+//      M' = A·Hm·M + B·Hs·S        S' = B·Hm·M + A·Hs·S
+//  so four kernels: 0 M→M, 1 S→S, 2 S→M, 3 M→S (cross terms cost a second pair of convolutions).
+// =============================================================================
+inline bool lrInFir (const std::array<Band, kBands>& bands, Mode mode)
+{
+    for (auto& b : bands) if (b.on && b.ch >= 3 && (mode != Mode::ZeroLatency || b.lin)) return true;
+    return false;
+}
+struct Kernel4 { std::array<std::vector<double>, 4> h; int latency = 0; };
+inline Kernel4 buildKernel4 (const std::array<Band, kBands>& bands, QMode qm, double fs, Mode mode, int resIndex)
+{
+    const int N = linearTaps (resIndex);
+    ChannelModel cm[4] = { channelModel (bands, qm, fs, mode, 1), channelModel (bands, qm, fs, mode, 2),
+                           channelModel (bands, qm, fs, mode, 3, true), channelModel (bands, qm, fs, mode, 4, true) };
+    bool anyLin = mode == Mode::Linear;
+    for (auto& c : cm) anyLin = anyLin || ! c.linM.empty();
+    const int L = anyLin ? N / 2 : 0;
+    const size_t M = std::max<size_t> (65536, (size_t) N * 4);
+    std::vector<cplx> sp[4];
+    for (int c = 0; c < 4; ++c)
+    {
+        auto& s = sp[c];
+        // the min-phase part only exists in the FIR outside Zero latency (there it runs as IIR)
+        if (mode == Mode::Analog && ! cm[c].minM.empty()) s = minimumPhaseSpectrum (cm[c].minM, M); else s.assign (M, 1.0);
+        if (! cm[c].linM.empty())
+        {
+            const auto g = magnitudeGrid (cm[c].linM, M);
+            for (size_t i = 0; i < M; ++i) s[i] *= g[i <= M / 2 ? i : M - i];
+        }
+        if (mode == Mode::Analog && ! cm[c].minM.allpass.empty())
+            for (size_t i = 0; i <= M / 2; ++i)
+            {
+                cplx h = 1.0; for (auto& a : cm[c].minM.allpass) h *= biquadResponse (a, fs * (double) i / (double) M, fs);
+                s[i] *= h; if (i && i < M / 2) s[M - i] *= std::conj (h);
+            }
+    }
+    std::vector<cplx> out[4]; for (auto& o : out) o.resize (M);
+    for (size_t i = 0; i < M; ++i)
+    {
+        const cplx d = std::polar (1.0, -kTau * (double) i * L / (double) M);
+        const cplx A = 0.5 * (sp[2][i] + sp[3][i]), B = 0.5 * (sp[2][i] - sp[3][i]);
+        out[0][i] = A * sp[0][i] * d; out[1][i] = A * sp[1][i] * d;
+        out[2][i] = B * sp[1][i] * d; out[3][i] = B * sp[0][i] * d;
+    }
+    Kernel4 k; k.latency = L;
+    const int T = (anyLin ? N : 0) + kMinPhaseLen / 2 + (anyLin ? 0 : kMinPhaseLen / 2), fade = kMinPhaseLen / 8;
+    for (int c = 0; c < 4; ++c)
+    {
+        fft (out[c], true);
+        auto& h = k.h[(size_t) c]; h.resize ((size_t) T);
+        for (int n = 0; n < T; ++n)
+        {
+            double w = 1.0;
+            if (n < L) w = 0.42 - 0.5 * std::cos (kPi * n / L) + 0.08 * std::cos (kTau * n / L);
+            else if (n > T - fade) w = 0.5 + 0.5 * std::cos (kPi * (n - (T - fade)) / fade);
+            h[(size_t) n] = out[c][(size_t) n].real() * w;
+        }
+    }
     return k;
 }
 

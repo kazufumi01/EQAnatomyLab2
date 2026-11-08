@@ -29,6 +29,7 @@ public:
             b.lf = b.tlf = std::log2 (x.f); b.g = b.tg = x.g; b.lq = b.tlq = std::log2 (x.q);
             b.z.clear();
         }
+        anyLR = false; for (auto& b : bands) anyLR = anyLR || (b.on && (b.mask & 12) != 0);
         updateCoefficients (false);
     }
     bool sameStructure (const std::array<Target, eqcore::kBands>& t, eqcore::QMode qm) const
@@ -70,8 +71,20 @@ public:
             for (size_t s = 0; s < scratch.size(); ++s) b.coefs[s] = eqcore::digitalSection (scratch[s], sampleRate);
         }
     }
-    // v[0] = mid, v[1] = side; w = per-band weight (1 = full effect)
+    // v[0] = mid, v[1] = side; w = per-band weight (1 = full effect).
+    // mask bits: 1 mid, 2 side, 4 left, 8 right. The M/S stage runs first, then the L/R stage
+    // (decoded to L / R, filtered, encoded back) — the same order as the FIR path.
     inline void process (double* v, const std::array<double, eqcore::kBands>& w)
+    {
+        run (v, w, 0);
+        if (anyLR)
+        {
+            double lr[2] = { v[0] + v[1], v[0] - v[1] };
+            run (lr, w, 2);
+            v[0] = 0.5 * (lr[0] + lr[1]); v[1] = 0.5 * (lr[0] - lr[1]);
+        }
+    }
+    inline void run (double* v, const std::array<double, eqcore::kBands>& w, int shift)
     {
         for (size_t bi = 0; bi < bands.size(); ++bi)
         {
@@ -79,7 +92,7 @@ public:
             if (b.coefs.empty()) continue;
             for (int ch = 0; ch < 2; ++ch)
             {
-                if ((b.mask & (1 << ch)) == 0) continue;
+                if ((b.mask & (1 << (ch + shift))) == 0) continue;
                 const double in = v[ch]; double x = in;
                 for (size_t s = 0; s < b.coefs.size(); ++s)
                 {
@@ -99,6 +112,7 @@ private:
                std::vector<eqcore::Biquad> coefs; std::vector<std::array<double, 4>> z; };
     std::array<B, eqcore::kBands> bands;
     std::array<double, eqcore::kBands> dyn {};
+    bool anyLR = false;
     std::vector<eqcore::Section> scratch;
     eqcore::QMode qmode = eqcore::QMode::Constant;
     double sampleRate = 48000;

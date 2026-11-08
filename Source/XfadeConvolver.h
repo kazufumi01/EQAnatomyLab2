@@ -37,7 +37,7 @@ public:
         fftBuild = std::make_unique<juce::dsp::FFT> (order);
         maxSegs = maxIRLength / B + 1;
         numIn = maxSegs + 1;
-        for (auto& ir : pool) { ir.numSegs = 0; for (auto& s : ir.seg) s.assign ((size_t) maxSegs * (size_t) S, 0.0f); }
+        for (auto& ir : pool) { ir.numSegs = 0; ir.cross = false; for (auto& s : ir.seg) s.assign ((size_t) maxSegs * (size_t) S, 0.0f); }
         for (auto& c : ch)
         {
             c.in.assign ((size_t) F, 0.0f);
@@ -62,15 +62,17 @@ public:
     }
 
     // background thread: transform a stereo kernel and publish it
-    void loadImpulseResponse (const float* left, const float* right, int length)
+    // toM / toS (optional): cross kernels S → M and M → S (L/R bands in the M/S domain)
+    void loadImpulseResponse (const float* left, const float* right, int length, const float* toM = nullptr, const float* toS = nullptr)
     {
         const std::lock_guard<std::mutex> lk (buildMutex);
         if (F == 0) return;
         length = juce::jlimit (1, maxIRLength, length);
         auto& ir = pool[(size_t) writer];
         ir.numSegs = std::min (maxSegs, (length + B - 1) / B);
-        const float* src[2] { left, right != nullptr ? right : left };
-        for (int c = 0; c < 2; ++c)
+        ir.cross = toM != nullptr && toS != nullptr;
+        const float* src[4] { left, right != nullptr ? right : left, toM, toS };
+        for (int c = 0; c < (ir.cross ? 4 : 2); ++c)
             for (int i = 0; i < ir.numSegs; ++i)
             {
                 std::fill (buildWork.begin(), buildWork.end(), 0.0f);
@@ -99,28 +101,39 @@ public:
             {
                 auto& C = ch[(size_t) c];
                 std::copy (io[c] + done, io[c] + done + k, C.in.data() + pos);
-
                 // spectrum of the (partly filled) current block
                 float* x = C.fdl.data() + (size_t) seg * (size_t) S;
                 std::copy (C.in.begin(), C.in.end(), C.work.begin());
                 fftAudio->performRealOnlyForwardTransform (C.work.data());
                 pack (C.work.data());
                 std::copy (C.work.data(), C.work.data() + S, x);
+            }
+            for (int c = 0; c < 2; ++c)
+            {
+                auto& C = ch[(size_t) c];
+                const auto& X = ch[(size_t) (1 - c)];           // the other input (cross terms)
+                const float* x = C.fdl.data() + (size_t) seg * (size_t) S;
+                const float* xo = X.fdl.data() + (size_t) seg * (size_t) S;
 
                 for (int r = 0; r < 2; ++r)
                 {
                     const IR* ir = irs[r];
                     if (ir == nullptr) continue;
                     const float* h = ir->seg[c].data();
+                    const float* hx = ir->cross ? ir->seg[(size_t) (2 + c)].data() : nullptr;
                     if (blockStart)                            // older blocks: once per block
                     {
                         std::fill (C.acc[r].begin(), C.acc[r].end(), 0.0f);
                         for (int i = 1; i < ir->numSegs; ++i)
-                            mac (C.fdl.data() + (size_t) ((seg + i) % numIn) * (size_t) S, h + (size_t) i * (size_t) S, C.acc[r].data());
+                        {
+                            const size_t at = (size_t) ((seg + i) % numIn) * (size_t) S;
+                            mac (C.fdl.data() + at, h + (size_t) i * (size_t) S, C.acc[r].data());
+                            if (hx != nullptr) mac (X.fdl.data() + at, hx + (size_t) i * (size_t) S, C.acc[r].data());
+                        }
                     }
                     float* o = C.work.data();
                     std::copy (C.acc[r].begin(), C.acc[r].end(), o);
-                    if (ir->numSegs > 0) mac (x, h, o);
+                    if (ir->numSegs > 0) { mac (x, h, o); if (hx != nullptr) mac (xo, hx, o); }
                     unpack (o);
                     fftAudio->performRealOnlyInverseTransform (o);
                     for (int j = 0; j < k; ++j) C.y[r][(size_t) j] = o[pos + j] + C.ov[r][(size_t) (pos + j)];
@@ -151,7 +164,7 @@ public:
 
 private:
     static constexpr int kFresh = 0x100, kMask = 0xff;
-    struct IR { int numSegs = 0; std::array<std::vector<float>, 2> seg; };
+    struct IR { int numSegs = 0; bool cross = false; std::array<std::vector<float>, 4> seg; };   // seg 0 M→M, 1 S→S, 2 S→M, 3 M→S
     struct Channel { std::vector<float> in, fdl, work; std::array<std::vector<float>, 2> acc, ov, y; };
 
     // block boundary only: install the newest kernel, rebuilding its overlap
@@ -169,8 +182,13 @@ private:
             const int c = (int) (&C - ch.data());
             float* o = C.work.data();
             std::fill (o, o + S, 0.0f);
+            const auto& X = ch[(size_t) (1 - c)];
             for (int i = 0; i < ir.numSegs; ++i)
-                mac (C.fdl.data() + (size_t) ((prevSeg + i) % numIn) * (size_t) S, ir.seg[c].data() + (size_t) i * (size_t) S, o);
+            {
+                const size_t at = (size_t) ((prevSeg + i) % numIn) * (size_t) S;
+                mac (C.fdl.data() + at, ir.seg[(size_t) c].data() + (size_t) i * (size_t) S, o);
+                if (ir.cross) mac (X.fdl.data() + at, ir.seg[(size_t) (2 + c)].data() + (size_t) i * (size_t) S, o);
+            }
             unpack (o);
             fftAudio->performRealOnlyInverseTransform (o);
             std::copy (o + B, o + 2 * B, C.ov[0].data());

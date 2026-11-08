@@ -64,7 +64,7 @@ std::array<IIRChain::Target, eqcore::kBands> EQAnatomyProcessor::targets() const
     {
         auto v = [&] (const char* w) { return apvts.getRawParameterValue (pid::band (i, w))->load(); };
         const int ch = (int) v ("ch");
-        const int mask = (! zero || v ("phase") > 0.5f) ? 0 : (ch == 0 ? 3 : ch == 1 ? 1 : 2);   // only zero-latency min bands run as IIR
+        const int mask = (! zero || v ("phase") > 0.5f) ? 0 : (ch == 0 ? 3 : ch == 1 ? 1 : ch == 2 ? 2 : ch == 3 ? 4 : 8);   // only zero-latency min bands run as IIR
         t[(size_t) i] = { v ("on") > 0.5f, (eqcore::Type) (int) v ("type"), (int) v ("slope"), (double) v ("freq"), (double) v ("gain"), (double) v ("q"), mask };
     }
     return t;
@@ -208,7 +208,7 @@ void EQAnatomyProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
         const bool minZero = activeMode == 0 && v ("on") > 0.5f && v ("phase") < 0.5f;
         dynOn[(size_t) b] = minZero && v ("dyn") > 0.5f
                          && (ty == eqcore::Type::Bell || ty == eqcore::Type::LowShelf || ty == eqcore::Type::HighShelf);
-        dynCh[(size_t) b] = (int) v ("ch") == 2 ? 1 : 0;
+        { const int c = (int) v ("ch"); dynCh[(size_t) b] = c == 2 ? 1 : c == 3 ? 2 : c == 4 ? 3 : 0; }   // detector on M, S, L or R
         dynSrc[(size_t) b] = (int) v ("src");                       // 0 Input, 1 Sidechain, 2 Mid, 3 Side
         dynSC[(size_t) b] = dynSrc[(size_t) b] == 1 && scL != nullptr;
         attC[(size_t) b] = 1.0 - std::exp (-1.0 / (sr * (snap (v ("att")) / 1000.0)));
@@ -260,7 +260,8 @@ void EQAnatomyProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
                         const double x = dynSC[(size_t) b] ? 0.5 * ((double) scL[i] + (double) scR[i])
                                        : dynSrc[(size_t) b] == 2 ? (double) M[i]
                                        : dynSrc[(size_t) b] == 3 ? (double) S[i]
-                                       : (dynCh[(size_t) b] ? (double) S[i] : (double) M[i]);
+                                       : dynCh[(size_t) b] == 1 ? (double) S[i] : dynCh[(size_t) b] == 2 ? (double) M[i] + (double) S[i]
+                                       : dynCh[(size_t) b] == 3 ? (double) M[i] - (double) S[i] : (double) M[i];
                         det[(size_t) b].process (x, attC[(size_t) b], relC[(size_t) b]);
                     }
             if (anyTB)
@@ -509,7 +510,7 @@ void EQAnatomyProcessor::run()
                 }
                 juce::ignoreUnused (cm);
             };
-            bool any = kM.active || kS.active;
+            bool any = kM.active || kS.active || eqcore::lrInFir (bands, mode);
             if (any) { fill (kM, cmM); fill (kS, cmS); }
             const bool load = any || mode != eqcore::Mode::ZeroLatency;      // Analog / Linear always convolve
             if (! any && load) { kM.h.assign (64, 0.0); kM.h[0] = 1.0; kM.active = true; kS = kM; }
@@ -544,7 +545,28 @@ void EQAnatomyProcessor::run()
                     }
                     for (size_t i = 0; i < h.size(); ++i) b.setSample (c, (int) i, (float) h[i]);
                 }
-                convolution.loadImpulseResponse (b.getReadPointer (0), b.getReadPointer (1), b.getNumSamples());
+                if (eqcore::lrInFir (bands, mode))
+                {
+                    // L/R bands: four kernels (two of them cross terms), about twice the convolution CPU
+                    auto k4 = eqcore::buildKernel4 (bands, qm, fs, mode, res);
+                    const int L4 = (int) k4.h[0].size();
+                    juce::AudioBuffer<float> q (4, L4); q.clear();
+                    for (int c = 0; c < 4; ++c)
+                    {
+                        auto& h = k4.h[(size_t) c];
+                        if (solo)
+                        {
+                            const int end = std::max (0, k4.latency - (int) std::round (fs * 0.00025));
+                            const int fade = std::min (end / 4, (int) (fs * 0.002));
+                            for (int i = 0; i < (int) h.size(); ++i)
+                                h[(size_t) i] = i >= end ? 0.0 : h[(size_t) i] * (i >= end - fade && fade > 0 ? (double) (end - i) / fade : 1.0);
+                        }
+                        for (int i = 0; i < L4; ++i) q.setSample (c, i, (float) h[(size_t) i]);
+                    }
+                    convolution.loadImpulseResponse (q.getReadPointer (0), q.getReadPointer (1), L4, q.getReadPointer (2), q.getReadPointer (3));
+                }
+                else
+                    convolution.loadImpulseResponse (b.getReadPointer (0), b.getReadPointer (1), b.getNumSamples());
             }
         }
     }

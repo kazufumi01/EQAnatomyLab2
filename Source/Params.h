@@ -83,7 +83,7 @@ inline void addBandMain (juce::AudioProcessorValueTreeState::ParameterLayout& l,
                                                       NormalisableRange<float> (-18.0f, 18.0f, 0.1f), 0.0f, AudioParameterFloatAttributes().withLabel ("dB")));
         l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::band (i, "src"), ver }, n + "Detector", StringArray { "Input", "Sidechain", "Mid", "Side" }, 0));
         l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::band (i, "phase"), ver }, n + "Phase", StringArray { "Min", "Lin" }, 0));
-        l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::band (i, "ch"), ver }, n + "Channel", StringArray { "Stereo", "Mid", "Side" }, 0));
+        l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::band (i, "ch"), ver }, n + "Channel", StringArray { "Stereo", "Mid", "Side", "Left", "Right" }, 0));
         l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::band (i, "tb"), ver }, n + "Transient/Body",
                                                       NormalisableRange<float> (-100.0f, 100.0f, 1.0f), 0.0f));
     }
