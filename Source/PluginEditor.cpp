@@ -60,39 +60,17 @@ EQAnatomyView::EQAnatomyView (EQAnatomyProcessor& p) : proc (p)
     };
     undoBtn.onClick = [this] { proc.undo.undo(); };
     redoBtn.onClick = [this] { proc.undo.redo(); };
-    earBtn.onClick  = [this]
-    {
-        juce::PopupMenu m; const bool on = proc.earActive(); const int k = earCard.getKind();
-        m.addItem (1, ph.tr ("EQ の帯域を当てる", "Guess the EQ band"), true, on && k == 0);
-        m.addItem (2, ph.tr ("プリリンギングを聴き分ける（Min と Linear）", "Hear the pre-ringing (min vs linear phase)"), true, on && k == 1);
-        if (on) { m.addSeparator(); m.addItem (3, ph.tr ("EAR を終了", "Leave EAR")); }
-        m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&earBtn), [this] (int r)
-        {
-            if (r == 3) setEar (false);
-            else if (r == 1 || r == 2) { earCard.setKind (r - 1); setEar (true); }
-        });
-    };
+    earBtn.onClick  = [this] { if (proc.earActive()) setEar (false); else { earCard.setKind (0); setEar (true); } };
     learnBtn.onClick   = [this]
     {
-        const bool ja = ph.ja(); const bool on = (bool) proc.uiState.getProperty ("learn", true);
-        const int cur = (int) proc.uiState.getProperty ("lesson", 0);
-        juce::PopupMenu m;
-        m.addItem (1, ja ? juce::String::fromUTF8 ("レッスンを閉じる（ヘルプ表示）") : juce::String ("Close lessons (show help)"), true, ! on);
-        m.addSeparator();
-        const auto& L = lessons();
-        for (int i = 0; i < (int) L.size(); ++i)
-            m.addItem (100 + i, juce::String (i + 1).paddedLeft ('0', 2) + "  " + juce::String::fromUTF8 (ja ? L[(size_t) i].titleJa : L[(size_t) i].titleEn), true, on && i == cur);
-        m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&learnBtn), [this] (int r)
-        {
-            if (r == 1) { proc.uiState.setProperty ("learn", false, nullptr); return; }
-            if (r >= 100)
-            {
-                if (proc.earActive()) setEar (false);                  // EAR and Learn are exclusive
-                proc.uiState.setProperty ("lesson", r - 100, nullptr);
-                proc.uiState.setProperty ("learn", true, nullptr);
-            }
-        });
+        if ((bool) proc.uiState.getProperty ("learn", true) && ! proc.earActive()) { proc.uiState.setProperty ("learn", false, nullptr); return; }
+        if (proc.earActive()) setEar (false);                     // EAR, Learn and Help are exclusive
+        proc.uiState.setProperty ("lesson", 0, nullptr); proc.uiState.setProperty ("learn", true, nullptr);
     };
+    helpBtn.onClick    = [this] { if (proc.earActive()) setEar (false); proc.uiState.setProperty ("learn", false, nullptr); };
+    addAndMakeVisible (helpBtn);
+    setHelp (helpBtn, "HELP", "説明欄にヘルプを出す（今の方式、マウス操作、ポインターを置いた部分の説明）。EAR・Learn を閉じる",
+             "Show help in the text panel (the current mode, mouse controls, and whatever you point at). Closes EAR and Learn");
     langBtn.onClick    = [this] { proc.uiState.setProperty ("lang", ph.ja() ? "en" : "ja", nullptr); };
     resetBtn.onClick   = [this]
     {
@@ -235,7 +213,9 @@ void EQAnatomyView::refreshTexts()
     soloBtn.setColour (juce::TextButton::buttonOnColourId, theme::pre);
     earBtn.setButtonText ("EAR"); earBtn.setToggleState (proc.earActive(), juce::dontSendNotification);
     learnBtn.setButtonText ("Learn");
-    learnBtn.setToggleState ((bool) proc.uiState.getProperty ("learn", true), juce::dontSendNotification);
+    helpBtn.setButtonText (ph.tr ("説明", "Help")); helpBtn.setClickingTogglesState (false);
+    helpBtn.setToggleState (! (bool) proc.uiState.getProperty ("learn", true) && ! proc.earActive(), juce::dontSendNotification);
+    learnBtn.setToggleState ((bool) proc.uiState.getProperty ("learn", true) && ! proc.earActive(), juce::dontSendNotification);
     langBtn.setButtonText (ph.ja() ? "EN" : juce::String::fromUTF8 ("日本語"));
     {
         const int pi = (int) proc.uiState.getProperty ("preset", -1);
@@ -281,7 +261,9 @@ void EQAnatomyView::paint (juce::Graphics& g)
     // captions for the two menus whose text is a name (curve character, preset)
     g.setColour (theme::muted); g.setFont (theme::ui (8.5f, true));
     g.drawText ("CURVE", curveBox.getX() - 38, 10, 35, 24, juce::Justification::centredRight);
-    g.drawText ("PRESET", resetBtn.getX() - 42, 10, 39, 24, juce::Justification::centredRight);
+    g.setColour (theme::text); g.setFont (theme::ui (9.5f, true));
+    g.drawText ("PRESET", resetBtn.getX() - 46, 10, 43, 24, juce::Justification::centredRight);
+    g.setColour (theme::accent); g.drawRoundedRectangle (resetBtn.getBounds().toFloat().expanded (1.5f), 5.0f, 1.5f);
 }
 
 void EQAnatomyView::resized()
@@ -295,10 +277,11 @@ void EQAnatomyView::resized()
     x += 42; resetBtn.setBounds (x, 10, 712 - x, 24);           // "PRESET" caption on the left
     for (int i = 0; i < 4; ++i) slotBtn[i].setBounds (778 + i * 26, 10, 24, 24);
     morphTo.setBounds (884, 12, 30, 20);
-    morph.setBounds (916, 10, 70, 26);
-    earBtn.setBounds (990, 10, 40, 24);
-    learnBtn.setBounds (1034, 10, 52, 24);
-    langBtn.setBounds (1090, 10, 58, 24);
+    morph.setBounds (916, 10, 50, 26);
+    helpBtn.setBounds (970, 10, 42, 24);
+    earBtn.setBounds (1016, 10, 40, 24);
+    learnBtn.setBounds (1060, 10, 48, 24);
+    langBtn.setBounds (1112, 10, 36, 24);
 
     // Lab 2: the lower panel can be closed; closed, the graph and meters take the whole height
     const bool lower = (bool) proc.uiState.getProperty ("lowerOpen", true);
@@ -310,21 +293,21 @@ void EQAnatomyView::resized()
     detail.setVisible (false);                     // its settings now open in the floating panel (▾)
     satStrip.setBounds (12, y, 300, h);
     for (auto* c : { (juce::Component*) &detail, (juce::Component*) &irView, (juce::Component*) &outDrag, (juce::Component*) &autoBtn,
-                     (juce::Component*) &deltaBtn, (juce::Component*) &viewSolo, (juce::Component*) &bypassBtn, (juce::Component*) &soloBtn, (juce::Component*) &lesson,
+                     (juce::Component*) &deltaBtn, (juce::Component*) &viewSolo, (juce::Component*) &bypassBtn, (juce::Component*) &lesson,
                      (juce::Component*) &satStrip })
         c->setVisible (! ear && lower);
     detail.setVisible (false);
     earCard.setVisible (ear && lower);
     earCard.setBounds (12, y, getWidth() - 24, h);
-    irView.setBounds (320, y, 196, h);
-    const int bx = 524, bw = 104, bh = (h - 20) / 6;
+    irView.setBounds (320, y, 128, h);
+    const int bw = 112, bx = getWidth() - 12 - bw, bh = (h - 16) / 5;
     outDrag.setBounds (bx, y, bw, bh);
     autoBtn.setBounds (bx, y + (bh + 4) * 1, bw, bh);
     deltaBtn.setBounds (bx, y + (bh + 4) * 2, bw, bh);
     viewSolo.setBounds (bx, y + (bh + 4) * 3, bw, bh);
     bypassBtn.setBounds (bx, y + (bh + 4) * 4, bw, bh);
-    soloBtn.setBounds (bx, y + (bh + 4) * 5, bw, bh);
-    lesson.setBounds (636, y, getWidth() - 636 - 12, h);
+    soloBtn.setVisible (false);                    // pre-ring solo is the P cell of SOLO
+    lesson.setBounds (456, y, bx - 8 - 456, h);
 }
 
 bool EQAnatomyView::keyPressed (const juce::KeyPress& k)

@@ -237,7 +237,7 @@ public:
         for (auto* c : { (juce::Component*) &soloBtn, (juce::Component*) &slopeBtn, (juce::Component*) &chBtn }) addAndMakeVisible (c);
         // Lab 2: ▾ opens every setting in the floating panel (the old detail panel), ▴ goes back to the compact one
         expBtn.setButtonText (juce::String::fromUTF8 (full ? "\xe2\x96\xb2" : "\xe2\x96\xbc"));
-        expBtn.onClick = [this] { ph.proc.uiState.setProperty ("popExpand", ! full, nullptr); };
+        expBtn.onClick = [this] { auto& ui = ph.proc.uiState; ui.setProperty ("popExpand", ! (bool) ui.getProperty ("popExpand", false), nullptr); };
         addAndMakeVisible (expBtn);
         setHelp (expBtn, full ? "COMPACT" : "EXPAND", full ? "小さい表示に戻す" : "このバンドのすべての設定（PHASE・DYN 一式・TRANS/BODY・T/B Scope）を浮き窓に広げて表示",
                  full ? "Back to the compact panel" : "Show every setting of this band (phase, the whole DYN set, transient/body, T/B Scope) in the floating panel");
@@ -336,6 +336,7 @@ public:
         fq.setParam (pid::band (b, "freq")); gn.setParam (pid::band (b, "gain")); qv.setParam (pid::band (b, "q"));
         qv.setAlpha ((shelf && s == 0) || t == (int) eqcore::Type::FlatTilt ? 0.35f : 1.0f);   // a first-order shelf / flat tilt has no Q
         gn.valueColour = theme::bandColour (b);
+        expBtn.setButtonText (juce::String::fromUTF8 ((bool) ph.proc.uiState.getProperty ("popExpand", false) ? "\xe2\x96\xb2" : "\xe2\x96\xbc"));
         const bool bandOn = ph.value (pid::band (b, "on")) > 0.5f;
         for (auto* c : { (juce::Component*) &fq, (juce::Component*) &type, (juce::Component*) &slopeBtn, (juce::Component*) &chBtn })
             c->setAlpha (bandOn ? 1.0f : 0.45f);
@@ -379,7 +380,7 @@ public:
     }
     juce::Rectangle<int> dotArea() const { return full ? juce::Rectangle<int>() : juce::Rectangle<int> { 22, 7, 12, 12 }; }
     juce::Rectangle<int> stripArea() const { return { 0, 0, getWidth(), 26 }; }
-    juce::Rectangle<int> tabArea (int i) const { return { 7 + i * 23, 4, 21, 18 }; }
+    juce::Rectangle<int> tabArea (int) const { return {}; }      // Lab 2: band tabs removed (the extension sits under the compact panel)
     void hidePanel() { if (! full) ph.proc.uiState.setProperty ("popup", false, nullptr); }
     // the white threshold line in the detector meter can be dragged (±5 px wide hit area, one gesture per drag)
     float thrX() const
@@ -484,7 +485,7 @@ public:
     void mouseExit (const juce::MouseEvent&) override { if (dotOver || thrOver) { dotOver = thrOver = false; repaint(); } }
     bool isBusy() const { return moving || thrDrag || fq.isBusy() || gn.isBusy() || qv.isBusy() || th.isBusy() || rg.isBusy() || bl.isBusy()
                               || at.isBusy() || rl.isBusy() || kn.isBusy() || tb.isMouseButtonDown(); }
-    static constexpr int compactW = 270, compactH = 100, fullW = 256, fullH = 222;
+    static constexpr int compactW = 270, compactH = 100, fullW = 270, fullH = 140;
     int idealHeight() const { return full ? fullH : compactH; }
     int idealWidth() const { return full ? fullW : compactW; }
     void paint (juce::Graphics& g) override
@@ -509,10 +510,10 @@ public:
             g.drawText ("B" + juce::String (band + 1), 38, 3, 24, 20, juce::Justification::centredLeft);
             return;
         }
-        // ---- detail panel
-        g.setColour (theme::panel); g.fillRoundedRectangle (r, 6.0f);
-        g.setColour (theme::line); g.drawRoundedRectangle (r, 6.0f, 1.0f);
-        for (int i = 0; i < eqcore::kBands; ++i)
+        // ---- extension panel (looks like the floating panel above it)
+        g.setColour (theme::popup.withAlpha (0.86f)); g.fillRoundedRectangle (r, 8.0f);
+        g.setColour (theme::text.withAlpha (0.18f)); g.drawRoundedRectangle (r, 8.0f, 1.0f);
+        for (int i = 0; i < 0; ++i)
         {
             const auto a = tabArea (i).toFloat();
             const bool on = ph.value (pid::band (i, "on")) > 0.5f, sel = i == band;
@@ -531,7 +532,7 @@ public:
             if (bandOn && ph.value (pid::band (band, "dyn")) > 0.5f) tg.add ("D");
             if (bandOn && std::abs (ph.value (pid::band (band, "tb"))) > 0.5f) tg.add ("T/B");
             g.setColour (bandOn ? theme::bandColour (band) : theme::muted); g.setFont (theme::mono (9.0f, true));
-            g.drawText (bandOn ? tg.joinIntoString (" ") : juce::String ("off"), 192, 4, getWidth() - 199, 18, juce::Justification::centredRight);
+            juce::ignoreUnused (tg);
         }
         g.setColour (theme::text.withAlpha (0.12f)); g.drawHorizontalLine (rowSep, 7.0f, (float) getWidth() - 7.0f);
         g.setColour (theme::muted); g.setFont (theme::ui (9.5f));
@@ -588,21 +589,19 @@ public:
             slopeBtn.setBounds (8, 74, bw, 20); chBtn.setBounds (12 + bw, 74, bw - 26, 20); expBtn.setBounds (12 + 2 * bw - 22, 74, 22, 20);
             return;
         }
-        // detail panel, 248 × 218
-        soloBtn.setBounds (getWidth() - 50, 4, 44, 18);
-        type.setBounds (7, 26, 96, 20);
-        slopeBtn.setBounds (106, 26, 64, 20);
-        chBtn.setBounds (173, 26, getWidth() - 180 - 26, 20); expBtn.setBounds (getWidth() - 29, 26, 22, 20);
+        // Lab 2: the extension under the compact panel (same width): phase, the DYN set, transient / body, T/B Scope
+        for (auto* c : { (juce::Component*) &soloBtn, (juce::Component*) &type, (juce::Component*) &slopeBtn, (juce::Component*) &chBtn,
+                         (juce::Component*) &expBtn, (juce::Component*) &fq, (juce::Component*) &gn, (juce::Component*) &qv })
+            c->setVisible (false);
         const int w = (getWidth() - 20) / 3;
-        fq.setBounds (7, 50, w, 30); gn.setBounds (10 + w, 50, w, 30); qv.setBounds (13 + 2 * w, 50, w, 30);
-        rowSep = 85; rowPhase = 89;
+        rowSep = -10; rowPhase = 8;
         phaseSeg.setBounds (44, rowPhase, 62, 20);
         dynBtn.setBounds (112, rowPhase - 1, 38, 22);
         srcSeg.setBounds (154, rowPhase, getWidth() - 161, 20);
-        meterArea = { 7, 113, getWidth() - 14, 8 };
+        meterArea = { 7, 32, getWidth() - 14, 8 };
         DragValue* dv[] = { &th, &rg, &bl, &at, &rl, &kn };
-        for (int k = 0; k < 6; ++k) dv[k]->setBounds (7 + (k % 3) * (w + 3), 134 + (k / 3) * 30, w, 28);
-        rowTB = 192;
+        for (int k = 0; k < 6; ++k) dv[k]->setBounds (7 + (k % 3) * (w + 3), 53 + (k / 3) * 30, w, 28);
+        rowTB = 111;
         tb.setBounds (40, rowTB, getWidth() - 40 - 112, 22);
         scopeBtn.setBounds (getWidth() - 74, rowTB + 1, 67, 20);
     }
@@ -989,11 +988,11 @@ public:
         if (keep >= 0 && (keep != s || bands[(size_t) s].on)) ph.proc.uiState.setProperty ("keepOff", -1, nullptr);
         const bool showPop = (bands[(size_t) s].on || keep == s) && (bool) ph.proc.uiState.getProperty ("popup", true) && ! ph.proc.earActive();
         const bool expand = (bool) ph.proc.uiState.getProperty ("popExpand", false);
-        popup.setVisible (showPop && ! expand); popupFull.setVisible (showPop && expand);
+        popup.setVisible (showPop); popupFull.setVisible (showPop && expand);
         panelBtn.setButtonText ((bool) ph.proc.uiState.getProperty ("lowerOpen", true) ? juce::String::fromUTF8 ("Panel \xe2\x96\xbe") : juce::String::fromUTF8 ("Panel \xe2\x96\xb4"));
         // keep the panel still while one of its values is being dragged or typed
         if (popup.isVisible()) { popup.refresh (s); if (! popup.isBusy()) placePopup(); }
-        if (popupFull.isVisible()) { popupFull.refresh (s); if (! popupFull.isBusy()) placePopup(); }
+        if (popupFull.isVisible()) { popupFull.refresh (s); if (! popupFull.isBusy() && ! popup.isBusy()) placePopup(); }
         repaint();
     }
 
@@ -1728,19 +1727,21 @@ private:
         const auto bands = ph.proc.currentBands();
         const auto c = nodePos (s, bands[(size_t) s]);
         const bool ex = (bool) ph.proc.uiState.getProperty ("popExpand", false);
-        auto& pp = ex ? popupFull : popup;
-        const int w = pp.idealWidth(), h = pp.idealHeight();
+        auto& pp = popup;
+        const int w = pp.idealWidth(), h = pp.idealHeight() + (ex ? popupFull.idealHeight() + 2 : 0);   // the group: compact + extension
         auto& ui = ph.proc.uiState;
         if ((bool) ui.getProperty ("popPinned", false))       // parked where the user dragged it
         {
-            pp.setBounds (juce::jlimit (4, getWidth() - w - 4, (int) ui.getProperty ("popX", 40)), juce::jlimit (4, getHeight() - h - 4, (int) ui.getProperty ("popY", 40)), w, h);
+            pp.setBounds (juce::jlimit (4, getWidth() - w - 4, (int) ui.getProperty ("popX", 40)), juce::jlimit (4, getHeight() - h - 4, (int) ui.getProperty ("popY", 40)), w, pp.idealHeight());
+            popupFull.setBounds (pp.getX(), pp.getBottom() + 2, w, popupFull.idealHeight());
             return;
         }
         int x = (int) c.x + 22, y = (int) c.y - h - 14;
         if (x + w > getWidth() - 8) x = (int) c.x - w - 22;
         if (y < 32) y = (int) c.y + 22;
         if (y + h > getHeight() - 20) y = getHeight() - 20 - h;
-        pp.setBounds (juce::jlimit (8, getWidth() - w - 8, x), juce::jmax (30, y), w, h);
+        pp.setBounds (juce::jlimit (8, getWidth() - w - 8, x), juce::jmax (30, y), w, pp.idealHeight());
+        popupFull.setBounds (pp.getX(), pp.getBottom() + 2, w, popupFull.idealHeight());
     }
 
     ParamHelp& ph;
@@ -2031,8 +2032,8 @@ class SoloView : public juce::Component
 public:
     explicit SoloView (ParamHelp& h) : ph (h)
     {
-        setHelp (*this, "SOLO  M | S | T | B",
-                 "出力のどの部分だけを聴くか。M＝Mid（中央の音。左右同じ）／S＝Side（左右に広がる成分。左右が逆相なので、モノラルにすると消える）／T＝検出器がアタックと見る部分（出力×マスク）／B＝胴と見る部分（出力×(1−マスク)）。もう一度押すと解除。切り替えは約 15 ms のクロスフェード。優先順位：EAR ＞ Bypass ＞ Delta ＞ Pre-ring solo ＞ バンドソロ ＞ この SOLO（上位がオンの間は働かず、灰色になる）。保存されない（開き直すとオフ）。スペアナはこの SOLO の影響を受けない。注意：T／B は検出器の見立てで、厳密な分離ではない。T と B を足しても元の音になるのは各瞬間のマスクが 0〜1 のときだけで、聞こえ方は目安",
+        setHelp (*this, "SOLO  M | S | T | B | P",
+                 "P＝プリリンギングソロ（リニア位相で音より前に出る成分だけ。Lin のバンドがある時に働く）／出力のどの部分だけを聴くか。M＝Mid（中央の音。左右同じ）／S＝Side（左右に広がる成分。左右が逆相なので、モノラルにすると消える）／T＝検出器がアタックと見る部分（出力×マスク）／B＝胴と見る部分（出力×(1−マスク)）。もう一度押すと解除。切り替えは約 15 ms のクロスフェード。優先順位：EAR ＞ Bypass ＞ Delta ＞ Pre-ring solo ＞ バンドソロ ＞ この SOLO（上位がオンの間は働かず、灰色になる）。保存されない（開き直すとオフ）。スペアナはこの SOLO の影響を受けない。注意：T／B は検出器の見立てで、厳密な分離ではない。T と B を足しても元の音になるのは各瞬間のマスクが 0〜1 のときだけで、聞こえ方は目安",
                  "Which part of the finished output you hear. M = Mid (the centre, identical in both ears) / S = Side (the widening part: left and right are opposite in polarity, so it vanishes in mono) / T = what the detector hears as attack (output × mask) / B = as body (output × (1 − mask)). Click again to clear. Switching cross-fades over about 15 ms. Priority: EAR > Bypass > Delta > Pre-ring solo > band solo > this SOLO (it is ignored and dimmed while any of those is on). Not saved: off after reopening. The analyzer is not affected by it. Careful: T and B are the detector's guess, not a strict separation");
     }
     void paint (juce::Graphics& g) override
@@ -2043,14 +2044,15 @@ public:
         const int sel = ph.proc.soloView.load();
         const bool blocked = ph.proc.soloViewBlocked();
         g.setColour (blocked ? theme::faint : theme::muted); g.setFont (theme::ui (9.5f));
-        g.drawText ("SOLO", 8, 0, labelW - 8, getHeight(), juce::Justification::centredLeft);
-        static const char* t[] = { "M", "S", "T", "B" };
+        g.setFont (theme::ui (8.5f, true));
+        g.drawText ("SOLO", 5, 0, (int) labelW - 4, getHeight(), juce::Justification::centredLeft);
+        static const char* t[] = { "M", "S", "T", "B", "P" };       // P = pre-ring solo (needs a Lin band)
         const float w = cellW();
-        for (int i = 0; i < 4; ++i)
+        for (int i = 0; i < 5; ++i)
         {
-            auto c = juce::Rectangle<float> (r.getX() + labelW + (float) i * w, r.getY() + 3.0f, w, r.getHeight() - 6.0f).reduced (1.5f, 0.0f);
-            const bool on = sel == i + 1;
-            if (on) { g.setColour (theme::accent.withAlpha (blocked ? 0.3f : 1.0f)); g.fillRoundedRectangle (c, 3.0f); }
+            auto c = juce::Rectangle<float> (r.getX() + labelW + (float) i * w, r.getY() + 3.0f, w, r.getHeight() - 6.0f).reduced (1.0f, 0.0f);
+            const bool on = i == 4 ? ph.value (pid::preSolo) > 0.5f : sel == i + 1;
+            if (on) { g.setColour ((i == 4 ? theme::pre : theme::accent).withAlpha (blocked && i < 4 ? 0.3f : 1.0f)); g.fillRoundedRectangle (c, 3.0f); }
             g.setColour (on ? theme::onAccent : (blocked ? theme::faint : theme::muted)); g.setFont (theme::mono (11.0f, true));
             g.drawText (t[i], c, juce::Justification::centred);
         }
@@ -2058,13 +2060,14 @@ public:
     void mouseDown (const juce::MouseEvent& e) override
     {
         const int i = (int) std::floor (((float) e.x - labelW) / cellW());
-        if (i < 0 || i > 3 || e.mods.isPopupMenu()) return;
+        if (i < 0 || i > 4 || e.mods.isPopupMenu()) return;
+        if (i == 4) { ph.toggleGesture (pid::preSolo); repaint(); return; }
         ph.proc.soloView = ph.proc.soloView.load() == i + 1 ? 0 : i + 1;
         repaint();
     }
 private:
-    static constexpr float labelW = 38.0f;
-    float cellW() const { return ((float) getWidth() - labelW - 3.0f) / 4.0f; }
+    static constexpr float labelW = 32.0f;
+    float cellW() const { return ((float) getWidth() - labelW - 3.0f) / 5.0f; }
     ParamHelp& ph;
 };
 
@@ -2391,6 +2394,8 @@ public:
         aB.onClick = [this] { playEq = false; ph.proc.setEarPlayEQ (false); refresh(); };
         bB.onClick = [this] { playEq = true;  ph.proc.setEarPlayEQ (true);  refresh(); };
         nextB.onClick = [this] { newQuestion(); };
+        for (auto* b : { &kBandB, &kPreB }) { addAndMakeVisible (*b); b->setClickingTogglesState (false); }
+        kBandB.onClick = [this] { kind = 0; newQuestion(); }; kPreB.onClick = [this] { kind = 1; newQuestion(); };
         showB.onClick = [this] { if (! answered) { answered = true; chosen = -1; ++total; streak = 0; refresh(); } };
         setHelp (*this, "EAR TRAINING", "DAW の音に、隠れたベル EQ をかけて出題。B（EQ）と A（原音）を聴き比べて、持ち上がっている（または削られている）帯域を当てる。出題中は今の EQ 設定を一時的に外し、音量はそろえている。終了すると元に戻る",
                  "A hidden bell is applied to the DAW signal. Compare B (EQ) and A (original) and pick the band that is boosted (or cut). Your EQ is bypassed while you play and levels are matched; leaving restores it");
@@ -2406,6 +2411,8 @@ public:
         tog (easyB, level == 0); tog (normB, level == 1); tog (hardB, level == 2);
         tog (boostB, mode == 0); tog (cutB, mode == 1); tog (bothB, mode == 2);
         tog (aB, ! playEq); tog (bB, playEq);
+        tog (kBandB, kind == 0); tog (kPreB, kind == 1);
+        kBandB.setButtonText (ph.tr ("帯域当て", "Band")); kPreB.setButtonText (ph.tr ("プリリンギング", "Pre-ring"));
         easyB.setButtonText ("Easy"); normB.setButtonText ("Normal"); hardB.setButtonText ("Hard");
         boostB.setButtonText (kind == 1 ? "Low cut" : "Boost"); cutB.setButtonText (kind == 1 ? "High cut" : "Cut"); bothB.setButtonText ("Both");
         if (kind == 1) { aB.setButtonText (ph.tr ("A を聴く", "Play A")); bB.setButtonText (ph.tr ("B を聴く", "Play B")); }
@@ -2419,6 +2426,7 @@ public:
         const int lx = 12;
         easyB.setBounds (lx + 54, 30, 56, 22); normB.setBounds (lx + 112, 30, 60, 22); hardB.setBounds (lx + 174, 30, 52, 22);
         boostB.setBounds (lx + 54, 58, 56, 22); cutB.setBounds (lx + 112, 58, 60, 22); bothB.setBounds (lx + 174, 58, 52, 22);
+        kBandB.setBounds (lx + 96, 5, 60, 20); kPreB.setBounds (lx + 158, 5, 92, 20);
         const int qx = 280;
         bB.setBounds (getWidth() - 96, 8, 84, 24); aB.setBounds (getWidth() - 184, 8, 84, 24);
         nextB.setBounds (getWidth() - 96, getHeight() - 32, 84, 24);
@@ -2431,7 +2439,7 @@ public:
         g.setColour (theme::lessonBg); g.fillRoundedRectangle (r, 6.0f);
         g.setColour (theme::lessonLn); g.drawRoundedRectangle (r.reduced (0.5f), 6.0f, 1.0f);
         g.setColour (theme::muted); g.setFont (theme::mono (10.0f, true));
-        g.drawText (kind == 1 ? "EAR TRAINING  PRE-RING" : "EAR TRAINING", 12, 8, 260, 14, juce::Justification::centredLeft);
+        g.drawText ("EAR TRAINING", 12, 8, 96, 14, juce::Justification::centredLeft);
         g.setFont (theme::ui (11.0f));
         g.drawText (ph.tr ("難易度", "Level"), 12, 30, 50, 22, juce::Justification::centredLeft);
         g.drawText (ph.tr ("種類", "Type"), 12, 58, 50, 22, juce::Justification::centredLeft);
@@ -2559,7 +2567,7 @@ private:
         resized(); refresh();
     }
     ParamHelp& ph;
-    juce::TextButton easyB, normB, hardB, boostB, cutB, bothB, aB, bB, nextB, showB;
+    juce::TextButton easyB, normB, hardB, boostB, cutB, bothB, aB, bB, nextB, showB, kBandB, kPreB;
     EQAnatomyProcessor::EarQuestion q;
     int kind = 0, level = 1, mode = 0, answer = 0, chosen = -1, hover = -1, score = 0, total = 0, streak = 0; bool answered = false, playEq = true;
     juce::Rectangle<int> answerArea;

@@ -33,7 +33,7 @@ private:
 
     // header
     ResetCombo modeBox;            // Zero latency / Analog / Linear in one menu
-    juce::TextButton resBtn, learnBtn, langBtn, resetBtn, undoBtn, redoBtn, earBtn, morphTo;
+    juce::TextButton helpBtn, resBtn, learnBtn, langBtn, resetBtn, undoBtn, redoBtn, earBtn, morphTo;
     juce::TextButton slotBtn[4];
     ResetCombo curveBox;
     juce::Slider morph;
