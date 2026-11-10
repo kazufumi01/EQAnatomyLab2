@@ -53,8 +53,8 @@ private:
 };
 inline void markReset (juce::Component& c) { c.getProperties().set ("resettable", true); }
 
-inline const char* mouseHelpJa() { return "点をドラッグ：周波数とゲイン／Cmd＋ドラッグ：縦か横に固定／Alt＋ドラッグ：そのバンドだけを試聴／幅ハンドル・Shift＋上下・ホイール：Q／ダブルクリック：追加・オフ／右クリック：浮き窓の表示切替／DYN の▲▼（塗り＝ABOVE、輪＝BELOW）：上下ドラッグで可動範囲、Option＋クリックで初期値／上部の SAT タブ：サチュレーターの帯域／Cmd＋Z：元に戻す"; }
-inline const char* mouseHelpEn() { return "Drag a dot: frequency and gain / Cmd + drag: lock to one axis / Alt + drag: solo that band / width handles, Shift + drag or wheel: Q / double-click: add or switch off / right-click: show or hide the floating panel / DYN triangles (filled = ABOVE, ring = BELOW): drag up/down for the range, Option+click resets / SAT tabs: saturator band / Cmd + Z: undo"; }
+inline const char* mouseHelpJa() { return "点をドラッグ：周波数とゲイン／Cmd＋ドラッグ：縦か横に固定／Alt＋ドラッグ：そのバンドだけを試聴／幅ハンドル・Shift＋上下・ホイール：Q／ダブルクリック：追加（クリックした周波数で形を自動選択：〜45 Hz ローカット／〜180 Hz ローシェルフ／〜6 kHz ベル／〜14 kHz ハイシェルフ／それ以上ハイカット）・オフ／右クリック：浮き窓の表示切替／DYN の▲▼（塗り＝ABOVE、輪＝BELOW）：上下ドラッグで可動範囲、Option＋クリックで初期値／上部の SAT タブ：サチュレーターの帯域／Cmd＋Z：元に戻す"; }
+inline const char* mouseHelpEn() { return "Drag a dot: frequency and gain / Cmd + drag: lock to one axis / Alt + drag: solo that band / width handles, Shift + drag or wheel: Q / double-click: add (the shape follows the frequency: below 45 Hz low cut, 180 Hz low shelf, 6 kHz bell, 14 kHz high shelf, above that high cut) or switch off / right-click: show or hide the floating panel / DYN triangles (filled = ABOVE, ring = BELOW): drag up/down for the range, Option+click resets / SAT tabs: saturator band / Cmd + Z: undo"; }
 
 inline juce::String fmtHz (double f)
 {
@@ -819,6 +819,28 @@ public:
             else if (id > 0) ph.proc.uiState.setProperty ("anB", id - 1, nullptr);
         };
         addAndMakeVisible (anaA); addAndMakeVisible (anaB);
+        // analyzer pairs: one menu sets A (filled) and B (line) together; Custom frees the two menus
+        addAndMakeVisible (pairBtn);
+        pairBtn.onClick = [this]
+        {
+            juce::PopupMenu m; const int cur = (int) ph.proc.uiState.getProperty ("anPair", 0);
+            for (int i = 0; i < 9; ++i) m.addItem (1 + i, pairName (i), true, cur == i);
+            juce::PopupMenu other; refreshLinks(); lastLinkScan = 0;
+            for (int i = 0; i < linkNames.size(); ++i)
+                other.addItem (200 + i, linkNames[i], true, cur == 9 && ph.proc.uiState.getProperty ("anBLink", "").toString() == linkNames[i]);
+            if (linkNames.isEmpty()) other.addItem (199, ph.tr ("（他の EQ Anatomy Lab 2 がありません）", "(no other EQ Anatomy Lab 2 found)"), false);
+            m.addSubMenu (pairName (9), other, true, juce::Image(), cur == 9);
+            m.addSeparator();
+            m.addItem (11, pairName (10), true, cur == 10);
+            m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&pairBtn), [this] (int r)
+            {
+                auto& ui = ph.proc.uiState;
+                if (r >= 200 && r - 200 < linkNames.size()) { ui.setProperty ("anBLink", linkNames[r - 200], nullptr); setPair (9); }
+                else if (r >= 1 && r <= 11) setPair (r - 1);
+            });
+        };
+        setHelp (pairBtn, "ANALYZER PAIR", "スペアナの A（塗り）と B（線）の組み合わせをまとめて選ぶ。In＝EQ 前の入力、Out＝出力、SC＝サイドチェイン、Other＝同じ DAW 内の別の EQ Anatomy Lab 2 の出力。Custom で右の A・B を自由に選べる",
+                 "Pick the analyzer's A (filled) and B (line) together. In = the input before the EQ, Out = the output, SC = sidechain, Other = another EQ Anatomy Lab 2 in the same DAW. Custom frees the A and B menus on the right");
         const char* hj = "スペアナに出す音を選ぶ。A は塗り、B は線で重なる（B off で非表示）。Stereo＝Mid と Side のパワー和（L/R の平均）／Mid・Side＝出力の M/S／Trans・Body＝検出器が聞いている「アタック／胴」の音／Input＝EQ 前の入力（出力と同じ遅れに揃えてある。B に出すと前後比較）／SC＝サイドチェインの入力（ホストで接続した時だけ。キックとベースの帯域の重なりなどを見る）／B ← 名前＝同じ DAW 内の別の EQ Anatomy の出力（トラック名で表示。例：ボーカルの EQ でギターの出力を重ね、ぶつかる帯域を見る。AU と VST3 を混ぜると互いに見えない）。注意：Trans・Body は検出器の見立てを出力に掛けた表示で、厳密な分離ではない（掛け算なので、元の音との合計は一致しない）";
         const char* he = "Choose what the analyzer shows. A is filled, B is a line on top (B off hides it). Stereo = power sum of Mid and Side (mean of L and R) / Mid, Side = the output's M/S / Trans, Body = the part the detector hears as attack or body / Input = the input before the EQ (delayed to line up with the output; put it on B for a before/after view) / SC = the sidechain input (only when connected in the host; e.g. see where kick and bass overlap) / B ← name = another EQ Anatomy in the same DAW (named after its track; e.g. overlay the guitar on the vocal EQ to see where they clash. AU and VST3 instances cannot see each other). Careful: Trans and Body show the detector's guess applied to the output, not a strict separation";
         setHelp (anaA, "ANALYZER A", hj, he); setHelp (anaB, "ANALYZER B", hj, he);
@@ -838,7 +860,9 @@ public:
             const int bid = b == 8 ? 101 + linkNames.indexOf (ph.proc.uiState.getProperty ("anBLink", "").toString()) : b + 1;
             if (bid == 100) { if (anaB.getSelectedId() != 0) anaB.setText ("B (link lost)", juce::dontSendNotification); }
             else if (anaB.getSelectedId() != bid) anaB.setSelectedId (bid, juce::dontSendNotification);
-            anaA.setEnabled (! autoAna); anaB.setEnabled (! autoAna);
+            const int pr = juce::jlimit (0, 10, (int) ph.proc.uiState.getProperty ("anPair", 0));
+            pairBtn.setButtonText (pairName (pr) + juce::String::fromUTF8 (" \xe2\x96\xbe"));
+            anaA.setEnabled (! autoAna && pr == 10); anaB.setEnabled (! autoAna && pr == 10);   // only Custom edits them
             srcA = a; srcB = b - 1;
         }
         {
@@ -926,8 +950,10 @@ public:
                 const float d = ph.proc.dynGainDb[(size_t) i].load();
                 if (std::abs (d) > 0.05f) { live[(size_t) i].g += d; moving = true; }
             }
-            liveMag = moving ? eqcore::curves (eqcore::channelModel (live, ph.proc.currentQMode(), ph.proc.getSampleRateOrDefault(), ph.proc.currentMode(), 1), fr).mag
-                             : std::vector<double>();
+            // the same call gives phase and group delay, so the phase trace follows the dynamic bands at no extra cost
+            liveCur = moving ? eqcore::curves (eqcore::channelModel (live, ph.proc.currentQMode(), ph.proc.getSampleRateOrDefault(), ph.proc.currentMode(), 1), fr)
+                             : eqcore::CurvesV2();
+            liveMag = liveCur.mag;
         }
         if (specDb.size() == spectrum.size()) spectrum = specDb;
         const int s = ph.selected();
@@ -943,8 +969,9 @@ public:
     {
         phaseBtn.setBounds (getWidth() - 58, 6, 50, 20);
         overlayBtn.setBounds (getWidth() - 124, 6, 62, 20);
-        anaA.setBounds (42, 6, 84, 20); anaB.setBounds (130, 6, 84, 20);
-        scopeBtn.setBounds (220, 6, 74, 20);
+        pairBtn.setBounds (42, 6, 84, 20);
+        anaA.setBounds (130, 6, 84, 20); anaB.setBounds (218, 6, 96, 20);
+        scopeBtn.setBounds (320, 6, 74, 20);
         {
             const auto a = scopeArea();
             int x = (int) a.getX() + 150;
@@ -983,6 +1010,36 @@ public:
             // A is the main layer: brighter fill; B is a quieter line on top. Trans / Body / Side get their own colours
             const juce::Colour ca = srcColour (srcA, theme::analyzer.interpolatedWith (theme::text, 0.22f));
             g.setColour (ca.withAlpha (srcA >= 3 || srcA == 2 ? 0.55f : 0.85f)); g.fillPath (p);
+                // band solo (button or Alt + drag): the part of the spectrum the band works on is lit in its colour, the rest dimmed
+                if (const int sb = ph.proc.soloBand.load(); sb >= 0 && sb < eqcore::kBands)
+                {
+                    const auto bs = ph.proc.currentBands();
+                    std::array<eqcore::Band, eqcore::kBands> one {}; one[0] = bs[(size_t) sb]; one[0].on = true; one[0].ch = 0;
+                    const auto mag = eqcore::curves (eqcore::channelModel (one, ph.proc.currentQMode(), ph.proc.getSampleRateOrDefault(), ph.proc.currentMode(), 1), fr).mag;
+                    if (mag.size() == fr.size())
+                    {
+                        const auto ty = one[0].type;
+                        const bool cut = ty == eqcore::Type::LowCut || ty == eqcore::Type::HighCut;
+                        double mx = 0; for (auto v : mag) mx = std::max (mx, std::abs (v));
+                        auto wOf = [&] (size_t k)
+                        {
+                            if (cut) return std::pow (10.0, mag[k] / 20.0);                          // the band's pass region
+                            if (ty == eqcore::Type::Notch) return 1.0 - std::pow (10.0, mag[k] / 20.0);
+                            if (mx < 0.1) return 0.0;                                              // a 0 dB bell changes nothing
+                            return std::abs (mag[k]) / mx;                                          // how much the band changes each frequency
+                        };
+                        juce::Graphics::ScopedSaveState ss (g);
+                        g.reduceClipRegion (p);
+                        const auto bc = theme::bandColour (sb);
+                        for (size_t k = 0; k + 1 < fr.size(); ++k)
+                        {
+                            const float x0 = xOf (fr[k]), x1 = xOf (fr[k + 1]) + 0.6f;
+                            const float w = (float) juce::jlimit (0.0, 1.0, wOf (k));
+                            g.setColour (theme::well.withAlpha (0.55f * (1.0f - w))); g.fillRect (x0, pr.getY(), x1 - x0, pr.getHeight());
+                            g.setColour (bc.withAlpha (0.75f * w)); g.fillRect (x0, pr.getY(), x1 - x0, pr.getHeight());
+                        }
+                    }
+                }
             if (srcB >= 0)
             {
                 juce::Path q;
@@ -1087,7 +1144,8 @@ public:
                 else { juce::Path dashed; const float dash[] = { 2.0f, 4.0f }; juce::PathStrokeType (2.0f).createDashedStroke (dashed, p, dash, 2); g.setColour (col.withAlpha (alpha)); g.fillPath (dashed); }
             };
             if (anyMS && ! curS.mag.empty()) trace (curS, theme::side, 0.6f);
-            trace (cur, theme::phase, 0.85f);
+            if (! liveCur.phase.empty()) trace (cur, theme::phase, 0.3f);              // static phase, faint, under the live one
+            trace (liveCur.phase.empty() ? cur : liveCur, theme::phase, 0.85f);
             g.setFont (theme::mono (10.0f));
             for (int k = -2; k <= 2; ++k)
             {
@@ -1182,6 +1240,7 @@ public:
         const int solo = ph.proc.soloBand.load();
         for (int i = 0; i < eqcore::kBands; ++i)
         {
+            if (hiddenBand (i, bands[(size_t) i])) continue;
             const auto c = nodePos (i, bands[(size_t) i]);
             const float rad = i == s ? 11.0f : 8.0f;
             if (bands[(size_t) i].on)
@@ -1342,9 +1401,16 @@ public:
             if (ph.value (pid::band (i, "on")) < 0.5f)
             {
                 const auto pr = plot();
-                ph.setGesture (pid::band (i, "type"), 0); ph.setGesture (pid::band (i, "freq"), (float) fOf (e.position.x));
-                ph.setGesture (pid::band (i, "gain"), juce::jlimit (-30.0f, 30.0f, juce::jmap (e.position.y, pr.getBottom(), pr.getY(), -dbRange, dbRange)));
-                ph.setGesture (pid::band (i, "q"), 1.0f); ph.setGesture (pid::band (i, "on"), 1.0f); ph.select (i);
+                // the shape follows the frequency clicked: < 45 Hz low cut, < 180 Hz low shelf, < 6 kHz bell, < 14 kHz high shelf, above that high cut
+                const float f = (float) fOf (e.position.x);
+                const auto ty = f < 45.0f ? eqcore::Type::LowCut : f < 180.0f ? eqcore::Type::LowShelf : f < 6000.0f ? eqcore::Type::Bell
+                              : f < 14000.0f ? eqcore::Type::HighShelf : eqcore::Type::HighCut;
+                const bool cut = ty == eqcore::Type::LowCut || ty == eqcore::Type::HighCut;
+                ph.proc.undo.beginNewTransaction();
+                ph.setGesture (pid::band (i, "type"), (float) (int) ty); ph.setGesture (pid::band (i, "freq"), f);
+                ph.setGesture (pid::band (i, "gain"), cut ? 0.0f : juce::jlimit (-30.0f, 30.0f, juce::jmap (e.position.y, pr.getBottom(), pr.getY(), -dbRange, dbRange)));
+                ph.setGesture (pid::band (i, "slope"), cut ? 3.0f : 1.0f);   // cuts 24 dB/oct, shelves 12 dB/oct
+                ph.setGesture (pid::band (i, "q"), ty == eqcore::Type::Bell ? 1.0f : 0.707f); ph.setGesture (pid::band (i, "on"), 1.0f); ph.select (i);
                 return;
             }
     }
@@ -1590,6 +1656,8 @@ public:
     }
 private:
 
+    // Lab 2: bands 7 and 8 are extras — not drawn (nor clickable) in the graph until switched on
+    static bool hiddenBand (int i, const eqcore::Band& b) { return i >= 6 && ! b.on; }
     juce::Point<float> nodePos (int i, const eqcore::Band& b) const
     {
         const bool noGain = b.type == eqcore::Type::LowCut || b.type == eqcore::Type::HighCut || b.type == eqcore::Type::Notch || b.type == eqcore::Type::AllPass;
@@ -1619,7 +1687,7 @@ private:
             if (std::abs (h->second.x - p.x) < 9 && std::abs (h->second.y - p.y) < 14) return { ph.selected(), 2 };
         }
         const auto bands = ph.proc.currentBands(); int best = -1; float bd = 16.0f;
-        for (int i = 0; i < eqcore::kBands; ++i) { const float d = nodePos (i, bands[(size_t) i]).getDistanceFrom (p); if (d < bd) { bd = d; best = i; } }
+        for (int i = 0; i < eqcore::kBands; ++i) { if (hiddenBand (i, bands[(size_t) i])) continue; const float d = nodePos (i, bands[(size_t) i]).getDistanceFrom (p); if (d < bd) { bd = d; best = i; } }
         return { best, 0 };
     }
     void placePopup()
@@ -1644,11 +1712,24 @@ private:
     ParamHelp& ph;
     BandPopup popup;
     juce::TextButton phaseBtn, overlayBtn;     // Phase ⇄ GD, Overlay ⇄ Split
-    std::vector<double> fr; eqcore::CurvesV2 cur, curS; eqcore::Curves ghost; std::vector<double> selCurve, liveMag;
+    std::vector<double> fr; eqcore::CurvesV2 cur, curS; eqcore::Curves ghost; std::vector<double> selCurve, liveMag; eqcore::CurvesV2 liveCur;
     struct DynArea { std::vector<double> lo, hi, st, u; size_t peak = 0; }; std::array<DynArea, eqcore::kBands> dynArea;   // dynamic EQ: where each band can move
     bool anyMS = false, anyLR = false, lastSplit = false, altSolo = false;
     std::vector<float> spectrum, spectrumB; juce::String lastSig;
     juce::ComboBox anaA, anaB;
+    juce::TextButton pairBtn;
+    // pair index → (A source, B id). Sources: 0 Out, 1 Mid, 2 Side, 3 Trans, 4 Body, 5 Input, 6 SC, 7 link. B id = source + 1
+    static juce::String pairName (int i)
+    {
+        static const char* n[] = { "In / Out", "In / Mid", "In / Side", "In / Trans", "In / Body", "Mid / Side", "Trans / Body", "In / SC", "Out / SC", "Out / Other", "Custom" };
+        return n[juce::jlimit (0, 10, i)];
+    }
+    void setPair (int i)
+    {
+        static const int A[] = { 5, 5, 5, 5, 5, 1, 3, 5, 0, 0 }, B[] = { 1, 2, 3, 4, 5, 3, 5, 7, 7, 8 };
+        auto& ui = ph.proc.uiState; ui.setProperty ("anPair", i, nullptr);
+        if (i < 10) { ui.setProperty ("anA", A[i], nullptr); ui.setProperty ("anB", B[i], nullptr); }
+    }
     juce::StringArray linkNames; juce::uint32 lastLinkScan = 0;
     // other EQ Anatomy instances in this process, listed in analyzer B as "B ← name" (rescanned twice a second)
     void refreshLinks()
@@ -2178,8 +2259,8 @@ class IOMeter : public juce::Component
 public:
     explicit IOMeter (ParamHelp& h) : ph (h)
     {
-        setHelp (*this, "IN / OUT", "入出力のピーク（細い線は 1.5 秒ホールド）と RMS（300 ms）。Auto gain の効き具合や、次のプラグインへの送り量の確認に。下の CORR は出力の位相相関：+1 で左右同じ、0 で無相関、マイナスはモノラルで打ち消し合う",
-                 "Input and output peak (thin line: 1.5 s hold) and RMS (300 ms): check Auto gain and what you send to the next plugin. CORR below is output correlation: +1 identical, 0 unrelated, negative cancels in mono");
+        setHelp (*this, "IN / OUT", "入出力のピーク（細い線は 1.5 秒ホールド）と RMS（300 ms）。Auto gain の効き具合や、次のプラグインへの送り量の確認に。CREST＝直近 1 秒のピーク − RMS（dB）。上から入力・出力・変化量（マイナス＝密度が上がった、プラス＝メリハリが増えた）。下の CORR は出力の位相相関：+1 で左右同じ、0 で無相関、マイナスはモノラルで打ち消し合う",
+                 "Input and output peak (thin line: 1.5 s hold) and RMS (300 ms): check Auto gain and what you send to the next plugin. CREST = peak (last 1 s) minus RMS, dB: input, output, change (minus = the EQ / saturation made it denser, plus = more punch). CORR below is output correlation: +1 identical, 0 unrelated, negative cancels in mono");
     }
     void tick()
     {
@@ -2194,6 +2275,11 @@ public:
             if (in >= hold) { hold = in; t = 0; } else if ((t += dt) > 1.5) hold = std::max (in, hold - 20.0 * dt);
         };
         ball (ip, iDisp, iHold, iT); ball (op, oDisp, oHold, oT);
+        // crest factor: the highest peak of the last second over the 300 ms RMS, smoothed for reading
+        pkHist[(size_t) histPos] = { ip, op }; histPos = (histPos + 1) % (int) pkHist.size();
+        double ip1 = -200, op1 = -200; for (auto& h : pkHist) { ip1 = std::max (ip1, h.first); op1 = std::max (op1, h.second); }
+        auto cr = [] (double p, double r, double& s) { const double c = (p < -90 || r < -90) ? -1000.0 : p - r; s = c < -999 ? -1000.0 : (s < -999 ? c : s + (c - s) * 0.15); };
+        cr (ip1, ir, iCrest); cr (op1, orr, oCrest);
         corr += (ph.proc.correlation.load() - corr) * 0.3;
         repaint();
     }
@@ -2204,7 +2290,7 @@ public:
         g.setColour (theme::line); g.drawRoundedRectangle (r.reduced (0.5f), 6.0f, 1.0f);
         g.setColour (theme::muted); g.setFont (theme::ui (9.0f, true));
         g.drawText ("IN  OUT", 0, 4, getWidth(), 12, juce::Justification::centred);
-        const float top = 20, bottom = (float) getHeight() - 112;
+        const float top = 20, bottom = (float) getHeight() - 160;
         auto yOf = [&] (double db) { return juce::jmap ((float) juce::jlimit (-60.0, 3.0, db), -60.0f, 3.0f, bottom, top); };
         auto bar = [&] (float x, double disp, double rms, double hold, juce::Colour c)
         {
@@ -2229,6 +2315,17 @@ public:
             g.setColour (theme::text); g.drawText (num (row.second.first), 0, (int) y, getWidth(), 11, juce::Justification::centred); y += 11;
             g.setColour (theme::accent); g.drawText (num (row.second.second), 0, (int) y, getWidth(), 11, juce::Justification::centred); y += 13;
         }
+        // CREST: input, output, change (between RMS and CORR)
+        {
+            auto cnum = [] (double v) { return v < -999 ? juce::String::fromUTF8 ("\xe2\x80\x94") : juce::String (v, 1); };
+            g.setColour (theme::muted); g.drawText ("CREST", 0, (int) y, getWidth(), 11, juce::Justification::centred); y += 11;
+            g.setColour (theme::text); g.drawText (cnum (iCrest), 0, (int) y, getWidth(), 11, juce::Justification::centred); y += 11;
+            g.setColour (theme::accent); g.drawText (cnum (oCrest), 0, (int) y, getWidth(), 11, juce::Justification::centred); y += 11;
+            const bool ok = iCrest > -999 && oCrest > -999; const double d = ok ? oCrest - iCrest : 0.0;
+            g.setColour (! ok ? theme::muted : d < -0.05 ? theme::pre : d > 0.05 ? theme::ok : theme::text);
+            g.drawText (! ok ? juce::String::fromUTF8 ("\xe2\x80\x94") : (d >= 0 ? "+" : juce::String::fromUTF8 ("\xe2\x88\x92")) + juce::String (std::abs (d), 1),
+                        0, (int) y, getWidth(), 11, juce::Justification::centred); y += 15;
+        }
         g.setColour (theme::muted); g.drawText ("CORR", 0, (int) y, getWidth(), 11, juce::Justification::centred); y += 12;
         auto cb = juce::Rectangle<float> (6, y, (float) getWidth() - 12, 6);
         g.setColour (theme::well); g.fillRoundedRectangle (cb, 2.0f);
@@ -2241,6 +2338,7 @@ public:
 private:
     ParamHelp& ph;
     double iDisp = -100, oDisp = -100, iHold = -100, oHold = -100, iT = 0, oT = 0, ir = -100, orr = -100, corr = 1;
+    std::array<std::pair<double, double>, 30> pkHist = [] { std::array<std::pair<double, double>, 30> a; a.fill ({ -200.0, -200.0 }); return a; }(); int histPos = 0; double iCrest = -1000, oCrest = -1000;   // 1 s of peaks at 30 Hz
 };
 
 // =============================================================================

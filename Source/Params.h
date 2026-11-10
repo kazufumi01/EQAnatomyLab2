@@ -112,7 +112,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::qmode, 1 }, "Curve", StringArray { "Clean Const", "Clean Prop", "British A", "US 500", "Console E", "Tube Passive", "Precision" }, 0));
     l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::output, 1 }, "Output", NormalisableRange<float> (-18.0f, 18.0f, 0.1f), 0.0f,
                                                   AudioParameterFloatAttributes().withLabel ("dB")));
-    l.add (std::make_unique<AudioParameterBool> (ParameterID { pid::autoGain, 1 }, "Auto gain", true));
+    l.add (std::make_unique<AudioParameterBool> (ParameterID { pid::autoGain, 1 }, "Auto gain", false));   // Lab 2: off by default
     l.add (std::make_unique<AudioParameterBool> (ParameterID { pid::delta, 1 }, "Delta", false));
     l.add (std::make_unique<AudioParameterBool> (ParameterID { pid::bypass, 1 }, "Bypass", false));
     l.add (std::make_unique<AudioParameterBool> (ParameterID { pid::preSolo, 1 }, "Pre-ring solo", false));

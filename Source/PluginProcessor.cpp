@@ -22,6 +22,7 @@ EQAnatomyProcessor::EQAnatomyProcessor()
     uiState.setProperty ("slot", 0, nullptr);
     uiState.setProperty ("view", 0, nullptr);       // 0 = phase, 1 = group delay
     uiState.setProperty ("split", false, nullptr);
+    uiState.setProperty ("anPair", 0, nullptr); uiState.setProperty ("anA", 5, nullptr); uiState.setProperty ("anB", 1, nullptr);   // Lab 2 default: In / Out
     for (int c = 0; c < 2; ++c) { inPeak[(size_t) c] = 0; outPeak[(size_t) c] = 0; inRms[(size_t) c] = 0; outRms[(size_t) c] = 0; }
     chainA.reserve(); chainB.reserve();
     startThread (juce::Thread::Priority::low);

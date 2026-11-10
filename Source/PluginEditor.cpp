@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "Lessons.h"
 #include "Presets.h"
 
 EQAnatomyView::EQAnatomyView (EQAnatomyProcessor& p) : proc (p)
@@ -60,7 +61,27 @@ EQAnatomyView::EQAnatomyView (EQAnatomyProcessor& p) : proc (p)
     undoBtn.onClick = [this] { proc.undo.undo(); };
     redoBtn.onClick = [this] { proc.undo.redo(); };
     earBtn.onClick  = [this] { setEar (! proc.earActive()); };
-    learnBtn.onClick   = [this] { proc.uiState.setProperty ("learn", ! (bool) proc.uiState.getProperty ("learn", true), nullptr); };
+    learnBtn.onClick   = [this]
+    {
+        const bool ja = ph.ja(); const bool on = (bool) proc.uiState.getProperty ("learn", true);
+        const int cur = (int) proc.uiState.getProperty ("lesson", 0);
+        juce::PopupMenu m;
+        m.addItem (1, ja ? juce::String::fromUTF8 ("レッスンを閉じる（ヘルプ表示）") : juce::String ("Close lessons (show help)"), true, ! on);
+        m.addSeparator();
+        const auto& L = lessons();
+        for (int i = 0; i < (int) L.size(); ++i)
+            m.addItem (100 + i, juce::String (i + 1).paddedLeft ('0', 2) + "  " + juce::String::fromUTF8 (ja ? L[(size_t) i].titleJa : L[(size_t) i].titleEn), true, on && i == cur);
+        m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&learnBtn), [this] (int r)
+        {
+            if (r == 1) { proc.uiState.setProperty ("learn", false, nullptr); return; }
+            if (r >= 100)
+            {
+                if (proc.earActive()) setEar (false);                  // EAR and Learn are exclusive
+                proc.uiState.setProperty ("lesson", r - 100, nullptr);
+                proc.uiState.setProperty ("learn", true, nullptr);
+            }
+        });
+    };
     langBtn.onClick    = [this] { proc.uiState.setProperty ("lang", ph.ja() ? "en" : "ja", nullptr); };
     resetBtn.onClick   = [this]
     {
@@ -111,7 +132,7 @@ EQAnatomyView::EQAnatomyView (EQAnatomyProcessor& p) : proc (p)
     setHelp (morph, "MORPH", "今のスロットから行き先のスロットへ連続で変える。周波数と Q は対数、ゲインは dB で補間。ダブルクリックで 0。注意：タイプや Min/Lin、M/S のように連続で変えられないものは 50% で切り替わる。Lin のバンドは IR を作り直すため少し遅れて追従する。動かしたままスロットを切り替えると、その状態が今のスロットに保存される",
              "Morph from the current slot to the target. Frequency and Q interpolate logarithmically, gain in dB. Double-click resets. Careful: type, Min/Lin and M/S switch at 50%; Lin bands follow with a short delay while the IR rebuilds; switching slots stores the morphed state in the current slot");
     setHelp (earBtn, "EAR", "耳トレモード。隠れた EQ の帯域を当てる。注意：出題中は今の EQ を一時的に外す（終了すると戻る）", "Ear training: guess the hidden EQ band. Careful: your EQ is bypassed while playing (restored when you leave)");
-    setHelp (learnBtn, "LEARN", "レッスンの表示。オフにすると、この欄に方式とマウス操作、ポインターを置いた部分の説明が出る", "Lessons. Off shows the mode, mouse controls and help for whatever you point at here");
+    setHelp (learnBtn, "LEARN", "クリックでレッスン一覧（全タイトル）。選ぶとそのレッスンを表示。EAR とは同時に使えない（片方を選ぶともう片方は閉じる）。「レッスンを閉じる」にすると、この欄に方式とマウス操作、ポインターを置いた部分の説明が出る", "Click for the list of every lesson; pick one to show it. Not at the same time as EAR (choosing one closes the other). \"Close lessons\" shows the mode, mouse controls and help for whatever you point at here");
     setHelp (langBtn, "LANGUAGE", "説明とレッスンの言語（日本語 / English）", "Language of help and lessons");
     setHelp (zoom, "SIZE / LOOK", "画面の大きさ、外観（10種類）、隙間の質感（6種類）。大きさは右下の角のドラッグでも変えられる。外観と質感はこの Mac のすべてのインスタンスで共通", "Window size, look (ten skins) and surface texture for the gaps (six). Drag the bottom-right corner to resize. Look and surface are shared by every instance on this computer");
     setHelp (autoBtn, "AUTO GAIN", "EQ による音量変化を打ち消して、音色の違いだけを比べる", "Cancels the level change of the EQ so you compare tone only");
@@ -168,6 +189,7 @@ void EQAnatomyView::applyScale (int i)
 
 void EQAnatomyView::setEar (bool on)
 {
+    if (on) proc.uiState.setProperty ("learn", false, nullptr);   // EAR and Learn are exclusive
     if (on) earCard.start(); else earCard.stop();
     resized();
 }
