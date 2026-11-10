@@ -389,7 +389,7 @@ void EQAnatomyView::fieldUpdate()
     {
         for (double f = 20.0 * std::pow (2.0, 1.0 / 12.0); f < 20000.0; f *= std::pow (2.0, 1.0 / 6.0)) F.push_back (f);
         for (int k = 0; k < 2; ++k) { fPM[(size_t) k].assign (F.size(), 0.0); fPS[(size_t) k].assign (F.size(), 0.0); fX[(size_t) k].assign (F.size(), 0.0);
-                                      graph.fieldW[(size_t) k].assign (F.size(), std::numeric_limits<float>::quiet_NaN()); graph.fieldC[(size_t) k].assign (F.size(), std::numeric_limits<float>::quiet_NaN()); }
+                                      graph.fieldW[(size_t) k].assign (F.size(), std::numeric_limits<float>::quiet_NaN()); graph.fieldC[(size_t) k].assign (F.size(), std::numeric_limits<float>::quiet_NaN()); graph.fieldP[(size_t) k].assign (F.size(), std::numeric_limits<float>::quiet_NaN()); }
     }
     auto load = [&] (int ring, std::vector<float>& d)
     {
@@ -419,9 +419,12 @@ void EQAnatomyView::fieldUpdate()
             auto& PM = fPM[(size_t) k][i]; auto& PS = fPS[(size_t) k][i]; auto& X = fX[(size_t) k][i];
             PM += a * (pm - PM); PS += a * (ps - PS); X += a * (x - X);
             const double t = PM + PS;
-            if (t < floorP) { graph.fieldW[(size_t) k][i] = graph.fieldC[(size_t) k][i] = std::numeric_limits<float>::quiet_NaN(); continue; }
-            graph.fieldW[(size_t) k][i] = (float) (200.0 * PS / t);
-            graph.fieldC[(size_t) k][i] = (float) juce::jlimit (-1.0, 1.0, (PM - PS) / std::sqrt (std::max (1e-30, t * t - 4.0 * X * X)));
+            if (t < floorP) { graph.fieldW[(size_t) k][i] = graph.fieldC[(size_t) k][i] = graph.fieldP[(size_t) k][i] = std::numeric_limits<float>::quiet_NaN(); continue; }
+            // balance = (PL - PR) / (PL + PR) = 2X / (Pm + Ps); spread = (1 - corr) / 2
+            const double corr = juce::jlimit (-1.0, 1.0, (PM - PS) / std::sqrt (std::max (1e-30, t * t - 4.0 * X * X)));
+            graph.fieldC[(size_t) k][i] = (float) corr;
+            graph.fieldP[(size_t) k][i] = (float) juce::jlimit (-1.0, 1.0, 2.0 * X / t);
+            graph.fieldW[(size_t) k][i] = (float) (0.5 * (1.0 - corr));
         }
     }
 }

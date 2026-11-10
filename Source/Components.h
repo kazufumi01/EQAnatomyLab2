@@ -34,8 +34,7 @@ struct ParamHelp
     void select (int i) const
     {
         auto& ui = proc.uiState;
-        ui.setProperty ("popPinned", false, nullptr);
-        if ((int) ui.getProperty ("selected", 2) != i) ui.setProperty ("popExpand", false, nullptr);
+        ui.setProperty ("popPinned", false, nullptr);      // the extension stays as it is
         ui.setProperty ("selected", i, nullptr);
     }
     // hover help, filled by the editor from the component under the mouse
@@ -261,7 +260,14 @@ public:
         for (auto* c : { (juce::Component*) &soloBtn, (juce::Component*) &slopeBtn, (juce::Component*) &chBtn }) addAndMakeVisible (c);
         // Lab 2: ▾ opens every setting in the floating panel (the old detail panel), ▴ goes back to the compact one
         expBtn.setButtonText (juce::String::fromUTF8 (full ? "\xe2\x96\xb2" : "\xe2\x96\xbc"));
-        expBtn.onClick = [this] { auto& ui = ph.proc.uiState; ui.setProperty ("popExpand", ! (bool) ui.getProperty ("popExpand", false), nullptr); };
+        expBtn.onClick = [this]
+        {
+            auto& ui = ph.proc.uiState;
+            // keep the panel where it is: park it at its current place before it grows or shrinks
+            if (! (bool) ui.getProperty ("popPinned", false))
+            { ui.setProperty ("popPinned", true, nullptr); ui.setProperty ("popX", getX(), nullptr); ui.setProperty ("popY", getY(), nullptr); }
+            ui.setProperty ("popExpand", ! (bool) ui.getProperty ("popExpand", false), nullptr);
+        };
         addAndMakeVisible (expBtn);
         setHelp (expBtn, full ? "COMPACT" : "EXPAND", full ? "小さい表示に戻す" : "このバンドのすべての設定（PHASE・DYN 一式・TRANS/BODY・T/B Scope）を浮き窓に広げて表示",
                  full ? "Back to the compact panel" : "Show every setting of this band (phase, the whole DYN set, transient/body, T/B Scope) in the floating panel");
@@ -847,8 +853,8 @@ public:
         tbTab.onClick = [this] { ph.proc.uiState.setProperty ("lowerView", 0, nullptr); };
         fdTab.onClick = [this] { ph.proc.uiState.setProperty ("lowerView", 1, nullptr); };
         setHelp (tbTab, "T/B SCOPE", "下の枠をトランジェント／ボディのスコープに切り替える", "Shows the transient / body scope in the lower panel");
-        setHelp (fdTab, "STEREO FIELD", "下の枠を帯域ごとのステレオ表示に切り替える。上＝広がり（Side の割合。0% モノ、100% L/R 無相関、200% 逆相）、下＝相関（+1 同相、0 無相関、−1 逆相）。灰色の線が EQ 前、色付きが EQ 後。1/6 オクターブ、約 0.3 s の平均",
-                 "Shows the stereo picture per band in the lower panel. Top: width (share of Side; 0% mono, 100% uncorrelated L/R, 200% out of phase). Bottom: correlation (+1 in phase, 0 uncorrelated, -1 out of phase). Grey = before the EQ, coloured = after. 1/6 octave, about 0.3 s average");
+        setHelp (fdTab, "STEREO FIELD", "下の枠を帯域ごとのステレオ表示に切り替える。上＝ステレオイメージ（上が L、下が R。中央の線が左右の偏り、幅が広がり＝(1−相関)/2）、下＝相関（+1 同相、0 無相関、−1 逆相）。灰色が EQ 前、色付きが EQ 後。1/6 オクターブ、約 0.3 s の平均",
+                 "Shows the stereo picture per band in the lower panel. Top: stereo image (L up, R down; the centre line is the balance, the spread is (1 - corr) / 2). Bottom: correlation (+1 in phase, 0 uncorrelated, -1 out of phase). Grey = before the EQ, coloured = after. 1/6 octave, about 0.3 s average");
         phaseBtn.onClick = [this] { ph.proc.uiState.setProperty ("view", (int) ph.proc.uiState.getProperty ("view", 0) == 1 ? 0 : 1, nullptr); };
         setHelp (*this, "MOUSE", mouseHelpJa(), mouseHelpEn());
         for (int i = 0; i <= 400; ++i) fr.push_back (20.0 * std::pow (1000.0, i / 400.0));
@@ -1638,16 +1644,56 @@ private:
         g.setFont (theme::ui (9.5f)); g.setColour (theme::muted);
         g.drawText ("per band  /  grey: before EQ   colour: after EQ", (int) a.getX() + 168, (int) a.getY() + 2, 300, 17, juce::Justification::centredLeft);
         auto body = a.withTrimmedTop (22).withTrimmedBottom (2);
-        const float hh = (body.getHeight() - 6) * 0.5f;
+        const float hh = (body.getHeight() - 6) * 0.62f;
         const auto rw = body.withHeight (hh), rc = body.withTrimmedTop (hh + 6);
+        auto grid = [&] (juce::Rectangle<float> r) { g.setColour (theme::grid); for (double f : { 50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0 }) g.drawVerticalLine ((int) xOf (f), r.getY(), r.getBottom()); };
+        // stereo image per band: L up, R down. Centre line = balance, spread = (1 - corr) / 2, narrowed toward the side it leans to
+        {
+            const auto r = rw; grid (r);
+            auto y = [&] (float v) { return juce::jmap (juce::jlimit (-1.0f, 1.0f, v), -1.0f, 1.0f, r.getBottom(), r.getY()); };
+            g.setFont (theme::mono (9.0f));
+            for (float m : { -1.0f, -0.5f, 0.0f, 0.5f, 1.0f })
+            {
+                g.setColour (m == 0.0f ? theme::zero : theme::grid.brighter (0.25f)); g.drawHorizontalLine ((int) y (m), r.getX(), r.getRight());
+                const juce::String t = m == 1.0f ? "L" : m == -1.0f ? "R" : m == 0.0f ? "C" : "";
+                g.setColour (theme::muted);
+                if (t.isNotEmpty()) g.drawText (t, (int) r.getRight() - 20, (int) y (m) - (m == 1.0f ? 0 : m == -1.0f ? 14 : 7), 16, 14, juce::Justification::centredRight);
+            }
+            g.setColour (theme::side); g.setFont (theme::ui (10.0f, true)); g.drawText ("STEREO IMAGE (L up / R down)", (int) r.getX() + 6, (int) r.getY() + 1, 220, 13, juce::Justification::centredLeft);
+            for (int k = 0; k < 2; ++k)
+            {
+                if (fieldW[(size_t) k].size() != fieldF.size() || fieldP[(size_t) k].size() != fieldF.size()) continue;
+                juce::Path top, bot, ctr, fill; bool open = false;
+                for (size_t i = 0; i < fieldF.size(); ++i)
+                {
+                    const float sp = fieldW[(size_t) k][i], pn = fieldP[(size_t) k][i];
+                    if (! std::isfinite (sp) || ! std::isfinite (pn)) { open = false; continue; }
+                    const float h = sp * (1.0f - std::abs (pn));
+                    const float x = xOf (fieldF[i]), yt = y (pn + h), yb = y (pn - h), yc = y (pn);
+                    if (! open) { top.startNewSubPath (x, yt); bot.startNewSubPath (x, yb); ctr.startNewSubPath (x, yc); open = true; }
+                    else { top.lineTo (x, yt); bot.lineTo (x, yb); ctr.lineTo (x, yc); }
+                    if (k == 1) { const float w = (float) (xOf (fieldF[std::min (i + 1, fieldF.size() - 1)]) - x); fill.addRectangle (x, yt, std::max (1.0f, w), std::max (1.0f, yb - yt)); }
+                }
+                if (k == 1)
+                {
+                    g.setColour (theme::side.withAlpha (0.25f)); g.fillPath (fill);
+                    g.setColour (theme::side); g.strokePath (top, juce::PathStrokeType (1.4f)); g.strokePath (bot, juce::PathStrokeType (1.4f));
+                    g.setColour (theme::text.withAlpha (0.75f)); g.strokePath (ctr, juce::PathStrokeType (1.0f));
+                }
+                else
+                {
+                    g.setColour (theme::muted.withAlpha (0.9f)); g.strokePath (top, juce::PathStrokeType (1.1f)); g.strokePath (bot, juce::PathStrokeType (1.1f));
+                    juce::Path d; const float dash[] = { 3.0f, 3.0f }; juce::PathStrokeType (1.0f).createDashedStroke (d, ctr, dash, 2); g.fillPath (d);
+                }
+            }
+        }
         auto panel = [&] (juce::Rectangle<float> r, const std::array<std::vector<float>, 2>& v, float lo, float hi, std::initializer_list<float> marks,
                           std::function<juce::String (float)> lab, juce::Colour col, float base, const char* title)
         {
-            g.setColour (theme::grid);
-            for (double f : { 50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0 }) g.drawVerticalLine ((int) xOf (f), r.getY(), r.getBottom());
+            grid (r);
             auto y = [&] (float x) { return juce::jmap (juce::jlimit (lo, hi, x), lo, hi, r.getBottom(), r.getY()); };
             g.setFont (theme::mono (9.0f));
-            for (float m : marks) { g.setColour (theme::grid.brighter (0.25f)); g.drawHorizontalLine ((int) y (m), r.getX(), r.getRight()); g.setColour (theme::muted); g.drawText (lab (m), (int) r.getRight() - 58, (int) y (m) - 7, 56, 14, juce::Justification::centredRight); }
+            for (float m : marks) { g.setColour (theme::grid.brighter (0.25f)); g.drawHorizontalLine ((int) y (m), r.getX(), r.getRight()); g.setColour (theme::muted); g.drawText (lab (m), (int) r.getRight() - 58, (int) y (m) - (m == hi ? 0 : m == lo ? 14 : 7), 56, 14, juce::Justification::centredRight); }
             g.setColour (col); g.setFont (theme::ui (10.0f, true)); g.drawText (title, (int) r.getX() + 6, (int) r.getY() + 1, 160, 13, juce::Justification::centredLeft);
             for (int k = 0; k < 2; ++k)
             {
@@ -1665,8 +1711,7 @@ private:
                 else { g.setColour (theme::muted.withAlpha (0.9f)); g.strokePath (p, juce::PathStrokeType (1.2f)); }
             }
         };
-        panel (rw, fieldW, 0.0f, 200.0f, { 0.0f, 100.0f, 200.0f }, [] (float m) { return m == 0.0f ? juce::String ("mono") : juce::String ((int) m) + "%"; }, theme::side, 0.0f, "WIDTH (Side share)");
-        panel (rc, fieldC, -1.0f, 1.0f, { -1.0f, 0.0f, 1.0f }, [] (float m) { return m > 0 ? juce::String ("+1") : m < 0 ? juce::String::fromUTF8 ("â" "1") : juce::String ("0"); }, theme::accent, 1.0f, "CORRELATION");
+        panel (rc, fieldC, -1.0f, 1.0f, { -1.0f, 0.0f, 1.0f }, [] (float m) { return m > 0 ? juce::String ("+1") : m < 0 ? juce::String ("-1") : juce::String ("0"); }, theme::accent, 1.0f, "CORRELATION");
     }
     void paintScope (juce::Graphics& g) const
     {
@@ -1879,7 +1924,7 @@ private:
     bool lastField = false;
 public:
     // stereo field per band, filled by the editor: [0] before the EQ, [1] after. NaN = too quiet to show
-    std::vector<double> fieldF; std::array<std::vector<float>, 2> fieldW, fieldC;
+    std::vector<double> fieldF; std::array<std::vector<float>, 2> fieldW, fieldC, fieldP;   // W = spread (1 - corr) / 2, P = balance (+1 L, -1 R)
     bool fieldWanted() const { return lastScope && lastField && ! ph.proc.earActive(); }
 private:
     bool lastScope = false, autoAna = false; int srcA = 0, srcB = -1, scDrag = 0; float scStartY = 0, scStartSens = 0, scStartWidth = 6;
