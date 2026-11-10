@@ -6,7 +6,7 @@ endif()
 # Windows: C++ ランタイムを静的リンク（VC++ 再頒布パッケージ不要）
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-project(EQAnatomy VERSION 0.1.0)
+project(EQAnatomyLab2 VERSION 0.2.0)   # EQ Anatomy Lab 2 β (separate product from EQ Anatomy Lab 0.1.x)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -33,13 +33,13 @@ else()
   set(EQA_FORMATS VST3 Standalone)
 endif()
 
-juce_add_plugin(EQAnatomy
+juce_add_plugin(EQAnatomyLab2
   COMPANY_NAME "JPK"
   PLUGIN_MANUFACTURER_CODE Jpkl
-  PLUGIN_CODE Eqa1
+  PLUGIN_CODE Eqa2
   FORMATS ${EQA_FORMATS}
-  PRODUCT_NAME "EQ Anatomy Lab"
-  BUNDLE_ID com.jpk.eqanatomy
+  PRODUCT_NAME "EQ Anatomy Lab 2"
+  BUNDLE_ID com.jpk.eqanatomylab2
   IS_SYNTH FALSE
   NEEDS_MIDI_INPUT FALSE
   NEEDS_MIDI_OUTPUT FALSE
@@ -47,11 +47,11 @@ juce_add_plugin(EQAnatomy
   VST3_CATEGORIES Fx EQ
   COPY_PLUGIN_AFTER_BUILD ${EQA_COPY_AFTER_BUILD})
 
-target_sources(EQAnatomy PRIVATE Source/PluginProcessor.cpp Source/PluginEditor.cpp)
+target_sources(EQAnatomyLab2 PRIVATE Source/PluginProcessor.cpp Source/PluginEditor.cpp)
 if(MSVC)
-  target_compile_options(EQAnatomy PRIVATE /utf-8)   # 日本語文字列のため
+  target_compile_options(EQAnatomyLab2 PRIVATE /utf-8)   # 日本語文字列のため
 endif()
-target_compile_definitions(EQAnatomy PUBLIC
+target_compile_definitions(EQAnatomyLab2 PUBLIC
   JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0 JUCE_DISPLAY_SPLASH_SCREEN=0)
-target_link_libraries(EQAnatomy PRIVATE juce::juce_audio_utils juce::juce_dsp
+target_link_libraries(EQAnatomyLab2 PRIVATE juce::juce_audio_utils juce::juce_dsp
   PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_lto_flags juce::juce_recommended_warning_flags)
