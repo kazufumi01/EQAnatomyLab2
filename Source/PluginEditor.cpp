@@ -373,6 +373,57 @@ void EQAnatomyView::pullAnalyzer()
     proc.analyzerNeedTB = a == 3 || a == 4 || b == 3 || b == 4;
     layerSpectrum (a, spec);
     if (b >= 0) layerSpectrum (b, specB); else std::fill (specB.begin(), specB.end(), -140.0f);
+    if (graph.fieldWanted()) fieldUpdate();
+}
+
+// Stereo field per band. L = M + S, R = M - S, so per band
+//   width % = 200 · Ps / (Pm + Ps)               (0 mono, 100 uncorrelated L / R, 200 out of phase)
+//   corr    = (Pm − Ps) / √((Pm + Ps)² − 4X²)    with X = Σ Re(M · S*)
+// Complex FFT (8192, Hann) of the input M / S (rings 4, 5) and the output M / S (rings 0, 1), powers smoothed over ~0.3 s.
+void EQAnatomyView::fieldUpdate()
+{
+    const int N = (int) rings[0].size();
+    const double fs = proc.getSampleRateOrDefault();
+    auto& F = graph.fieldF;
+    if (F.empty())
+    {
+        for (double f = 20.0 * std::pow (2.0, 1.0 / 12.0); f < 20000.0; f *= std::pow (2.0, 1.0 / 6.0)) F.push_back (f);
+        for (int k = 0; k < 2; ++k) { fPM[(size_t) k].assign (F.size(), 0.0); fPS[(size_t) k].assign (F.size(), 0.0); fX[(size_t) k].assign (F.size(), 0.0);
+                                      graph.fieldW[(size_t) k].assign (F.size(), std::numeric_limits<float>::quiet_NaN()); graph.fieldC[(size_t) k].assign (F.size(), std::numeric_limits<float>::quiet_NaN()); }
+    }
+    auto load = [&] (int ring, std::vector<float>& d)
+    {
+        for (int i = 0; i < N; ++i) d[(size_t) i] = rings[(size_t) ring][(size_t) ((ringPos + i) % N)];
+        std::fill (d.begin() + N, d.end(), 0.0f);
+        window.multiplyWithWindowingTable (d.data(), (size_t) N);
+        fft.performRealOnlyForwardTransform (d.data(), true);      // interleaved re / im, bins 0 .. N/2
+    };
+    const double a = 0.2;               // ~0.3 s at the 30 Hz refresh
+    const double floorP = std::pow (10.0, -80.0 / 10.0) * (N * N / 16.0);   // about −80 dBFS per band
+    for (int k = 0; k < 2; ++k)
+    {
+        auto& m = bins[0]; auto& s = bins[1];
+        load (k == 0 ? 4 : 0, m); load (k == 0 ? 5 : 1, s);
+        for (size_t i = 0; i < F.size(); ++i)
+        {
+            const double lo = F[i] * std::pow (2.0, -1.0 / 12.0), hi = F[i] * std::pow (2.0, 1.0 / 12.0);
+            int b0 = juce::jlimit (1, N / 2 - 1, (int) std::ceil (lo * N / fs)), b1 = juce::jlimit (b0, N / 2 - 1, (int) std::floor (hi * N / fs));
+            double pm = 0, ps = 0, x = 0;
+            for (int b = b0; b <= b1; ++b)
+            {
+                const double mr = m[(size_t) (2 * b)], mi = m[(size_t) (2 * b + 1)], sr = s[(size_t) (2 * b)], si = s[(size_t) (2 * b + 1)];
+                pm += mr * mr + mi * mi; ps += sr * sr + si * si; x += mr * sr + mi * si;
+            }
+            const double n = (double) (b1 - b0 + 1);
+            pm /= n; ps /= n; x /= n;
+            auto& PM = fPM[(size_t) k][i]; auto& PS = fPS[(size_t) k][i]; auto& X = fX[(size_t) k][i];
+            PM += a * (pm - PM); PS += a * (ps - PS); X += a * (x - X);
+            const double t = PM + PS;
+            if (t < floorP) { graph.fieldW[(size_t) k][i] = graph.fieldC[(size_t) k][i] = std::numeric_limits<float>::quiet_NaN(); continue; }
+            graph.fieldW[(size_t) k][i] = (float) (200.0 * PS / t);
+            graph.fieldC[(size_t) k][i] = (float) juce::jlimit (-1.0, 1.0, (PM - PS) / std::sqrt (std::max (1e-30, t * t - 4.0 * X * X)));
+        }
+    }
 }
 
 // One analyzer layer: 8192-point FFT of the ring(s), max per display column, +3 dB/oct tilt, slow fall.

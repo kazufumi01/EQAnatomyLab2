@@ -69,6 +69,9 @@ private:
                                              std::vector<float> (16384, 0.0f), std::vector<float> (16384, 0.0f), std::vector<float> (16384, 0.0f) };
     void layerSpectrum (int src, std::vector<float>& out);     // src: 0 Stereo, 1 Mid, 2 Side, 3 Trans, 4 Body, 5 Input (before the EQ), 6 Sidechain, 7 another instance (link)
     std::vector<float> spec = std::vector<float> (401, -140.0f), specB = std::vector<float> (401, -140.0f);
+    // stereo field per band (1/6 octave): smoothed Mid / Side powers and their cross term, [0] input, [1] output
+    void fieldUpdate();
+    std::array<std::vector<double>, 2> fPM, fPS, fX;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EQAnatomyView)
 };

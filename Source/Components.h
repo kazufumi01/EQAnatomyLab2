@@ -30,7 +30,14 @@ struct ParamHelp
     bool ja() const { return proc.uiState.getProperty ("lang", "ja").toString() == "ja"; }
     juce::String tr (const char* j, const char* e) const { return juce::String::fromUTF8 (ja() ? j : e); }
     int selected() const { return juce::jlimit (0, eqcore::kBands - 1, (int) proc.uiState.getProperty ("selected", 2)); }
-    void select (int i) const { proc.uiState.setProperty ("selected", i, nullptr); }
+    // selecting a band brings the floating panel back next to its point; a different band also closes the extension
+    void select (int i) const
+    {
+        auto& ui = proc.uiState;
+        ui.setProperty ("popPinned", false, nullptr);
+        if ((int) ui.getProperty ("selected", 2) != i) ui.setProperty ("popExpand", false, nullptr);
+        ui.setProperty ("selected", i, nullptr);
+    }
     // hover help, filled by the editor from the component under the mouse
     juce::String hoverTitle, hoverText;
 };
@@ -834,6 +841,14 @@ public:
         // one button each: it shows the current choice and a click switches to the other one (its help says which)
         for (auto* b : { &phaseBtn, &overlayBtn }) { b->setClickingTogglesState (false); b->setToggleState (true, juce::dontSendNotification); addAndMakeVisible (*b); }
         overlayBtn.onClick = [this] { ph.proc.uiState.setProperty ("split", ! (bool) ph.proc.uiState.getProperty ("split", false), nullptr); resized(); };
+        // the lower panel while the scope is open: T/B scope or the stereo field (width and correlation per band)
+        for (auto* b : { &tbTab, &fdTab }) { b->setClickingTogglesState (false); b->setRadioGroupId (0); addChildComponent (*b); }
+        tbTab.setButtonText ("T/B scope"); fdTab.setButtonText ("Stereo field");
+        tbTab.onClick = [this] { ph.proc.uiState.setProperty ("lowerView", 0, nullptr); };
+        fdTab.onClick = [this] { ph.proc.uiState.setProperty ("lowerView", 1, nullptr); };
+        setHelp (tbTab, "T/B SCOPE", "下の枠をトランジェント／ボディのスコープに切り替える", "Shows the transient / body scope in the lower panel");
+        setHelp (fdTab, "STEREO FIELD", "下の枠を帯域ごとのステレオ表示に切り替える。上＝広がり（Side の割合。0% モノ、100% L/R 無相関、200% 逆相）、下＝相関（+1 同相、0 無相関、−1 逆相）。灰色の線が EQ 前、色付きが EQ 後。1/6 オクターブ、約 0.3 s の平均",
+                 "Shows the stereo picture per band in the lower panel. Top: width (share of Side; 0% mono, 100% uncorrelated L/R, 200% out of phase). Bottom: correlation (+1 in phase, 0 uncorrelated, -1 out of phase). Grey = before the EQ, coloured = after. 1/6 octave, about 0.3 s average");
         phaseBtn.onClick = [this] { ph.proc.uiState.setProperty ("view", (int) ph.proc.uiState.getProperty ("view", 0) == 1 ? 0 : 1, nullptr); };
         setHelp (*this, "MOUSE", mouseHelpJa(), mouseHelpEn());
         for (int i = 0; i <= 400; ++i) fr.push_back (20.0 * std::pow (1000.0, i / 400.0));
@@ -912,7 +927,10 @@ public:
         {
             const bool sc = (bool) ph.proc.uiState.getProperty ("scope", false) && ! ph.proc.earActive();
             scopeBtn.setToggleState (sc, juce::dontSendNotification);
-            ph.proc.scopeNeed = sc;
+            const bool fd = sc && (int) ph.proc.uiState.getProperty ("lowerView", 0) == 1;
+            ph.proc.scopeNeed = sc && ! fd;
+            tbTab.setToggleState (! fd, juce::dontSendNotification); fdTab.setToggleState (fd, juce::dontSendNotification);
+            if (fd != lastField) { lastField = fd; resized(); }
             if (sc != lastScope)
             {
                 auto& ui = ph.proc.uiState;
@@ -920,7 +938,7 @@ public:
                 else if (ui.hasProperty ("splitBeforeScope")) { ui.setProperty ("split", (bool) ui.getProperty ("splitBeforeScope"), nullptr); ui.removeProperty ("splitBeforeScope", nullptr); }
             }
             if (sc != lastScope) { lastScope = sc; if (sc) { scEnableW = ph.proc.scopeRawW.load(); scSig = {}; } else if (scPaused) setPaused (false); resized(); }
-            if (sc) scopeTick();
+            if (sc && ! fd) scopeTick();
         }
         if (specDbB.size() == spectrumB.size()) spectrumB = specDbB;
         const bool gd = (int) ph.proc.uiState.getProperty ("view", 0) == 1;
@@ -1022,15 +1040,20 @@ public:
         anaA.setBounds (130, 6, 84, 20); anaB.setBounds (218, 6, 96, 20);
         scopeBtn.setBounds (320, 6, 74, 20);
         {
+            const auto a = scopeArea();
+            tbTab.setBounds ((int) a.getX() + 4, (int) a.getY() + 2, 70, 17); fdTab.setBounds ((int) a.getX() + 76, (int) a.getY() + 2, 84, 17);
+            tbTab.setVisible (lastScope); fdTab.setVisible (lastScope);
+        }
+        {
             // Lab 2: every T/B Scope setting in one row under the graph (shown while the scope is open)
             const int yr = getHeight() - 32;
             int x = 74;
-            for (auto* d : { &scSens, &scWidth, &scAtt }) { d->setBounds (x, yr, 66, 28); x += 69; d->setVisible (lastScope); }
-            scMethod.setBounds (x + 4, yr + 4, 100, 20); scMethod.setVisible (lastScope); x += 112;
-            for (auto* d : { &scLc, &scE1f, &scE1g, &scE1q, &scE2f, &scE2g, &scE2q }) { d->setBounds (x, yr, 60, 28); x += (d == &scLc || d == &scE1q) ? 70 : 62; d->setVisible (lastScope); }
+            for (auto* d : { &scSens, &scWidth, &scAtt }) { d->setBounds (x, yr, 66, 28); x += 69; d->setVisible (tbView()); }
+            scMethod.setBounds (x + 4, yr + 4, 100, 20); scMethod.setVisible (tbView()); x += 112;
+            for (auto* d : { &scLc, &scE1f, &scE1g, &scE1q, &scE2f, &scE2g, &scE2q }) { d->setBounds (x, yr, 60, 28); x += (d == &scLc || d == &scE1q) ? 70 : 62; d->setVisible (tbView()); }
             scSpan.setBounds (x + 4, yr + 4, 62, 20); x += 70;
             scPause.setBounds (x, yr + 4, 58, 20);
-            scSpan.setVisible (lastScope); scPause.setVisible (lastScope);
+            scSpan.setVisible (tbView()); scPause.setVisible (tbView());
         }
         placePopup();
     }
@@ -1204,7 +1227,7 @@ public:
                 g.drawText (t, (int) pp.getRight() - 64, juce::jlimit ((int) pp.getY() + (split ? 0 : 26), (int) pp.getBottom() - 14, (int) y - 7), 60, 14, juce::Justification::centredRight);
             }
         }
-        if (lastScope) paintScope (g);
+        if (lastScope) { if (lastField) paintField (g); else paintScope (g); }
         // analog ideal (zero latency only): shows the cramping near Nyquist
         if (! ghost.mag.empty())
         {
@@ -1512,7 +1535,8 @@ private:
     }
     int dynHover = -1, dynDrag = -1;
     struct Pick { int band = -1; int what = 0; };   // what: 0 node, 1/2 width handles, 3/4 saturator band edges
-    juce::Rectangle<float> fullPlot() const { return getLocalBounds().toFloat().withTrimmedLeft (34).withTrimmedRight (8).withTrimmedTop (30).withTrimmedBottom (lastScope ? 54.0f : 18.0f); }
+    bool tbView() const { return lastScope && ! lastField; }        // the T/B scope (not the stereo field) is in the lower panel
+    juce::Rectangle<float> fullPlot() const { return getLocalBounds().toFloat().withTrimmedLeft (34).withTrimmedRight (8).withTrimmedTop (30).withTrimmedBottom (tbView() ? 54.0f : 18.0f); }
     float splitFrac() const { return lastScope ? 0.46f : 0.64f; }       // the scope needs more room in the lower panel
     juce::Rectangle<float> plot() const { auto p = fullPlot(); return lastSplit ? p.withHeight (p.getHeight() * splitFrac()) : p; }
     juce::Rectangle<float> phasePlot() const { auto p = fullPlot(); return p.withTrimmedTop (p.getHeight() * splitFrac() + 22); }
@@ -1528,7 +1552,7 @@ private:
     static juce::Colour srcColour (int src, juce::Colour fallback) { return src == 3 ? colT() : src == 4 ? colB() : src == 2 ? theme::side : fallback; }
     int scopeHit (juce::Point<float> p) const      // 1 = lower line (Sens), 2 = upper line (Width)
     {
-        if (! lastScope || ph.proc.earActive() || ! scopeDet().expanded (0, 6).contains (p)) return 0;
+        if (! tbView() || ph.proc.earActive() || ! scopeDet().expanded (0, 6).contains (p)) return 0;
         const float s = ph.value (pid::tbSens), w = ph.value (pid::tbWidth);
         const float y0 = yDet (-s), y1 = yDet (w - s);
         if (std::abs (p.y - y1) <= 5.0f) return 2;
@@ -1605,6 +1629,45 @@ private:
         scPause.setToggleState (p, juce::dontSendNotification);
         scopeRebuild();
     }
+    void paintField (juce::Graphics& g) const
+    {
+        if (ph.proc.earActive()) return;
+        const auto a = scopeArea();
+        g.setColour (theme::well.withAlpha (0.96f)); g.fillRect (a);       // covers the phase trace
+        g.setColour (theme::line); g.drawHorizontalLine ((int) a.getY(), a.getX(), a.getRight());
+        g.setFont (theme::ui (9.5f)); g.setColour (theme::muted);
+        g.drawText ("per band  /  grey: before EQ   colour: after EQ", (int) a.getX() + 168, (int) a.getY() + 2, 300, 17, juce::Justification::centredLeft);
+        auto body = a.withTrimmedTop (22).withTrimmedBottom (2);
+        const float hh = (body.getHeight() - 6) * 0.5f;
+        const auto rw = body.withHeight (hh), rc = body.withTrimmedTop (hh + 6);
+        auto panel = [&] (juce::Rectangle<float> r, const std::array<std::vector<float>, 2>& v, float lo, float hi, std::initializer_list<float> marks,
+                          std::function<juce::String (float)> lab, juce::Colour col, float base, const char* title)
+        {
+            g.setColour (theme::grid);
+            for (double f : { 50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0 }) g.drawVerticalLine ((int) xOf (f), r.getY(), r.getBottom());
+            auto y = [&] (float x) { return juce::jmap (juce::jlimit (lo, hi, x), lo, hi, r.getBottom(), r.getY()); };
+            g.setFont (theme::mono (9.0f));
+            for (float m : marks) { g.setColour (theme::grid.brighter (0.25f)); g.drawHorizontalLine ((int) y (m), r.getX(), r.getRight()); g.setColour (theme::muted); g.drawText (lab (m), (int) r.getRight() - 58, (int) y (m) - 7, 56, 14, juce::Justification::centredRight); }
+            g.setColour (col); g.setFont (theme::ui (10.0f, true)); g.drawText (title, (int) r.getX() + 6, (int) r.getY() + 1, 160, 13, juce::Justification::centredLeft);
+            for (int k = 0; k < 2; ++k)
+            {
+                if (v[(size_t) k].size() != fieldF.size()) continue;
+                juce::Path p, fill; bool open = false;
+                for (size_t i = 0; i < fieldF.size(); ++i)
+                {
+                    const float val = v[(size_t) k][i];
+                    const float x = xOf (fieldF[i]);
+                    if (! std::isfinite (val)) { open = false; continue; }
+                    if (! open) { p.startNewSubPath (x, y (val)); open = true; } else p.lineTo (x, y (val));
+                    if (k == 1) { const float w = (float) (xOf (fieldF[std::min (i + 1, fieldF.size() - 1)]) - x); fill.addRectangle (x, std::min (y (val), y (base)), std::max (1.0f, w), std::abs (y (val) - y (base))); }
+                }
+                if (k == 1) { g.setColour (col.withAlpha (0.18f)); g.fillPath (fill); g.setColour (col); g.strokePath (p, juce::PathStrokeType (1.6f)); }
+                else { g.setColour (theme::muted.withAlpha (0.9f)); g.strokePath (p, juce::PathStrokeType (1.2f)); }
+            }
+        };
+        panel (rw, fieldW, 0.0f, 200.0f, { 0.0f, 100.0f, 200.0f }, [] (float m) { return m == 0.0f ? juce::String ("mono") : juce::String ((int) m) + "%"; }, theme::side, 0.0f, "WIDTH (Side share)");
+        panel (rc, fieldC, -1.0f, 1.0f, { -1.0f, 0.0f, 1.0f }, [] (float m) { return m > 0 ? juce::String ("+1") : m < 0 ? juce::String::fromUTF8 ("â" "1") : juce::String ("0"); }, theme::accent, 1.0f, "CORRELATION");
+    }
     void paintScope (juce::Graphics& g) const
     {
         if (ph.proc.earActive()) return;
@@ -1612,7 +1675,7 @@ private:
         g.setColour (theme::well.withAlpha (lastSplit ? 0.55f : 0.82f)); g.fillRect (a);
         g.setColour (theme::line); g.drawHorizontalLine ((int) a.getY(), a.getX(), a.getRight());
         g.setFont (theme::ui (10.0f, true)); g.setColour (theme::muted);
-        g.drawText ("T/B SCOPE  input", (int) a.getX() + 6, (int) a.getY() + 2, 140, 14, juce::Justification::centredLeft);
+        g.drawText ("input", (int) a.getX() + 168, (int) a.getY() + 2, 140, 14, juce::Justification::centredLeft);
         g.setColour (ph.proc.detEq.active() ? theme::accent : theme::muted);
         g.drawText ("DETECTOR", (int) a.getX() + 6, (int) a.getY() + 33, 54, 12, juce::Justification::centredLeft);
         g.setFont (theme::ui (8.5f)); g.setColour (theme::muted);
@@ -1812,6 +1875,13 @@ private:
     TransientDetector sdet; juce::uint64 sRead = 0, scEnableW = 0, frozenEnd = 0;
     double sAcc = 0, sAccT = 0, sPk = 0, sDmax = -100; int sCnt = 0;
     bool scPaused = false; std::vector<float> frozen; juce::String scSig;
+    juce::TextButton tbTab, fdTab;
+    bool lastField = false;
+public:
+    // stereo field per band, filled by the editor: [0] before the EQ, [1] after. NaN = too quiet to show
+    std::vector<double> fieldF; std::array<std::vector<float>, 2> fieldW, fieldC;
+    bool fieldWanted() const { return lastScope && lastField && ! ph.proc.earActive(); }
+private:
     bool lastScope = false, autoAna = false; int srcA = 0, srcB = -1, scDrag = 0; float scStartY = 0, scStartSens = 0, scStartWidth = 6;
     Pick drag; double startQ = 1; float startY = 0, startF = 1000, startG = 0; juce::Point<float> downPos; int axis = 0; juce::uint32 lastRightClick = 0;
 };
