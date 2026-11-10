@@ -67,6 +67,22 @@ EQAnatomyView::EQAnatomyView (EQAnatomyProcessor& p) : proc (p)
         if (proc.earActive()) setEar (false);                     // EAR, Learn and Help are exclusive
         proc.uiState.setProperty ("lesson", 0, nullptr); proc.uiState.setProperty ("learn", true, nullptr);
     };
+    // long press: the list of every lesson
+    learnBtn.onLongPress = [this]
+    {
+        const bool ja = ph.ja(); const bool on = (bool) proc.uiState.getProperty ("learn", true) && ! proc.earActive();
+        const int cur = (int) proc.uiState.getProperty ("lesson", 0);
+        juce::PopupMenu m;
+        const auto& L = lessons();
+        for (int i = 0; i < (int) L.size(); ++i)
+            m.addItem (100 + i, juce::String (i + 1).paddedLeft ('0', 2) + "  " + juce::String::fromUTF8 (ja ? L[(size_t) i].titleJa : L[(size_t) i].titleEn), true, on && i == cur);
+        m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&learnBtn), [this] (int r)
+        {
+            if (r < 100) return;
+            if (proc.earActive()) setEar (false);
+            proc.uiState.setProperty ("lesson", r - 100, nullptr); proc.uiState.setProperty ("learn", true, nullptr);
+        });
+    };
     helpBtn.onClick    = [this] { if (proc.earActive()) setEar (false); proc.uiState.setProperty ("learn", false, nullptr); };
     addAndMakeVisible (helpBtn);
     setHelp (helpBtn, "HELP", "説明欄にヘルプを出す（今の方式、マウス操作、ポインターを置いた部分の説明）。EAR・Learn を閉じる",
@@ -121,7 +137,7 @@ EQAnatomyView::EQAnatomyView (EQAnatomyProcessor& p) : proc (p)
     setHelp (morph, "MORPH", "今のスロットから行き先のスロットへ連続で変える。周波数と Q は対数、ゲインは dB で補間。ダブルクリックで 0。注意：タイプや Min/Lin、M/S のように連続で変えられないものは 50% で切り替わる。Lin のバンドは IR を作り直すため少し遅れて追従する。動かしたままスロットを切り替えると、その状態が今のスロットに保存される",
              "Morph from the current slot to the target. Frequency and Q interpolate logarithmically, gain in dB. Double-click resets. Careful: type, Min/Lin and M/S switch at 50%; Lin bands follow with a short delay while the IR rebuilds; switching slots stores the morphed state in the current slot");
     setHelp (earBtn, "EAR", "耳トレモード。クリックで種類を選ぶ：EQ の帯域当て／プリリンギングの聴き分け（同じカットを最小位相とリニア位相で鳴らし、音の前ににじむ方を当てる。出題中はレイテンシーが 4096 サンプル増える）。Learn とは同時に使えない。注意：出題中は今の EQ を一時的に外す（終了すると戻る）", "Ear training. Click to choose: guess the EQ band, or hear the pre-ringing (the same cut in minimum and linear phase; pick the one that smears before the attack; adds 4096 samples of latency while it plays). Not at the same time as Learn. Careful: your EQ is bypassed while playing (restored when you leave)");
-    setHelp (learnBtn, "LEARN", "クリックでレッスン一覧（全タイトル）。選ぶとそのレッスンを表示。EAR とは同時に使えない（片方を選ぶともう片方は閉じる）。「レッスンを閉じる」にすると、この欄に方式とマウス操作、ポインターを置いた部分の説明が出る", "Click for the list of every lesson; pick one to show it. Not at the same time as EAR (choosing one closes the other). \"Close lessons\" shows the mode, mouse controls and help for whatever you point at here");
+    setHelp (learnBtn, "LEARN", "クリック：レッスン 1 を表示（もう一度でヘルプへ）。長押し：全レッスンの一覧から選ぶ。クリックでレッスン一覧（全タイトル）。選ぶとそのレッスンを表示。EAR とは同時に使えない（片方を選ぶともう片方は閉じる）。「レッスンを閉じる」にすると、この欄に方式とマウス操作、ポインターを置いた部分の説明が出る", "Click: lesson 1 (again: back to help). Long press: the list of every lesson. Not at the same time as EAR (choosing one closes the other). \"Close lessons\" shows the mode, mouse controls and help for whatever you point at here");
     setHelp (langBtn, "LANGUAGE", "説明とレッスンの言語（日本語 / English）", "Language of help and lessons");
     setHelp (zoom, "SIZE / LOOK", "画面の大きさ、外観（10種類）、隙間の質感（6種類）。大きさは右下の角のドラッグでも変えられる。外観と質感はこの Mac のすべてのインスタンスで共通", "Window size, look (ten skins) and surface texture for the gaps (six). Drag the bottom-right corner to resize. Look and surface are shared by every instance on this computer");
     setHelp (autoBtn, "AUTO GAIN", "EQ による音量変化を打ち消して、音色の違いだけを比べる", "Cancels the level change of the EQ so you compare tone only");

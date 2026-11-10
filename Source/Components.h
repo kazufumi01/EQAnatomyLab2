@@ -213,6 +213,23 @@ private:
 //    full = the detail panel at the bottom left: band tabs, everything above,
 //      then PHASE, DYN (detector, meter, six numbers), TRANSIENT/BODY, T/B scope
 // =============================================================================
+// A button that also answers a long press (0.5 s): onLongPress runs and the click is skipped
+class LongPressButton : public juce::TextButton, private juce::Timer
+{
+public:
+    std::function<void()> onLongPress;
+    void mouseDown (const juce::MouseEvent& e) override { fired = false; startTimer (500); juce::TextButton::mouseDown (e); }
+    void mouseUp (const juce::MouseEvent& e) override
+    {
+        stopTimer();
+        if (fired) { fired = false; setState (juce::Button::buttonNormal); return; }   // the long press already acted
+        juce::TextButton::mouseUp (e);
+    }
+private:
+    bool fired = false;
+    void timerCallback() override { stopTimer(); if (isMouseButtonDown()) { fired = true; if (onLongPress) onLongPress(); } }
+};
+
 class BandPopup : public juce::Component
 {
 public:
