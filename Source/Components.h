@@ -811,10 +811,16 @@ public:
         anaA.setSelectedId (1 + juce::jlimit (0, 6, (int) ph.proc.uiState.getProperty ("anA", 0)), juce::dontSendNotification);
         anaB.setSelectedId (1 + juce::jlimit (0, 7, (int) ph.proc.uiState.getProperty ("anB", 0)), juce::dontSendNotification);
         anaA.onChange = [this] { ph.proc.uiState.setProperty ("anA", anaA.getSelectedId() - 1, nullptr); };
-        anaB.onChange = [this] { ph.proc.uiState.setProperty ("anB", anaB.getSelectedId() - 1, nullptr); };
+        anaB.onChange = [this]
+        {
+            const int id = anaB.getSelectedId();
+            if (id > 100 && id - 101 < linkNames.size())
+            { ph.proc.uiState.setProperty ("anBLink", linkNames[id - 101], nullptr); ph.proc.uiState.setProperty ("anB", 8, nullptr); }
+            else if (id > 0) ph.proc.uiState.setProperty ("anB", id - 1, nullptr);
+        };
         addAndMakeVisible (anaA); addAndMakeVisible (anaB);
-        const char* hj = "スペアナに出す音を選ぶ。A は塗り、B は線で重なる（B off で非表示）。Stereo＝Mid と Side のパワー和（L/R の平均）／Mid・Side＝出力の M/S／Trans・Body＝検出器が聞いている「アタック／胴」の音／Input＝EQ 前の入力（出力と同じ遅れに揃えてある。B に出すと前後比較）／SC＝サイドチェインの入力（ホストで接続した時だけ。キックとベースの帯域の重なりなどを見る）。注意：Trans・Body は検出器の見立てを出力に掛けた表示で、厳密な分離ではない（掛け算なので、元の音との合計は一致しない）";
-        const char* he = "Choose what the analyzer shows. A is filled, B is a line on top (B off hides it). Stereo = power sum of Mid and Side (mean of L and R) / Mid, Side = the output's M/S / Trans, Body = the part the detector hears as attack or body / Input = the input before the EQ (delayed to line up with the output; put it on B for a before/after view) / SC = the sidechain input (only when connected in the host; e.g. see where kick and bass overlap). Careful: Trans and Body show the detector's guess applied to the output, not a strict separation";
+        const char* hj = "スペアナに出す音を選ぶ。A は塗り、B は線で重なる（B off で非表示）。Stereo＝Mid と Side のパワー和（L/R の平均）／Mid・Side＝出力の M/S／Trans・Body＝検出器が聞いている「アタック／胴」の音／Input＝EQ 前の入力（出力と同じ遅れに揃えてある。B に出すと前後比較）／SC＝サイドチェインの入力（ホストで接続した時だけ。キックとベースの帯域の重なりなどを見る）／B ← 名前＝同じ DAW 内の別の EQ Anatomy の出力（トラック名で表示。例：ボーカルの EQ でギターの出力を重ね、ぶつかる帯域を見る。AU と VST3 を混ぜると互いに見えない）。注意：Trans・Body は検出器の見立てを出力に掛けた表示で、厳密な分離ではない（掛け算なので、元の音との合計は一致しない）";
+        const char* he = "Choose what the analyzer shows. A is filled, B is a line on top (B off hides it). Stereo = power sum of Mid and Side (mean of L and R) / Mid, Side = the output's M/S / Trans, Body = the part the detector hears as attack or body / Input = the input before the EQ (delayed to line up with the output; put it on B for a before/after view) / SC = the sidechain input (only when connected in the host; e.g. see where kick and bass overlap) / B ← name = another EQ Anatomy in the same DAW (named after its track; e.g. overlay the guitar on the vocal EQ to see where they clash. AU and VST3 instances cannot see each other). Careful: Trans and Body show the detector's guess applied to the output, not a strict separation";
         setHelp (anaA, "ANALYZER A", hj, he); setHelp (anaB, "ANALYZER B", hj, he);
     }
 
@@ -822,13 +828,16 @@ public:
     {
         {
             // SOLO M / S → Mid + Side, SOLO T / B → Trans + Body, shown but not stored; the saved choice returns after the solo
-            int a = juce::jlimit (0, 6, (int) ph.proc.uiState.getProperty ("anA", 0)), b = juce::jlimit (0, 7, (int) ph.proc.uiState.getProperty ("anB", 0));
+            int a = juce::jlimit (0, 6, (int) ph.proc.uiState.getProperty ("anA", 0)), b = juce::jlimit (0, 8, (int) ph.proc.uiState.getProperty ("anB", 0));
+            refreshLinks();
             { const bool sc = ph.proc.sidechainConnected(); anaA.setItemEnabled (7, sc); anaB.setItemEnabled (8, sc); }   // SC needs the host's sidechain
             const int sv = ph.proc.soloViewEffective();
             autoAna = sv != 0;
             if (sv == 1 || sv == 2) { a = 1; b = 3; } else if (sv >= 3) { a = 3; b = 5; }
             if (anaA.getSelectedId() != a + 1) anaA.setSelectedId (a + 1, juce::dontSendNotification);
-            if (anaB.getSelectedId() != b + 1) anaB.setSelectedId (b + 1, juce::dontSendNotification);
+            const int bid = b == 8 ? 101 + linkNames.indexOf (ph.proc.uiState.getProperty ("anBLink", "").toString()) : b + 1;
+            if (bid == 100) { if (anaB.getSelectedId() != 0) anaB.setText ("B (link lost)", juce::dontSendNotification); }
+            else if (anaB.getSelectedId() != bid) anaB.setSelectedId (bid, juce::dontSendNotification);
             anaA.setEnabled (! autoAna); anaB.setEnabled (! autoAna);
             srcA = a; srcB = b - 1;
         }
@@ -1640,6 +1649,26 @@ private:
     bool anyMS = false, anyLR = false, lastSplit = false, altSolo = false;
     std::vector<float> spectrum, spectrumB; juce::String lastSig;
     juce::ComboBox anaA, anaB;
+    juce::StringArray linkNames; juce::uint32 lastLinkScan = 0;
+    // other EQ Anatomy instances in this process, listed in analyzer B as "B ← name" (rescanned twice a second)
+    void refreshLinks()
+    {
+        const auto now = juce::Time::getMillisecondCounter();
+        if (now - lastLinkScan < 500 && lastLinkScan != 0) return;
+        lastLinkScan = now;
+        juce::StringArray names;
+        for (auto& t : LinkRegistry::list()) if (t != ph.proc.linkTap) names.addIfNotAlreadyThere (t->name());
+        if (names == linkNames) return;
+        linkNames = names;
+        const int sel = anaB.getSelectedId();
+        anaB.clear (juce::dontSendNotification);
+        static const char* nm[] = { "Stereo", "Mid", "Side", "Trans", "Body", "Input", "SC" };
+        anaB.addItem ("B off", 1);
+        for (int i = 0; i < 7; ++i) anaB.addItem (juce::String ("B ") + nm[i], i + 2);
+        if (linkNames.size() > 0) anaB.addSectionHeading (ph.tr ("他の EQ Anatomy の出力", "Other EQ Anatomy outputs"));
+        for (int i = 0; i < linkNames.size(); ++i) anaB.addItem (juce::String::fromUTF8 ("B \xe2\x86\x90 ") + linkNames[i], 101 + i);
+        if (sel > 0 && sel <= 8) anaB.setSelectedId (sel, juce::dontSendNotification);
+    }
     juce::TextButton scopeBtn; DragValue scSens, scWidth, scAtt;
     juce::ComboBox scSpan; juce::TextButton scPause;
     DragValue scLc, scE1f, scE1g, scE1q, scE2f, scE2g, scE2q; Seg scMethod;

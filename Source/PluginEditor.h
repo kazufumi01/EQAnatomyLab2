@@ -62,10 +62,11 @@ private:
                                               std::vector<float> (8192, 0.0f), std::vector<float> (8192, 0.0f),
                                               std::vector<float> (8192, 0.0f), std::vector<float> (8192, 0.0f), std::vector<float> (8192, 0.0f) };
     int ringPos = 0;
+    std::shared_ptr<LinkTap> linkTap;        // the instance shown by analyzer B (link), found by name
     std::array<std::vector<float>, 7> bins { std::vector<float> (16384, 0.0f), std::vector<float> (16384, 0.0f),
                                              std::vector<float> (16384, 0.0f), std::vector<float> (16384, 0.0f),
                                              std::vector<float> (16384, 0.0f), std::vector<float> (16384, 0.0f), std::vector<float> (16384, 0.0f) };
-    void layerSpectrum (int src, std::vector<float>& out);     // src: 0 Stereo, 1 Mid, 2 Side, 3 Trans, 4 Body, 5 Input (before the EQ), 6 Sidechain
+    void layerSpectrum (int src, std::vector<float>& out);     // src: 0 Stereo, 1 Mid, 2 Side, 3 Trans, 4 Body, 5 Input (before the EQ), 6 Sidechain, 7 another instance (link)
     std::vector<float> spec = std::vector<float> (401, -140.0f), specB = std::vector<float> (401, -140.0f);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EQAnatomyView)

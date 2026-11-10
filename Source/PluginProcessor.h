@@ -5,6 +5,7 @@
 #include "EQCore.h"
 #include "BandSaturator.h"
 #include "XfadeConvolver.h"
+#include "LinkRegistry.h"
 
 // =============================================================================
 //  Zero-latency engine: RBJ biquads with smoothed frequency / gain / Q,
@@ -244,6 +245,9 @@ public:
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }
     double getTailLengthSeconds() const override { return 0.4; }
+    // instance link: the host's track name (when it tells us) names this instance in the other instances' analyzer menus
+    void updateTrackProperties (const TrackProperties& p) override { if (p.name.has_value() && p.name->isNotEmpty()) linkTap->setName (*p.name); }
+    std::shared_ptr<LinkTap> linkTap = LinkRegistry::add();
     int getNumPrograms() override { return 1; }
     int getCurrentProgram() override { return 0; }
     void setCurrentProgram (int) override {}

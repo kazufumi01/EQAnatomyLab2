@@ -319,7 +319,14 @@ void EQAnatomyView::pullAnalyzer()
 
     // layer A is always drawn; layer B is optional (0 = off, otherwise source + 1)
     int a = juce::jlimit (0, 6, (int) proc.uiState.getProperty ("anA", 0));
-    int b = juce::jlimit (0, 7, (int) proc.uiState.getProperty ("anB", 0)) - 1;
+    int b = juce::jlimit (0, 8, (int) proc.uiState.getProperty ("anB", 0)) - 1;
+    linkTap.reset();
+    if (b == 7)
+    {
+        const auto want = proc.uiState.getProperty ("anBLink", "").toString();
+        for (auto& t : LinkRegistry::list()) if (t != proc.linkTap && t->name() == want) { linkTap = t; break; }
+        if (linkTap == nullptr) b = -1;                // that instance is gone (or not loaded yet)
+    }
     // SOLO M / S shows Mid + Side, SOLO T / B shows Trans + Body; the saved choice comes back when the solo ends
     const int sv = proc.soloViewEffective();
     if (sv == 1 || sv == 2) { a = 1; b = 2; } else if (sv >= 3) { a = 3; b = 4; }
@@ -342,10 +349,17 @@ void EQAnatomyView::layerSpectrum (int src, std::vector<float>& out)
         fft.performFrequencyOnlyForwardTransform (d.data());
     };
     // Stereo = rings 0 + 1, Mid 0, Side 1, Trans 2, Body 3, Input = rings 4 + 5 (power sum, like Stereo), Sidechain 6
-    const bool pair = src == 0 || src == 5;
-    const int k0 = src == 0 ? 0 : src == 1 ? 0 : src == 2 ? 1 : src == 3 ? 2 : src == 4 ? 3 : src == 5 ? 4 : 6, k1 = k0 + 1;
-    transform (k0);
-    if (pair) transform (k1);
+    // Link (7): the other instance's latest Mid / Side, power sum, into bins 0 / 1 (A is already drawn by then)
+    if (src == 7)
+    {
+        if (linkTap == nullptr) return;
+        for (int k = 0; k < 2; ++k) std::fill (bins[(size_t) k].begin(), bins[(size_t) k].end(), 0.0f);
+        linkTap->read (bins[0].data(), bins[1].data(), N);
+        for (int k = 0; k < 2; ++k) { window.multiplyWithWindowingTable (bins[(size_t) k].data(), (size_t) N); fft.performFrequencyOnlyForwardTransform (bins[(size_t) k].data()); }
+    }
+    const bool pair = src == 0 || src == 5 || src == 7;
+    const int k0 = src == 0 ? 0 : src == 1 ? 0 : src == 2 ? 1 : src == 3 ? 2 : src == 4 ? 3 : src == 5 ? 4 : src == 6 ? 6 : 0, k1 = k0 + 1;
+    if (src != 7) { transform (k0); if (pair) transform (k1); }
 
     const double fs = proc.getSampleRateOrDefault();
     const float norm = 4.0f / (float) N;

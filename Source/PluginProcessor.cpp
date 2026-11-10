@@ -31,6 +31,7 @@ EQAnatomyProcessor::EQAnatomyProcessor()
 EQAnatomyProcessor::~EQAnatomyProcessor()
 {
     stopTimer();
+    LinkRegistry::remove (linkTap);
     signalThreadShouldExit(); buildEvent.signal(); stopThread (2000);
 }
 
@@ -88,7 +89,7 @@ int EQAnatomyProcessor::currentRes() const { return (int) apvts.getRawParameterV
 
 void EQAnatomyProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    sr = sampleRate; blockSize = samplesPerBlock;
+    sr = sampleRate; blockSize = samplesPerBlock; linkTap->fs = sampleRate;
     convolution.prepare (sampleRate, samplesPerBlock);
     ms.setSize (2, samplesPerBlock); dryD.setSize (2, samplesPerBlock); tmp.setSize (2, samplesPerBlock);
     for (auto& d : dryDelay) d.prepare (eqcore::linearTaps (2) / 2 + 64);
@@ -424,6 +425,7 @@ void EQAnatomyProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
         feed (s1, n1, 0); feed (s2, n2, n1);
         analyzerFifo.finishedWrite (n1 + n2);
     }
+    linkTap->push (oL, oR, n);       // the same signal, for the other instances' analyzers
 
     // solo view: listen to the finished output's Mid, Side, or its Transient / Body part (output · mask, output · (1 − mask)).
     // It yields to EAR, Bypass, Delta, Pre-ring solo and band solo. Moves are cross-faded (~15 ms).
