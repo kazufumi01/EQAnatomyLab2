@@ -201,6 +201,7 @@ void EQAnatomyView::applyScale (int i)
 void EQAnatomyView::setEar (bool on)
 {
     if (on) proc.uiState.setProperty ("learn", false, nullptr);   // EAR and Learn are exclusive
+    if (on) proc.uiState.setProperty ("lowerOpen", true, nullptr);   // the quiz lives in the lower panel
     if (on) earCard.start(); else earCard.stop();
     resized();
 }
@@ -299,27 +300,31 @@ void EQAnatomyView::resized()
     learnBtn.setBounds (1034, 10, 52, 24);
     langBtn.setBounds (1090, 10, 58, 24);
 
-    graph.setBounds (12, 54, 1076, 470);
-    io.setBounds (1096, 54, 52, 470);
-    satStrip.setBounds (268, 530, 880, 44);
-
-    const int y = 582, h = 166;
+    // Lab 2: the lower panel can be closed; closed, the graph and meters take the whole height
+    const bool lower = (bool) proc.uiState.getProperty ("lowerOpen", true);
+    const int y = 600, h = 148;
+    const int gh = lower ? y - 8 - 54 : getHeight() - 12 - 54;
+    graph.setBounds (12, 54, 1076, gh);
+    io.setBounds (1096, 54, 52, gh);
     const bool ear = proc.earActive();
+    detail.setVisible (false);                     // its settings now open in the floating panel (▾)
+    satStrip.setBounds (12, y, 300, h);
     for (auto* c : { (juce::Component*) &detail, (juce::Component*) &irView, (juce::Component*) &outDrag, (juce::Component*) &autoBtn,
-                     (juce::Component*) &deltaBtn, (juce::Component*) &viewSolo, (juce::Component*) &bypassBtn, (juce::Component*) &soloBtn, (juce::Component*) &lesson })
-        c->setVisible (! ear);
-    earCard.setVisible (ear);
+                     (juce::Component*) &deltaBtn, (juce::Component*) &viewSolo, (juce::Component*) &bypassBtn, (juce::Component*) &soloBtn, (juce::Component*) &lesson,
+                     (juce::Component*) &satStrip })
+        c->setVisible (! ear && lower);
+    detail.setVisible (false);
+    earCard.setVisible (ear && lower);
     earCard.setBounds (12, y, getWidth() - 24, h);
-    detail.setBounds (12, 530, 248, y + h - 530);     // grows up into the SAT row
-    irView.setBounds (268, y, 196, h);
-    const int bx = 472, bw = 104, bh = (h - 20) / 6;
+    irView.setBounds (320, y, 196, h);
+    const int bx = 524, bw = 104, bh = (h - 20) / 6;
     outDrag.setBounds (bx, y, bw, bh);
     autoBtn.setBounds (bx, y + (bh + 4) * 1, bw, bh);
     deltaBtn.setBounds (bx, y + (bh + 4) * 2, bw, bh);
     viewSolo.setBounds (bx, y + (bh + 4) * 3, bw, bh);
     bypassBtn.setBounds (bx, y + (bh + 4) * 4, bw, bh);
     soloBtn.setBounds (bx, y + (bh + 4) * 5, bw, bh);
-    lesson.setBounds (584, y, getWidth() - 584 - 12, h);
+    lesson.setBounds (636, y, getWidth() - 636 - 12, h);
 }
 
 bool EQAnatomyView::keyPressed (const juce::KeyPress& k)

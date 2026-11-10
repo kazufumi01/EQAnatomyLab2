@@ -235,6 +235,12 @@ public:
         scopeBtn.onClick = [this] { ph.proc.uiState.setProperty ("scope", ! (bool) ph.proc.uiState.getProperty ("scope", false), nullptr); };
         for (auto* b : { &slopeBtn, &chBtn, &scopeBtn, &dynBtn, &soloBtn }) b->getProperties().set ("fontPx", full ? 10.0 : 10.5);
         for (auto* c : { (juce::Component*) &soloBtn, (juce::Component*) &slopeBtn, (juce::Component*) &chBtn }) addAndMakeVisible (c);
+        // Lab 2: ▾ opens every setting in the floating panel (the old detail panel), ▴ goes back to the compact one
+        expBtn.setButtonText (juce::String::fromUTF8 (full ? "\xe2\x96\xb2" : "\xe2\x96\xbc"));
+        expBtn.onClick = [this] { ph.proc.uiState.setProperty ("popExpand", ! full, nullptr); };
+        addAndMakeVisible (expBtn);
+        setHelp (expBtn, full ? "COMPACT" : "EXPAND", full ? "小さい表示に戻す" : "このバンドのすべての設定（PHASE・DYN 一式・TRANS/BODY・T/B Scope）を浮き窓に広げて表示",
+                 full ? "Back to the compact panel" : "Show every setting of this band (phase, the whole DYN set, transient/body, T/B Scope) in the floating panel");
         th.format = [] (float v) { return fmtDb (v, 0); };
         rg.format = [] (float v) { return fmtDb (v); };
         bl.format = [] (float v) { return fmtDb (v); };
@@ -478,8 +484,9 @@ public:
     void mouseExit (const juce::MouseEvent&) override { if (dotOver || thrOver) { dotOver = thrOver = false; repaint(); } }
     bool isBusy() const { return moving || thrDrag || fq.isBusy() || gn.isBusy() || qv.isBusy() || th.isBusy() || rg.isBusy() || bl.isBusy()
                               || at.isBusy() || rl.isBusy() || kn.isBusy() || tb.isMouseButtonDown(); }
-    static constexpr int compactW = 270, compactH = 100;
-    int idealHeight() const { return compactH; }
+    static constexpr int compactW = 270, compactH = 100, fullW = 256, fullH = 222;
+    int idealHeight() const { return full ? fullH : compactH; }
+    int idealWidth() const { return full ? fullW : compactW; }
     void paint (juce::Graphics& g) override
     {
         auto r = getLocalBounds().toFloat().reduced (0.5f);
@@ -578,14 +585,14 @@ public:
             const int w = (getWidth() - 24) / 3, y = 31, h = 38;
             fq.setBounds (8, y, w, h); gn.setBounds (12 + w, y, w, h); qv.setBounds (16 + 2 * w, y, w, h);
             const int bw = (getWidth() - 20) / 2;
-            slopeBtn.setBounds (8, 74, bw, 20); chBtn.setBounds (12 + bw, 74, bw, 20);
+            slopeBtn.setBounds (8, 74, bw, 20); chBtn.setBounds (12 + bw, 74, bw - 26, 20); expBtn.setBounds (12 + 2 * bw - 22, 74, 22, 20);
             return;
         }
         // detail panel, 248 × 218
         soloBtn.setBounds (getWidth() - 50, 4, 44, 18);
         type.setBounds (7, 26, 96, 20);
         slopeBtn.setBounds (106, 26, 64, 20);
-        chBtn.setBounds (173, 26, getWidth() - 180, 20);
+        chBtn.setBounds (173, 26, getWidth() - 180 - 26, 20); expBtn.setBounds (getWidth() - 29, 26, 22, 20);
         const int w = (getWidth() - 20) / 3;
         fq.setBounds (7, 50, w, 30); gn.setBounds (10 + w, 50, w, 30); qv.setBounds (13 + 2 * w, 50, w, 30);
         rowSep = 85; rowPhase = 89;
@@ -641,7 +648,7 @@ private:
     ParamHelp& ph; const bool full; int band = 0;
     ResetCombo type; DragValue fq, gn, qv, th, rg, bl, at, rl, kn;
     Seg phaseSeg, srcSeg;
-    juce::TextButton dynBtn, soloBtn, slopeBtn, chBtn, scopeBtn; juce::Slider tb;
+    juce::TextButton dynBtn, soloBtn, slopeBtn, chBtn, scopeBtn; juce::TextButton expBtn; juce::Slider tb;
     bool tbDrag = false, dynType = true, dotOver = false, thrOver = false, thrDrag = false, refreshing = false, moving = false, toggledPopup = false;
     juce::Rectangle<int> meterArea; int rowPhase = 89, rowTB = 192, rowSep = 85;
     float thrStartDb = 0; int thrStartX = 0;
@@ -697,6 +704,18 @@ public:
     }
     void resized() override
     {
+        if (getHeight() > 80)
+        {
+            const int W = getWidth() - 16, cw = (W - 9) / 4;
+            onBtn.setBounds (8, 8, 44, 22); type.setBounds (56, 8, W - 48 - 132, 22);
+            deltaBtn.setBounds (getWidth() - 136, 8, 56, 22); autoBtn.setBounds (getWidth() - 76, 8, 68, 22);
+            lo.setBounds (8, 36, cw, 30); hi.setBounds (11 + cw, 36, cw, 30); drive.setBounds (14 + 2 * cw, 36, cw, 30); mix.setBounds (17 + 3 * cw, 36, cw, 30);
+            os.setBounds (8, 76, 96, 20);
+            makeupArea = { 112, 72, 50, 28 };
+            curveArea = { getWidth() - 52, 70, 44, 32 };
+            textArea = { 8, 104, W, getHeight() - 110 };
+            return;
+        }
         int x = 8; const int y = 5, h = getHeight() - 10;
         onBtn.setBounds (x, y + 3, 44, h - 6); x += 48;
         type.setBounds (x, y + 3, 92, h - 6); x += 96;
@@ -755,7 +774,7 @@ private:
 class GraphView : public juce::Component
 {
 public:
-    explicit GraphView (ParamHelp& h) : ph (h), popup (h), scSens (h, "SENS dB"), scWidth (h, "WIDTH dB"), scAtt (h, "ATTACK ms"),
+    explicit GraphView (ParamHelp& h) : ph (h), popup (h), popupFull (h, true), scSens (h, "SENS dB"), scWidth (h, "WIDTH dB"), scAtt (h, "ATTACK ms"),
         scLc (h, "LOW CUT"), scE1f (h, "EQ1 Hz"), scE1g (h, "EQ1 dB"), scE1q (h, "EQ1 Q"), scE2f (h, "EQ2 Hz"), scE2g (h, "EQ2 dB"), scE2q (h, "EQ2 Q"),
         scMethod (h, { "Ratio", "Slope" })
     {
@@ -819,6 +838,15 @@ public:
             else if (id > 0) ph.proc.uiState.setProperty ("anB", id - 1, nullptr);
         };
         addAndMakeVisible (anaA); addAndMakeVisible (anaB);
+        addChildComponent (popupFull);
+        addAndMakeVisible (panelBtn);
+        panelBtn.onClick = [this]
+        {
+            auto& ui = ph.proc.uiState; ui.setProperty ("lowerOpen", ! (bool) ui.getProperty ("lowerOpen", true), nullptr);
+            if (auto* p = getParentComponent()) p->resized();
+        };
+        setHelp (panelBtn, "PANEL", "下段（サチュレーター・インパルス・出力・レッスン）の開閉。閉じるとグラフとメーターが下まで広がる",
+                 "Open or close the lower panel (saturator, impulse, output, lessons). Closed, the graph and meters take the whole height");
         // analyzer pairs: one menu sets A (filled) and B (line) together; Custom frees the two menus
         addAndMakeVisible (pairBtn);
         pairBtn.onClick = [this]
@@ -959,9 +987,13 @@ public:
         const int s = ph.selected();
         const int keep = (int) ph.proc.uiState.getProperty ("keepOff", -1);
         if (keep >= 0 && (keep != s || bands[(size_t) s].on)) ph.proc.uiState.setProperty ("keepOff", -1, nullptr);
-        popup.setVisible ((bands[(size_t) s].on || keep == s) && (bool) ph.proc.uiState.getProperty ("popup", true) && ! ph.proc.earActive());
+        const bool showPop = (bands[(size_t) s].on || keep == s) && (bool) ph.proc.uiState.getProperty ("popup", true) && ! ph.proc.earActive();
+        const bool expand = (bool) ph.proc.uiState.getProperty ("popExpand", false);
+        popup.setVisible (showPop && ! expand); popupFull.setVisible (showPop && expand);
+        panelBtn.setButtonText ((bool) ph.proc.uiState.getProperty ("lowerOpen", true) ? juce::String::fromUTF8 ("Panel \xe2\x96\xbe") : juce::String::fromUTF8 ("Panel \xe2\x96\xb4"));
         // keep the panel still while one of its values is being dragged or typed
         if (popup.isVisible()) { popup.refresh (s); if (! popup.isBusy()) placePopup(); }
+        if (popupFull.isVisible()) { popupFull.refresh (s); if (! popupFull.isBusy()) placePopup(); }
         repaint();
     }
 
@@ -969,20 +1001,20 @@ public:
     {
         phaseBtn.setBounds (getWidth() - 58, 6, 50, 20);
         overlayBtn.setBounds (getWidth() - 124, 6, 62, 20);
+        panelBtn.setBounds (400, 6, 70, 20);
         pairBtn.setBounds (42, 6, 84, 20);
         anaA.setBounds (130, 6, 84, 20); anaB.setBounds (218, 6, 96, 20);
         scopeBtn.setBounds (320, 6, 74, 20);
         {
-            const auto a = scopeArea();
-            int x = (int) a.getX() + 150;
-            for (auto* d : { &scSens, &scWidth, &scAtt }) { d->setBounds (x, (int) a.getY() + 1, 70, 28); x += 74; d->setVisible (lastScope); }
-            scSpan.setBounds (x, (int) a.getY() + 5, 62, 20); x += 66;
-            scPause.setBounds (x, (int) a.getY() + 5, 58, 20);
+            // Lab 2: every T/B Scope setting in one row under the graph (shown while the scope is open)
+            const int yr = getHeight() - 32;
+            int x = 74;
+            for (auto* d : { &scSens, &scWidth, &scAtt }) { d->setBounds (x, yr, 66, 28); x += 69; d->setVisible (lastScope); }
+            scMethod.setBounds (x + 4, yr + 4, 100, 20); scMethod.setVisible (lastScope); x += 112;
+            for (auto* d : { &scLc, &scE1f, &scE1g, &scE1q, &scE2f, &scE2g, &scE2q }) { d->setBounds (x, yr, 60, 28); x += (d == &scLc || d == &scE1q) ? 70 : 62; d->setVisible (lastScope); }
+            scSpan.setBounds (x + 4, yr + 4, 62, 20); x += 70;
+            scPause.setBounds (x, yr + 4, 58, 20);
             scSpan.setVisible (lastScope); scPause.setVisible (lastScope);
-            x = (int) a.getX() + 60;
-            const int y2 = (int) a.getY() + 31;
-            for (auto* d : { &scLc, &scE1f, &scE1g, &scE1q, &scE2f, &scE2g, &scE2q }) { d->setBounds (x, y2, 62, 28); x += (d == &scLc || d == &scE1q) ? 74 : 64; d->setVisible (lastScope); }
-            scMethod.setBounds (x + 14, y2 + 4, 120, 20); scMethod.setVisible (lastScope);
         }
         placePopup();
     }
@@ -1464,14 +1496,14 @@ private:
     }
     int dynHover = -1, dynDrag = -1;
     struct Pick { int band = -1; int what = 0; };   // what: 0 node, 1/2 width handles, 3/4 saturator band edges
-    juce::Rectangle<float> fullPlot() const { return getLocalBounds().toFloat().withTrimmedLeft (34).withTrimmedRight (8).withTrimmedTop (30).withTrimmedBottom (18); }
+    juce::Rectangle<float> fullPlot() const { return getLocalBounds().toFloat().withTrimmedLeft (34).withTrimmedRight (8).withTrimmedTop (30).withTrimmedBottom (lastScope ? 54.0f : 18.0f); }
     float splitFrac() const { return lastScope ? 0.46f : 0.64f; }       // the scope needs more room in the lower panel
     juce::Rectangle<float> plot() const { auto p = fullPlot(); return lastSplit ? p.withHeight (p.getHeight() * splitFrac()) : p; }
     juce::Rectangle<float> phasePlot() const { auto p = fullPlot(); return p.withTrimmedTop (p.getHeight() * splitFrac() + 22); }
     // where the scope goes: the phase panel in Split, the lower part of the graph in Overlay
     juce::Rectangle<float> scopeArea() const { if (lastSplit) return phasePlot(); auto p = plot(); return p.withTrimmedTop (p.getHeight() * 0.40f); }
-    juce::Rectangle<float> scopeWave() const { auto a = scopeArea().withTrimmedTop (62); return a.withHeight (a.getHeight() * 0.58f); }
-    juce::Rectangle<float> scopeDet() const { auto a = scopeArea().withTrimmedTop (62); return a.withTrimmedTop (a.getHeight() * 0.58f + 4); }
+    juce::Rectangle<float> scopeWave() const { auto a = scopeArea().withTrimmedTop (22); return a.withHeight (a.getHeight() * 0.58f); }
+    juce::Rectangle<float> scopeDet() const { auto a = scopeArea().withTrimmedTop (22); return a.withTrimmedTop (a.getHeight() * 0.58f + 4); }
     static constexpr float detLo = -12.0f, detHi = 30.0f;       // detector strip range, dB
     float dbPx() const { return scopeDet().getHeight() / (detHi - detLo); }
     float yDet (float db) const { const auto r = scopeDet(); return juce::jmap (juce::jlimit (detLo, detHi, db), detLo, detHi, r.getBottom(), r.getY()); }
@@ -1695,22 +1727,25 @@ private:
         const int s = ph.selected();
         const auto bands = ph.proc.currentBands();
         const auto c = nodePos (s, bands[(size_t) s]);
-        const int w = BandPopup::compactW, h = popup.idealHeight();
+        const bool ex = (bool) ph.proc.uiState.getProperty ("popExpand", false);
+        auto& pp = ex ? popupFull : popup;
+        const int w = pp.idealWidth(), h = pp.idealHeight();
         auto& ui = ph.proc.uiState;
         if ((bool) ui.getProperty ("popPinned", false))       // parked where the user dragged it
         {
-            popup.setBounds (juce::jlimit (4, getWidth() - w - 4, (int) ui.getProperty ("popX", 40)), juce::jlimit (4, getHeight() - h - 4, (int) ui.getProperty ("popY", 40)), w, h);
+            pp.setBounds (juce::jlimit (4, getWidth() - w - 4, (int) ui.getProperty ("popX", 40)), juce::jlimit (4, getHeight() - h - 4, (int) ui.getProperty ("popY", 40)), w, h);
             return;
         }
         int x = (int) c.x + 22, y = (int) c.y - h - 14;
         if (x + w > getWidth() - 8) x = (int) c.x - w - 22;
         if (y < 32) y = (int) c.y + 22;
         if (y + h > getHeight() - 20) y = getHeight() - 20 - h;
-        popup.setBounds (juce::jlimit (8, getWidth() - w - 8, x), y, w, h);
+        pp.setBounds (juce::jlimit (8, getWidth() - w - 8, x), juce::jmax (30, y), w, h);
     }
 
     ParamHelp& ph;
-    BandPopup popup;
+    BandPopup popup, popupFull;
+    juce::TextButton panelBtn;
     juce::TextButton phaseBtn, overlayBtn;     // Phase ⇄ GD, Overlay ⇄ Split
     std::vector<double> fr; eqcore::CurvesV2 cur, curS; eqcore::Curves ghost; std::vector<double> selCurve, liveMag; eqcore::CurvesV2 liveCur;
     struct DynArea { std::vector<double> lo, hi, st, u; size_t peak = 0; }; std::array<DynArea, eqcore::kBands> dynArea;   // dynamic EQ: where each band can move
