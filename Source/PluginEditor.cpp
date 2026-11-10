@@ -111,7 +111,7 @@ EQAnatomyView::EQAnatomyView (EQAnatomyProcessor& p) : proc (p)
             morph.setValue (0.0, juce::dontSendNotification);
         });
     };
-    for (auto* b : { &resBtn, &learnBtn, &langBtn, &resetBtn, &undoBtn, &redoBtn, &earBtn, &morphTo })
+    for (juce::TextButton* b : { &resBtn, (juce::TextButton*) &learnBtn, &langBtn, &resetBtn, &undoBtn, &redoBtn, &earBtn, &morphTo })
         addAndMakeVisible (*b);
     addAndMakeVisible (curveBox); addAndMakeVisible (morph);
     paramToggle (autoBtn, pid::autoGain);
