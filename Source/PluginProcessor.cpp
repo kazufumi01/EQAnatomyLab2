@@ -92,6 +92,7 @@ void EQAnatomyProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     sr = sampleRate; blockSize = samplesPerBlock; linkTap->fs = sampleRate;
     convolution.prepare (sampleRate, samplesPerBlock);
+    earConv.prepare (sampleRate, samplesPerBlock); loadEarKernel();
     ms.setSize (2, samplesPerBlock); dryD.setSize (2, samplesPerBlock); tmp.setSize (2, samplesPerBlock);
     for (auto& d : dryDelay) d.prepare (eqcore::linearTaps (2) / 2 + 64);
     for (auto& d : postDelay) d.prepare (256);
@@ -116,6 +117,12 @@ void EQAnatomyProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     dirty = true;
 }
 
+void EQAnatomyProcessor::loadEarKernel()
+{
+    const auto& k = earB.load() ? earKB : earKA;
+    if (! k.empty()) earConv.loadImpulseResponse (k.data(), k.data(), (int) k.size());   // crossfades from the other one
+}
+
 void EQAnatomyProcessor::setEar (bool on, EarQuestion q)
 {
     { const juce::SpinLock::ScopedLockType l (earLock); earQ = q; earDirty = true; }
@@ -123,7 +130,25 @@ void EQAnatomyProcessor::setEar (bool on, EarQuestion q)
     eqcore::Band b; b.on = true; b.type = eqcore::Type::Bell; b.f = q.f; b.g = q.g; b.q = q.q;
     std::array<eqcore::Band, eqcore::kBands> bs {}; bs[0] = b;
     earGainComp = (float) eqcore::matchGain (eqcore::Model (bs, eqcore::QMode::Constant, getSampleRateOrDefault()), eqcore::Mode::ZeroLatency);
+    if (on && q.kind == 1)
+    {
+        // pre-ring question: identical magnitude, min phase vs linear phase. No level matching needed (same magnitude).
+        eqcore::Band c; c.on = true; c.type = (eqcore::Type) q.type; c.f = q.f; c.g = q.g; c.q = q.q; c.slope = q.slope;
+        std::array<eqcore::Band, eqcore::kBands> cs {}; cs[0] = c;
+        const eqcore::Model m (cs, eqcore::QMode::Constant, getSampleRateOrDefault());
+        const auto lin = eqcore::linearPhaseFIR (m, 2 * kEarPreLat);                 // centre at kEarPreLat
+        auto mn = eqcore::minimumPhaseFIR (m, eqcore::kMinPhaseLen);
+        std::vector<float> L (lin.begin(), lin.end()), M ((size_t) kEarPreLat, 0.0f);  // min phase delayed to line up
+        M.insert (M.end(), mn.begin(), mn.end());
+        L.resize (M.size(), 0.0f);
+        earKA = q.linOnB ? M : L; earKB = q.linOnB ? L : M;
+        earGainComp = 1.0f;
+        earKind = 1;
+        loadEarKernel();
+    }
+    else earKind = 0;
     earOn = on;
+    dirty = true;                                  // latency: + kEarPreLat while a pre-ring question plays
 }
 
 void EQAnatomyProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
@@ -340,6 +365,8 @@ void EQAnatomyProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
             earDirty = false;
         }
         const bool playEq = earB.load();
+        if (earKind.load() == 1) earConv.process (oL, oR, n);       // pre-ring question: A and B both run through the convolver
+        else
         for (int i = 0; i < n; ++i)
         {
             const double l = earF[0].process (oL[i]), r = earF[1].process (oR[i]);
@@ -473,7 +500,8 @@ void EQAnatomyProcessor::computeLatency()
     sat.setOversampling ((int) apvts.getRawParameterValue (pid::satOS)->load());
     const int s = satOn ? sat.latencySamples() : 0;
     wantedKernelLat = k; wantedSatLat = s;
-    if (k + s != latencyReported) { latencyReported = k + s; setLatencySamples (latencyReported); }
+    const int e = earOn.load() && earKind.load() == 1 ? kEarPreLat : 0;     // the pre-ring question's convolver (after the EQ path)
+    if (k + s + e != latencyReported) { latencyReported = k + s + e; setLatencySamples (latencyReported); }
 }
 
 void EQAnatomyProcessor::timerCallback()

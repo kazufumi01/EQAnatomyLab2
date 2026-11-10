@@ -2361,6 +2361,9 @@ public:
                  "A hidden bell is applied to the DAW signal. Compare B (EQ) and A (original) and pick the band that is boosted (or cut). Your EQ is bypassed while you play and levels are matched; leaving restores it");
     }
     void start() { newQuestion(); }
+    // 0: guess the boosted / cut band, 1: which of A / B pre-rings (same filter, min vs linear phase)
+    void setKind (int k) { kind = juce::jlimit (0, 1, k); }
+    int getKind() const { return kind; }
     void stop() { ph.proc.setEar (false, {}); }
     void refresh()
     {
@@ -2369,8 +2372,9 @@ public:
         tog (boostB, mode == 0); tog (cutB, mode == 1); tog (bothB, mode == 2);
         tog (aB, ! playEq); tog (bB, playEq);
         easyB.setButtonText ("Easy"); normB.setButtonText ("Normal"); hardB.setButtonText ("Hard");
-        boostB.setButtonText ("Boost"); cutB.setButtonText ("Cut"); bothB.setButtonText ("Both");
-        aB.setButtonText (ph.tr ("A 原音", "A original")); bB.setButtonText (ph.tr ("B EQ", "B EQ"));
+        boostB.setButtonText (kind == 1 ? "Low cut" : "Boost"); cutB.setButtonText (kind == 1 ? "High cut" : "Cut"); bothB.setButtonText ("Both");
+        if (kind == 1) { aB.setButtonText (ph.tr ("A を聴く", "Play A")); bB.setButtonText (ph.tr ("B を聴く", "Play B")); }
+        else { aB.setButtonText (ph.tr ("A 原音", "A original")); bB.setButtonText (ph.tr ("B EQ", "B EQ")); }
         nextB.setButtonText (ph.tr ("次の問題", "Next")); showB.setButtonText (ph.tr ("答えを見る", "Show answer"));
         showB.setVisible (! answered);
         repaint();
@@ -2392,14 +2396,16 @@ public:
         g.setColour (theme::lessonBg); g.fillRoundedRectangle (r, 6.0f);
         g.setColour (theme::lessonLn); g.drawRoundedRectangle (r.reduced (0.5f), 6.0f, 1.0f);
         g.setColour (theme::muted); g.setFont (theme::mono (10.0f, true));
-        g.drawText ("EAR TRAINING", 12, 8, 200, 14, juce::Justification::centredLeft);
+        g.drawText (kind == 1 ? "EAR TRAINING  PRE-RING" : "EAR TRAINING", 12, 8, 260, 14, juce::Justification::centredLeft);
         g.setFont (theme::ui (11.0f));
         g.drawText (ph.tr ("難易度", "Level"), 12, 30, 50, 22, juce::Justification::centredLeft);
         g.drawText (ph.tr ("種類", "Type"), 12, 58, 50, 22, juce::Justification::centredLeft);
         g.setColour (theme::text.withAlpha (0.82f)); g.setFont (theme::ui (10.0f));
         static const char* lj[] = { "Easy：9 オクターブ帯、±9 dB・Q 1.4", "Normal：9 オクターブ帯、±6 dB・Q 2", "Hard：1/3 オクターブ帯、±3 dB・Q 4" };
         static const char* le[] = { "Easy: 9 octave bands, ±9 dB, Q 1.4", "Normal: 9 octave bands, ±6 dB, Q 2", "Hard: 1/3-octave bands, ±3 dB, Q 4" };
-        g.drawFittedText (juce::String::fromUTF8 (ph.ja() ? lj[level] : le[level]), 12, 86, 250, 16, juce::Justification::centredLeft, 1, 0.9f);
+        static const char* pj[] = { "Easy：48 dB/oct、ローカット 250〜700 Hz", "Normal：24〜36 dB/oct、ローカット 120〜300 Hz", "Hard：18〜24 dB/oct、ローカット 60〜120 Hz" };
+        static const char* pe[] = { "Easy: 48 dB/oct, low cut 250–700 Hz", "Normal: 24–36 dB/oct, low cut 120–300 Hz", "Hard: 18–24 dB/oct, low cut 60–120 Hz" };
+        g.drawFittedText (juce::String::fromUTF8 (kind == 1 ? (ph.ja() ? pj[level] : pe[level]) : (ph.ja() ? lj[level] : le[level])), 12, 86, 250, 16, juce::Justification::centredLeft, 1, 0.9f);
         g.setColour (theme::text); g.setFont (theme::mono (12.0f, true));
         g.drawText ("SCORE " + juce::String (score) + " / " + juce::String (total) + "   STREAK " + juce::String (streak), 12, getHeight() - 30, 260, 18, juce::Justification::centredLeft);
         g.setColour (theme::faint); g.setFont (theme::ui (9.5f));
@@ -2410,6 +2416,10 @@ public:
         g.drawText ("QUESTION " + juce::String (total + (answered ? 0 : 1)).paddedLeft ('0', 2), 280, 8, 110, 24, juce::Justification::centredLeft);
         g.setColour (theme::text); g.setFont (theme::ui (13.0f, true));
         const juce::String verb = q.g > 0 ? ph.tr ("持ち上がっている", "boosted") : ph.tr ("削られている", "cut");
+        if (kind == 1)
+            g.drawText (ph.tr ("A と B、プリリンギング（アタックの前ににじむ音）があるのはどっち？", "A or B: which one pre-rings (a smear before the attack)?"),
+                        390, 8, getWidth() - 390 - 190, 24, juce::Justification::centredLeft);
+        else
         g.drawText (ph.ja() ? juce::String::fromUTF8 ("どの帯域が ") + fmtDb (q.g, 0) + " dB " + verb + juce::String::fromUTF8 ("？")
                             : "Which band is " + verb + " by " + fmtDb (std::abs (q.g), 0) + " dB?",
                     390, 8, getWidth() - 390 - 190, 24, juce::Justification::centredLeft);
@@ -2424,13 +2434,24 @@ public:
             g.setColour (bg); g.fillRoundedRectangle (b, 4.0f);
             g.setColour (ln); g.drawRoundedRectangle (b.reduced (0.5f), 4.0f, 1.0f);
             g.setColour (fg); g.setFont (theme::mono (level == 2 ? 10.0f : 12.0f, answered && i == answer));
-            g.drawText (fmtHz (fs[(size_t) i]), b, juce::Justification::centred);
+            g.drawText (kind == 1 ? juce::String (i == 0 ? "A" : "B") : fmtHz (fs[(size_t) i]), b, juce::Justification::centred);
         }
         if (answered)
         {
             const int ty = answerArea.getBottom() + 6;
             g.setColour (theme::text); g.setFont (theme::ui (11.5f));
             juce::String t;
+            if (kind == 1)
+            {
+                const juce::String lin = answer == 1 ? "B" : "A", mn = answer == 1 ? "A" : "B";
+                const juce::String what = juce::String (q.type == (int) eqcore::Type::LowCut ? "Low cut " : "High cut ") + fmtHz (q.f) + " Hz " + slopeNames()[q.slope];
+                t = (chosen == answer ? ph.tr ("正解！ ", "Correct! ") : ph.tr ("不正解。", "Not quite. "))
+                  + (ph.ja() ? lin + juce::String::fromUTF8 (" がリニア位相（音の前にリンギング）、") + mn + juce::String::fromUTF8 (" が最小位相（リンギングは音の後ろ）。フィルター：") + what
+                             : lin + " is linear phase (ringing before the sound), " + mn + " is minimum phase (ringing after it). Filter: " + what)
+                  + ph.tr ("。キックやスネアなど、アタックの鋭い音ほど違いが分かりやすい", ". Sharp attacks (kick, snare) make it easiest to hear");
+                g.drawFittedText (t, 280, ty, getWidth() - 280 - 200, getHeight() - ty - 4, juce::Justification::topLeft, 3, 0.85f);
+                return;
+            }
             if (chosen == answer) t = ph.tr ("正解！ ", "Correct! ");
             else if (chosen >= 0) t = ph.tr ("正解は ", "It was ") + fmtHz (q.f) + " Hz. ";
             else t = ph.tr ("正解は ", "It was ") + fmtHz (q.f) + " Hz. ";
@@ -2452,14 +2473,16 @@ public:
 private:
     const std::vector<double>& freqs() const
     {
+        static const std::vector<double> ab { 0, 1 };      // pre-ring question: A, B
+        if (kind == 1) return ab;
         static const std::vector<double> oct { 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000 };
         static const std::vector<double> third { 50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000, 12500, 16000 };
         return level == 2 ? third : oct;
     }
-    int buttonsHeight() const { return level == 2 ? 58 : 40; }
+    int buttonsHeight() const { return level == 2 && kind == 0 ? 58 : 40; }
     juce::Rectangle<int> cellRect (int i) const
     {
-        const int n = (int) freqs().size(), perRow = level == 2 ? 13 : n, rows = level == 2 ? 2 : 1;
+        const int n = (int) freqs().size(), perRow = level == 2 && kind == 0 ? 13 : n, rows = level == 2 && kind == 0 ? 2 : 1;
         const int w = (answerArea.getWidth() - (perRow - 1) * 4) / perRow, h = (answerArea.getHeight() - (rows - 1) * 4) / rows;
         return { answerArea.getX() + (i % perRow) * (w + 4), answerArea.getY() + (i / perRow) * (h + 4), w, h };
     }
@@ -2475,6 +2498,22 @@ private:
     void newQuestion()
     {
         auto& rnd = juce::Random::getSystemRandom();
+        if (kind == 1)
+        {
+            // the same cut in min and linear phase; which one is linear (pre-rings) is the answer
+            static const std::vector<float> lc[] = { { 250, 350, 500, 700 }, { 120, 160, 200, 300 }, { 60, 80, 100, 120 } };
+            static const std::vector<float> hc[] = { { 1500, 2000, 3000 }, { 3000, 4000, 5000 }, { 6000, 8000, 10000 } };
+            const bool high = mode == 1 || (mode == 2 && rnd.nextBool());
+            const auto& set = high ? hc[level] : lc[level];
+            q = {}; q.kind = 1; q.type = (int) (high ? eqcore::Type::HighCut : eqcore::Type::LowCut);
+            q.f = set[(size_t) rnd.nextInt ((int) set.size())]; q.g = 0; q.q = 0.7071f;
+            q.slope = level == 0 ? 5 : level == 1 ? 3 + rnd.nextInt (2) : 2 + rnd.nextInt (2);   // 48 / 24–36 / 18–24 dB/oct
+            q.linOnB = rnd.nextBool(); answer = q.linOnB ? 1 : 0;
+            answered = false; chosen = -1; playEq = false;
+            ph.proc.setEarPlayEQ (false); ph.proc.setEar (true, q);
+            resized(); refresh();
+            return;
+        }
         const auto& fs = freqs();
         answer = rnd.nextInt ((int) fs.size());
         const double gain = level == 0 ? 9.0 : level == 1 ? 6.0 : 3.0;
@@ -2487,6 +2526,6 @@ private:
     ParamHelp& ph;
     juce::TextButton easyB, normB, hardB, boostB, cutB, bothB, aB, bB, nextB, showB;
     EQAnatomyProcessor::EarQuestion q;
-    int level = 1, mode = 0, answer = 0, chosen = -1, hover = -1, score = 0, total = 0, streak = 0; bool answered = false, playEq = true;
+    int kind = 0, level = 1, mode = 0, answer = 0, chosen = -1, hover = -1, score = 0, total = 0, streak = 0; bool answered = false, playEq = true;
     juce::Rectangle<int> answerArea;
 };

@@ -282,9 +282,10 @@ public:
 
     // Band solo (−1 = off) and ear training
     std::atomic<int> soloBand { -1 };
-    struct EarQuestion { float f = 1000, g = 6, q = 2; };
+    // kind 0: a hidden bell (guess the band). kind 1 (Lab 2): the same filter in min and linear phase on A / B — which one pre-rings?
+    struct EarQuestion { float f = 1000, g = 6, q = 2; int kind = 0; int type = 3; int slope = 5; bool linOnB = true; };
     void setEar (bool on, EarQuestion q);
-    void setEarPlayEQ (bool b) { earB = b; }
+    void setEarPlayEQ (bool b) { earB = b; if (earKind.load() == 1) loadEarKernel(); }
     bool earActive() const { return earOn.load(); }
 
     // Analyzer: post-EQ Mid (0.5·(L+R)), Side, and the Transient / Body parts of the Mid.
@@ -364,6 +365,9 @@ private:
                 inline double process (double x) { const double y = b0 * x + z1; z1 = b1 * x - a1 * y + z2; z2 = b2 * x - a2 * y; return y; } };
     Bq soloF[2], earF[2]; int lastSolo = -1;
     std::atomic<bool> earOn { false }, earB { true }; std::atomic<float> earGainComp { 1.0f };
+    // pre-ring ear training: one convolver, kernel A or B (both 4096 samples late, so they line up)
+    static constexpr int kEarPreLat = 4096;
+    std::atomic<int> earKind { 0 }; XfadeConvolver earConv; std::vector<float> earKA, earKB; void loadEarKernel();
     juce::SpinLock earLock; EarQuestion earQ; bool earDirty = false;
 
     juce::WaitableEvent buildEvent;

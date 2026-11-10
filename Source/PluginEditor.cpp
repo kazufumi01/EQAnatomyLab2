@@ -60,7 +60,18 @@ EQAnatomyView::EQAnatomyView (EQAnatomyProcessor& p) : proc (p)
     };
     undoBtn.onClick = [this] { proc.undo.undo(); };
     redoBtn.onClick = [this] { proc.undo.redo(); };
-    earBtn.onClick  = [this] { setEar (! proc.earActive()); };
+    earBtn.onClick  = [this]
+    {
+        juce::PopupMenu m; const bool on = proc.earActive(); const int k = earCard.getKind();
+        m.addItem (1, ph.tr ("EQ の帯域を当てる", "Guess the EQ band"), true, on && k == 0);
+        m.addItem (2, ph.tr ("プリリンギングを聴き分ける（Min と Linear）", "Hear the pre-ringing (min vs linear phase)"), true, on && k == 1);
+        if (on) { m.addSeparator(); m.addItem (3, ph.tr ("EAR を終了", "Leave EAR")); }
+        m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&earBtn), [this] (int r)
+        {
+            if (r == 3) setEar (false);
+            else if (r == 1 || r == 2) { earCard.setKind (r - 1); setEar (true); }
+        });
+    };
     learnBtn.onClick   = [this]
     {
         const bool ja = ph.ja(); const bool on = (bool) proc.uiState.getProperty ("learn", true);
@@ -131,7 +142,7 @@ EQAnatomyView::EQAnatomyView (EQAnatomyProcessor& p) : proc (p)
     setHelp (morphTo, "MORPH TARGET", "モーフの行き先のスロット。クリックで切り替え", "The slot the morph slider heads for. Click to change");
     setHelp (morph, "MORPH", "今のスロットから行き先のスロットへ連続で変える。周波数と Q は対数、ゲインは dB で補間。ダブルクリックで 0。注意：タイプや Min/Lin、M/S のように連続で変えられないものは 50% で切り替わる。Lin のバンドは IR を作り直すため少し遅れて追従する。動かしたままスロットを切り替えると、その状態が今のスロットに保存される",
              "Morph from the current slot to the target. Frequency and Q interpolate logarithmically, gain in dB. Double-click resets. Careful: type, Min/Lin and M/S switch at 50%; Lin bands follow with a short delay while the IR rebuilds; switching slots stores the morphed state in the current slot");
-    setHelp (earBtn, "EAR", "耳トレモード。隠れた EQ の帯域を当てる。注意：出題中は今の EQ を一時的に外す（終了すると戻る）", "Ear training: guess the hidden EQ band. Careful: your EQ is bypassed while playing (restored when you leave)");
+    setHelp (earBtn, "EAR", "耳トレモード。クリックで種類を選ぶ：EQ の帯域当て／プリリンギングの聴き分け（同じカットを最小位相とリニア位相で鳴らし、音の前ににじむ方を当てる。出題中はレイテンシーが 4096 サンプル増える）。Learn とは同時に使えない。注意：出題中は今の EQ を一時的に外す（終了すると戻る）", "Ear training. Click to choose: guess the EQ band, or hear the pre-ringing (the same cut in minimum and linear phase; pick the one that smears before the attack; adds 4096 samples of latency while it plays). Not at the same time as Learn. Careful: your EQ is bypassed while playing (restored when you leave)");
     setHelp (learnBtn, "LEARN", "クリックでレッスン一覧（全タイトル）。選ぶとそのレッスンを表示。EAR とは同時に使えない（片方を選ぶともう片方は閉じる）。「レッスンを閉じる」にすると、この欄に方式とマウス操作、ポインターを置いた部分の説明が出る", "Click for the list of every lesson; pick one to show it. Not at the same time as EAR (choosing one closes the other). \"Close lessons\" shows the mode, mouse controls and help for whatever you point at here");
     setHelp (langBtn, "LANGUAGE", "説明とレッスンの言語（日本語 / English）", "Language of help and lessons");
     setHelp (zoom, "SIZE / LOOK", "画面の大きさ、外観（10種類）、隙間の質感（6種類）。大きさは右下の角のドラッグでも変えられる。外観と質感はこの Mac のすべてのインスタンスで共通", "Window size, look (ten skins) and surface texture for the gaps (six). Drag the bottom-right corner to resize. Look and surface are shared by every instance on this computer");
