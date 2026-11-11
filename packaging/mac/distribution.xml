@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <installer-gui-script minSpecVersion="2">
-    <title>EQ Anatomy Lab @VERSION@</title>
+    <title>EQ Anatomy Lab 2 @VERSION@</title>
     <organization>com.jpk</organization>
     <welcome file="welcome.html" mime-type="text/html"/>
     <license file="license.txt"/>
@@ -15,16 +15,16 @@
     </choices-outline>
 
     <choice id="au" title="Audio Unit (Logic / GarageBand / Live)" description="/Library/Audio/Plug-Ins/Components">
-        <pkg-ref id="com.jpk.eqanatomy.au"/>
+        <pkg-ref id="com.jpk.eqanatomylab2.au"/>
     </choice>
     <choice id="vst3" title="VST3 (Live / Cubase / Studio One など)" description="/Library/Audio/Plug-Ins/VST3">
-        <pkg-ref id="com.jpk.eqanatomy.vst3"/>
+        <pkg-ref id="com.jpk.eqanatomylab2.vst3"/>
     </choice>
     <choice id="app" title="Standalone（DAWなしで試せるアプリ）" description="/Applications">
-        <pkg-ref id="com.jpk.eqanatomy.app"/>
+        <pkg-ref id="com.jpk.eqanatomylab2.app"/>
     </choice>
 
-    <pkg-ref id="com.jpk.eqanatomy.au"   version="@VERSION@">au.pkg</pkg-ref>
-    <pkg-ref id="com.jpk.eqanatomy.vst3" version="@VERSION@">vst3.pkg</pkg-ref>
-    <pkg-ref id="com.jpk.eqanatomy.app"  version="@VERSION@">app.pkg</pkg-ref>
+    <pkg-ref id="com.jpk.eqanatomylab2.au"   version="@VERSION@">au.pkg</pkg-ref>
+    <pkg-ref id="com.jpk.eqanatomylab2.vst3" version="@VERSION@">vst3.pkg</pkg-ref>
+    <pkg-ref id="com.jpk.eqanatomylab2.app"  version="@VERSION@">app.pkg</pkg-ref>
 </installer-gui-script>

@@ -1,16 +1,16 @@
 #!/bin/zsh
-# EQ Anatomy Lab の Mac 用「手動インストール」zip を作る
+# EQ Anatomy Lab 2 の Mac 用「手動インストール」zip を作る
 # 使い方： packaging/mac/build_zip.sh [バージョン] [ビルド成果物フォルダ]
-# 出力：dist/EQAnatomyLab-<ver>-mac.zip
+# 出力：dist/EQAnatomyLab2-<ver>-mac.zip
 #   中身：.component / .vst3 / .app / HOW_TO_INSTALL.txt / license.txt
 set -e
 cd "$(dirname "$0")/../.."
 
-VERSION="${1:-0.1.0}"
-ART="${2:-build/EQAnatomy_artefacts/Release}"
-NAME="EQ Anatomy Lab"
-DIR="build/zip/EQAnatomyLab-${VERSION}-mac"
-OUT="dist/EQAnatomyLab-${VERSION}-mac.zip"
+VERSION="${1:-0.2.0}"
+ART="${2:-build/EQAnatomyLab2_artefacts/Release}"
+NAME="EQ Anatomy Lab 2"
+DIR="build/zip/EQAnatomyLab2-${VERSION}-mac"
+OUT="dist/EQAnatomyLab2-${VERSION}-mac.zip"
 
 rm -rf "$DIR"; mkdir -p "$DIR" dist
 ditto "$ART/AU/$NAME.component"   "$DIR/$NAME.component"
