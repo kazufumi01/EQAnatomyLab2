@@ -6,6 +6,7 @@
 #include "BandSaturator.h"
 #include "XfadeConvolver.h"
 #include "LinkRegistry.h"
+#include "ResSuppressor.h"
 
 // =============================================================================
 //  Zero-latency engine: RBJ biquads with smoothed frequency / gain / Q,
@@ -346,6 +347,10 @@ private:
     Delay dryDelay[2], postDelay[2];
     juce::LinearSmoothedValue<float> outGain, autoGain;
     BandSaturator sat; bool satWasOn = false;
+public:
+    ResSuppressor rs;           // the editor reads rs.dispDb for the graph
+private:
+    bool rsWasOn = false; Delay rsDelay[2];
     std::array<DynDetector, eqcore::kBands> det; std::array<double, eqcore::kBands> dynNow {}; double detAtt = 0.1, detRel = 0.01;
     TransientDetector trans;
     std::vector<double> maskBuf, maskDel;     // per-block transient mask, and the same delayed to match the output
@@ -354,8 +359,8 @@ private:
     std::atomic<bool> scConnected { false };
 
     std::atomic<bool> dirty { true };
-    std::atomic<int>  wantedMode { 0 }, wantedKernelLat { 0 }, wantedSatLat { 0 };
-    int  activeMode = 0, activeKernelLat = 0, activeSatLat = 0, modeFade = 0, modeFadeLen = 720; bool fadingOut = false;
+    std::atomic<int>  wantedMode { 0 }, wantedKernelLat { 0 }, wantedSatLat { 0 }, wantedRsLat { 0 };
+    int  activeMode = 0, activeKernelLat = 0, activeSatLat = 0, activeRsLat = 0, modeFade = 0, modeFadeLen = 720; bool fadingOut = false;
     std::atomic<float> autoGainDb { 0.0f };
     int latencyReported = 0;
     double rmsCoef = 0.001; double inMs[2] {}, outMs[2] {}, cLR = 0, cLL = 0, cRR = 0;

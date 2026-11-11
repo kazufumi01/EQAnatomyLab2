@@ -96,7 +96,8 @@ void EQAnatomyProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     ms.setSize (2, samplesPerBlock); dryD.setSize (2, samplesPerBlock); tmp.setSize (2, samplesPerBlock);
     for (auto& d : dryDelay) d.prepare (eqcore::linearTaps (2) / 2 + 64);
     for (auto& d : postDelay) d.prepare (256);
-    maskDelay.prepare (eqcore::linearTaps (2) / 2 + 64 + 512);
+    maskDelay.prepare (eqcore::linearTaps (2) / 2 + 64 + 512 + ResSuppressor::latency());
+    rs.prepare (sampleRate); for (auto& d : rsDelay) d.prepare (ResSuppressor::latency() + 8);
     svC = 1.0 - std::exp (-1.0 / (sampleRate * 0.003)); svG[0] = 1.0; for (int k = 1; k < 5; ++k) svG[k] = 0.0;
     maskBuf.assign ((size_t) samplesPerBlock, 0.0); maskDel.assign ((size_t) samplesPerBlock, 0.0);
     sat.prepare (sampleRate, samplesPerBlock);
@@ -112,7 +113,7 @@ void EQAnatomyProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     const auto t = targets();
     chainA.configure (t, currentQMode(), sampleRate); cur = &chainA; nxt = &chainB; xfade = 0;
     activeMode = (int) currentMode(); fadingOut = false; modeFade = modeFadeLen;
-    activeKernelLat = wantedKernelLat.load(); activeSatLat = wantedSatLat.load();
+    activeKernelLat = wantedKernelLat.load(); activeSatLat = wantedSatLat.load(); activeRsLat = wantedRsLat.load();
     lastSolo = -1;
     dirty = true;
 }
@@ -202,9 +203,9 @@ void EQAnatomyProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     if (xfade > 0) nxt->setTargets (t);
 
     // mode / latency switch: fade out, switch, fade back in
-    const int wantM = (int) currentMode(), wantK = wantedKernelLat.load(), wantS = wantedSatLat.load();
+    const int wantM = (int) currentMode(), wantK = wantedKernelLat.load(), wantS = wantedSatLat.load(), wantR = wantedRsLat.load();
     wantedMode = wantM;
-    if ((wantM != activeMode || wantK != activeKernelLat || wantS != activeSatLat) && ! fadingOut) fadingOut = true;
+    if ((wantM != activeMode || wantK != activeKernelLat || wantS != activeSatLat || wantR != activeRsLat) && ! fadingOut) fadingOut = true;
 
     // dry, delayed by the kernel latency (for Bypass / Delta / ear training)
     for (int c = 0; c < 2; ++c)
@@ -266,7 +267,7 @@ void EQAnatomyProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     }
     if (needMask)
     {
-        const int dly = activeKernelLat + activeSatLat;
+        const int dly = activeKernelLat + activeSatLat + activeRsLat;
         for (int i = 0; i < n; ++i)
         {
             maskBuf[(size_t) i] = trans.process (detEq.active() ? detEq.process ((double) M[i]) : (double) M[i]);
@@ -374,6 +375,19 @@ void EQAnatomyProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
         }
     }
 
+    // resonance suppressor, after the EQ and before the saturator (left out of Bypass / Delta / Pre-ring solo / ear training)
+    {
+        rs.setParams (P (pid::rsDepth), P (pid::rsThr), P (pid::rsLo), P (pid::rsHi), P (pid::rsSel), P (pid::rsAtt), P (pid::rsRel), P (pid::rsDelta) > 0.5f);
+        const bool run = activeRsLat > 0 && P (pid::rsOn) > 0.5f && ! bypass && ! delta && ! solo && ! ear;
+        if (run) { if (! rsWasOn) rs.reset(); rs.process (oL, oR, n); }
+        else
+        {
+            if (rsWasOn) for (auto& d : rs.dispDb) d = 0.0f;
+            if (activeRsLat > 0) for (int i = 0; i < n; ++i) { oL[i] = rsDelay[0].process (oL[i], activeRsLat); oR[i] = rsDelay[1].process (oR[i], activeRsLat); }
+        }
+        rsWasOn = run;
+    }
+
     // band saturator, after the EQ (left out of Bypass / Delta / Pre-ring solo / ear training)
     {
         const bool satOn = P (pid::satOn) > 0.5f;
@@ -418,7 +432,8 @@ void EQAnatomyProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
             if (--modeFade <= 0)
             {
                 modeFade = 0; fadingOut = false;
-                activeMode = wantedMode.load(); activeKernelLat = wantedKernelLat.load(); activeSatLat = wantedSatLat.load();
+                activeMode = wantedMode.load(); activeKernelLat = wantedKernelLat.load(); activeSatLat = wantedSatLat.load(); activeRsLat = wantedRsLat.load();
+                for (auto& d : rsDelay) d.clear(); rs.reset();
                 for (auto& d : dryDelay) d.clear();
                 for (auto& d : postDelay) d.clear();
                 maskDelay.clear();
@@ -499,9 +514,10 @@ void EQAnatomyProcessor::computeLatency()
     const bool satOn = apvts.getRawParameterValue (pid::satOn)->load() > 0.5f;
     sat.setOversampling ((int) apvts.getRawParameterValue (pid::satOS)->load());
     const int s = satOn ? sat.latencySamples() : 0;
-    wantedKernelLat = k; wantedSatLat = s;
+    const int rl = apvts.getRawParameterValue (pid::rsOn)->load() > 0.5f ? ResSuppressor::latency() : 0;
+    wantedKernelLat = k; wantedSatLat = s; wantedRsLat = rl;
     const int e = earOn.load() && earKind.load() == 1 ? kEarPreLat : 0;     // the pre-ring question's convolver (after the EQ path)
-    if (k + s + e != latencyReported) { latencyReported = k + s + e; setLatencySamples (latencyReported); }
+    if (k + s + rl + e != latencyReported) { latencyReported = k + s + rl + e; setLatencySamples (latencyReported); }
 }
 
 void EQAnatomyProcessor::timerCallback()

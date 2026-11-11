@@ -47,6 +47,8 @@ private:
     // body
     GraphView graph { ph };
     SatStrip satStrip { ph };
+    ResStrip resStrip { ph };
+    juce::TextButton satTab, resTab;        // SAT | RES share the lower-left slot
     BandPopup detail { ph, true };     // the selected band's detail panel (replaces the band cards)
     IRView irView { ph };
     OutputDrag outDrag { ph };

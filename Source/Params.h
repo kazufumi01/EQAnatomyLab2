@@ -32,6 +32,16 @@ static const char* tbMethod = "tb_method";  // transient detector: 0 Ratio (fast
 static const char* tbLc = "tb_lc";          // detector-only EQ (never in the output): low cut, Hz (20 = off)
 static const char* tbE1f = "tb_e1f"; static const char* tbE1g = "tb_e1g"; static const char* tbE1q = "tb_e1q";
 static const char* tbE2f = "tb_e2f"; static const char* tbE2g = "tb_e2g"; static const char* tbE2q = "tb_e2q";
+// Lab 2: resonance suppressor (after the EQ, before the saturator). Off by default
+static const char* rsOn = "rs_on";
+static const char* rsDepth = "rs_depth";    // most it may take from one bin, dB
+static const char* rsThr = "rs_thr";        // how far above its surroundings a bin must stick out, dB
+static const char* rsLo = "rs_lo";          // adaptive range, Hz
+static const char* rsHi = "rs_hi";
+static const char* rsSel = "rs_sel";        // selectivity, %: 0 = broad bumps count, 100 = only needle-sharp peaks
+static const char* rsAtt = "rs_att";        // ms
+static const char* rsRel = "rs_rel";        // ms
+static const char* rsDelta = "rs_delta";    // hear only what is removed
 }
 
 inline const juce::StringArray& typeNames()
@@ -145,5 +155,19 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     }
     // ---- 0.1.1: bands 7 and 8, appended (off by default) ----
     for (int i = 6; i < eqcore::kBands; ++i) { addBandMain (l, i, 3); addBandDyn (l, i, 3); }
+    // ---- Lab 2: resonance suppressor, appended (off by default) ----
+    {
+        auto rsRange = NormalisableRange<float> (20.0f, 20000.0f, 0.0f, 1.0f); rsRange.setSkewForCentre (632.0f);
+        auto msRange = [] (float a, float b) { NormalisableRange<float> r (a, b, 0.0f); r.setSkewForCentre (std::sqrt (a * b)); return r; };
+        l.add (std::make_unique<AudioParameterBool> (ParameterID { pid::rsOn, 4 }, "Res on", false));
+        l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::rsDepth, 4 }, "Res depth", NormalisableRange<float> (0.0f, 18.0f, 0.1f), 6.0f, AudioParameterFloatAttributes().withLabel ("dB")));
+        l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::rsThr, 4 }, "Res threshold", NormalisableRange<float> (0.0f, 24.0f, 0.1f), 6.0f, AudioParameterFloatAttributes().withLabel ("dB")));
+        l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::rsLo, 4 }, "Res low", rsRange, 300.0f, AudioParameterFloatAttributes().withLabel ("Hz")));
+        l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::rsHi, 4 }, "Res high", rsRange, 10000.0f, AudioParameterFloatAttributes().withLabel ("Hz")));
+        l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::rsSel, 4 }, "Res selectivity", NormalisableRange<float> (0.0f, 100.0f, 1.0f), 50.0f, AudioParameterFloatAttributes().withLabel ("%")));
+        l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::rsAtt, 4 }, "Res attack", msRange (1.0f, 200.0f), 10.0f, AudioParameterFloatAttributes().withLabel ("ms")));
+        l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::rsRel, 4 }, "Res release", msRange (10.0f, 2000.0f), 150.0f, AudioParameterFloatAttributes().withLabel ("ms")));
+        l.add (std::make_unique<AudioParameterBool> (ParameterID { pid::rsDelta, 4 }, "Res delta", false));
+    }
     return l;
 }

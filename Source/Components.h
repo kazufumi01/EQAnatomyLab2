@@ -724,7 +724,8 @@ public:
         os.onColour = theme::sat;
         onBtn.setButtonText ("SAT"); onBtn.setToggleState (on, juce::dontSendNotification);
         deltaBtn.setButtonText (juce::String::fromUTF8 ("Sat \xce\x94")); deltaBtn.setToggleState (ph.value (pid::satDelta) > 0.5f, juce::dontSendNotification);
-        autoBtn.setButtonText (juce::String ("Auto lvl")); autoBtn.setToggleState (ph.value (pid::satAuto) > 0.5f, juce::dontSendNotification);
+        autoBtn.setButtonText (makeupArea.isEmpty() && on && ph.value (pid::satAuto) > 0.5f ? fmtDb (ph.proc.satMakeupDb.load()) : juce::String ("Auto lvl"));
+        autoBtn.getProperties().set ("fontPx", 10.5); autoBtn.setToggleState (ph.value (pid::satAuto) > 0.5f, juce::dontSendNotification);
         const int t = (int) ph.value (pid::satType);
         if (type.getSelectedId() != t + 1) type.setSelectedId (t + 1, juce::dontSendNotification);
         for (auto* c : { (juce::Component*) &lo, (juce::Component*) &hi, (juce::Component*) &drive, (juce::Component*) &mix, (juce::Component*) &deltaBtn, (juce::Component*) &autoBtn, (juce::Component*) &type, (juce::Component*) &os })
@@ -736,13 +737,13 @@ public:
         if (getHeight() > 80 && getWidth() < 240)
         {
             const int W = getWidth() - 16, cw = (W - 4) / 2;
-            onBtn.setBounds (8, 8, 40, 22); type.setBounds (52, 8, W - 44 - 40, 22);
-            curveArea = { getWidth() - 44, 6, 36, 26 };
-            lo.setBounds (8, 36, cw, 30); hi.setBounds (12 + cw, 36, cw, 30);
-            drive.setBounds (8, 70, cw, 30); mix.setBounds (12 + cw, 70, cw, 30);
-            os.setBounds (8, 106, 68, 18);
-            deltaBtn.setBounds (80, 104, 40, 22); autoBtn.setBounds (124, 104, W - 116, 22);
-            makeupArea = { 8, 128, W, 16 };
+            onBtn.setBounds (8, 28, 40, 22); type.setBounds (52, 28, W - 44 - 40, 22);
+            curveArea = { getWidth() - 44, 26, 36, 26 };
+            lo.setBounds (8, 54, cw, 28); hi.setBounds (12 + cw, 54, cw, 28);
+            drive.setBounds (8, 84, cw, 28); mix.setBounds (12 + cw, 84, cw, 28);
+            os.setBounds (8, 118, 64, 18);
+            deltaBtn.setBounds (76, 116, 38, 22); autoBtn.setBounds (118, 116, W - 110, 22);
+            makeupArea = {};      // the makeup shows in the Auto button
             textArea = {};
             return;
         }
@@ -779,7 +780,8 @@ public:
         g.setColour (ph.value (pid::satOn) > 0.5f ? theme::sat.withAlpha (0.53f) : theme::line); g.drawRoundedRectangle (r.reduced (0.5f), 6.0f, 1.0f);
         const juce::String mk = fmtDb (ph.value (pid::satOn) > 0.5f && ph.value (pid::satAuto) > 0.5f ? ph.proc.satMakeupDb.load() : 0.0f);
         const juce::Colour mc = ph.value (pid::satAuto) > 0.5f && ph.value (pid::satOn) > 0.5f ? theme::sat : theme::faint;
-        if (makeupArea.getHeight() < 24)      // narrow layout: one line
+        if (makeupArea.isEmpty()) {}
+        else if (makeupArea.getHeight() < 24)      // narrow layout: one line
         {
             g.setColour (theme::muted); g.setFont (theme::ui (9.5f)); g.drawText ("MAKEUP", makeupArea, juce::Justification::centredLeft);
             g.setColour (mc); g.setFont (theme::mono (11.0f, true)); g.drawText (mk, makeupArea, juce::Justification::centredRight);
@@ -1208,6 +1210,34 @@ public:
                 g.setColour (theme::onAccent); g.drawText ("SAT", tab, juce::Justification::centred);
             }
         }
+        // resonance suppressor: its range (tabs at the bottom) and what it takes right now, hanging from 0 dB
+        if (ph.value (pid::rsOn) > 0.5f)
+        {
+            const float x0 = xOf (ph.value (pid::rsLo)), x1 = xOf (ph.value (pid::rsHi));
+            g.setColour (theme::res.withAlpha (0.05f)); g.fillRect (x0, pr.getY(), x1 - x0, pr.getHeight());
+            const float dash[] = { 3.0f, 4.0f };
+            g.setColour (theme::res.withAlpha (0.55f));
+            g.drawDashedLine ({ x0, pr.getY(), x0, pr.getBottom() }, dash, 2, 1.0f);
+            g.drawDashedLine ({ x1, pr.getY(), x1, pr.getBottom() }, dash, 2, 1.0f);
+            g.setFont (theme::mono (9.0f, true));
+            for (auto x : { x0, x1 })
+            {
+                auto tab = juce::Rectangle<float> (x - 15, pr.getBottom() - 18, 30, 16);
+                g.setColour (theme::res.withAlpha (0.85f)); g.fillRoundedRectangle (tab, 3.0f);
+                g.setColour (theme::onAccent); g.drawText ("RES", tab, juce::Justification::centred);
+            }
+            constexpr int D = ResSuppressor::kDisp;
+            juce::Path p; p.startNewSubPath (xOf (20.0), yOf (0));
+            float mx = 0;
+            for (int d = 0; d < D; ++d)
+            {
+                const float v = ph.proc.rs.dispDb[(size_t) d].load(); mx = std::max (mx, v);
+                const double f = 20.0 * std::pow (1000.0, (d + 0.5) / D);
+                p.lineTo (xOf (f), yOf (-juce::jlimit (0.0f, dbRange, v)));
+            }
+            p.lineTo (xOf (20000.0), yOf (0)); p.closeSubPath();
+            if (mx > 0.05f) { g.setColour (theme::res.withAlpha (0.38f)); g.fillPath (p); g.setColour (theme::res); g.strokePath (p, juce::PathStrokeType (1.2f)); }
+        }
         if (cur.mag.empty()) return;
         const int s = ph.selected();
         for (int i = 0; i < eqcore::kBands; ++i)
@@ -1411,7 +1441,7 @@ public:
             dynDrag = m; ph.proc.undo.beginNewTransaction(); ph.begin (id); repaint(); return;
         }
         drag = pick (e.position);
-        if (drag.what >= 3) { ph.begin (drag.what == 3 ? pid::satLo : pid::satHi); return; }
+        if (drag.what >= 3) { ph.begin (edgeId (drag.what)); return; }
         if (drag.band < 0) return;
         ph.select (drag.band);
         if (e.mods.isAltDown()) { altSolo = true; ph.proc.soloBand = drag.band; }
@@ -1451,10 +1481,12 @@ public:
         }
         if (drag.what >= 3)
         {
-            const char* id = drag.what == 3 ? pid::satLo : pid::satHi;
+            const char* id = edgeId (drag.what);
             float f = (float) fOf (e.position.x);
-            if (drag.what == 3) f = std::min (f, ph.value (pid::satHi) / 1.06f); else f = std::max (f, ph.value (pid::satLo) * 1.06f);
-            ph.set (id, f); return;
+            const bool low = drag.what == 3 || drag.what == 5;
+            const char* other = edgeId (low ? drag.what + 1 : drag.what - 1);
+            if (low) f = std::min (f, ph.value (other) / 1.06f); else f = std::max (f, ph.value (other) * 1.06f);
+            ph.set (id, juce::jlimit (20.0f, 20000.0f, f)); return;
         }
         if (drag.band < 0) return;
         const int b = drag.band; const auto pr = plot();
@@ -1494,7 +1526,7 @@ public:
         if (panelDrag) { panelDrag = false; repaint(); return; }
         if (scDrag != 0) { ph.end (scDrag == 1 ? pid::tbSens : pid::tbWidth); scDrag = 0; return; }
         if (dynDrag >= 0) { ph.end (pid::band (dynDrag / 2, (dynDrag % 2) == 0 ? "range" : "below")); dynDrag = -1; repaint(); return; }
-        if (drag.what >= 3) ph.end (drag.what == 3 ? pid::satLo : pid::satHi);
+        if (drag.what >= 3) ph.end (edgeId (drag.what));
         else if (drag.band >= 0) for (auto w : { "freq", "gain", "q" }) ph.end (pid::band (drag.band, w));
         drag = {}; axis = 0;
         if (altSolo) { altSolo = false; ph.proc.soloBand = -1; }
@@ -1571,7 +1603,8 @@ private:
         return -1;
     }
     int dynHover = -1, dynDrag = -1;
-    struct Pick { int band = -1; int what = 0; };   // what: 0 node, 1/2 width handles, 3/4 saturator band edges
+    struct Pick { int band = -1; int what = 0; };   // what: 0 node, 1/2 width handles, 3/4 saturator band edges, 5/6 suppressor range edges
+    static const char* edgeId (int what) { return what == 3 ? pid::satLo : what == 4 ? pid::satHi : what == 5 ? pid::rsLo : pid::rsHi; }
     bool tbView() const { return lastScope && ! lastField; }        // the T/B scope (not the stereo field) is in the lower panel
     juce::Rectangle<float> fullPlot() const { return getLocalBounds().toFloat().withTrimmedLeft (34).withTrimmedRight (8).withTrimmedTop (30).withTrimmedBottom (tbView() ? 54.0f : 18.0f); }
     bool panelShown() const { return (lastSplit || lastScope) && ! ph.proc.earActive(); }
@@ -1918,6 +1951,11 @@ private:
     }
     Pick pick (juce::Point<float> p) const
     {
+        if (ph.value (pid::rsOn) > 0.5f && p.y > plot().getBottom() - 20 && p.y < plot().getBottom() + 2)
+        {
+            if (std::abs (p.x - xOf (ph.value (pid::rsLo))) < 10) return { -1, 5 };
+            if (std::abs (p.x - xOf (ph.value (pid::rsHi))) < 10) return { -1, 6 };
+        }
         if (ph.value (pid::satOn) > 0.5f && p.y > plot().getY() - 2 && p.y < plot().getY() + 20)
         {
             if (std::abs (p.x - xOf (ph.value (pid::satLo))) < 10) return { -1, 3 };
@@ -2222,6 +2260,74 @@ public:
     }
 private:
     ParamHelp& ph; DisplayIR ir; int version = -1;
+};
+
+
+// =============================================================================
+//  RES: the resonance suppressor's controls (shares the lower-left slot with SAT; tabs above)
+// =============================================================================
+class ResStrip : public juce::Component
+{
+public:
+    explicit ResStrip (ParamHelp& h) : ph (h), lo (h, "LOW"), hi (h, "HIGH"), depth (h, "DEPTH"), thr (h, "THRESH"), sel (h, "SELECT"), att (h, "ATT"), rel (h, "REL")
+    {
+        onBtn.setClickingTogglesState (false); deltaBtn.setClickingTogglesState (false);
+        onBtn.onClick = [this] { ph.toggleGesture (pid::rsOn); }; markReset (onBtn);
+        deltaBtn.onClick = [this] { ph.toggleGesture (pid::rsDelta); }; markReset (deltaBtn);
+        onBtn.setColour (juce::TextButton::buttonOnColourId, theme::res); deltaBtn.setColour (juce::TextButton::buttonOnColourId, theme::res);
+        lo.setParam (pid::rsLo); hi.setParam (pid::rsHi); depth.setParam (pid::rsDepth); thr.setParam (pid::rsThr); sel.setParam (pid::rsSel); att.setParam (pid::rsAtt); rel.setParam (pid::rsRel);
+        for (auto* d : { &lo, &hi }) { d->format = [] (float v) { return fmtHz (v) + " Hz"; }; d->parse = parseHz; }
+        depth.format = thr.format = [] (float v) { return juce::String (v, 1) + " dB"; };
+        sel.format = [] (float v) { return juce::String ((int) std::round (v)) + " %"; };
+        att.format = rel.format = [] (float v) { return v < 10 ? juce::String (v, 1) : juce::String ((int) std::round (v)); };
+        for (auto* d : { &lo, &hi, &depth, &thr, &sel, &att, &rel }) { d->compact = true; d->valueColour = theme::res; addAndMakeVisible (*d); }
+        addAndMakeVisible (onBtn); addAndMakeVisible (deltaBtn);
+        setHelp (onBtn, "RES", "レゾナンス・サプレッサーのオン・オフ。EQ の後ろ（SAT の前）で、周りより突き出た帯域だけを、その瞬間だけ下げる。固定の EQ では追いきれない、音程や声で動く共振に効く。注意：オンの間はレイテンシーが 1024 サンプル（48 kHz で約 21 ms）増える",
+                 "Resonance suppressor on/off. After the EQ (before SAT) it turns down only the frequencies that stick out of their surroundings, only while they do: for resonances that move with pitch or voice, which a static EQ cannot follow. Careful: adds 1024 samples of latency (about 21 ms at 48 kHz) while on");
+        setHelp (deltaBtn, "RES Δ", "サプレッサーが削っている成分だけを聴く。何を削っているかを耳で確かめ、削りすぎ（音色の芯まで削っていないか）を判断する", "Hear only what the suppressor removes: check by ear what it takes, and whether it eats into the core of the tone");
+        setHelp (lo, "LOW", "適応帯域の下端。ここより下は触らない（1/6 オクターブでなだらかに切れる）。グラフ下の RES タブでも動かせる。例：ボーカルは 200〜300 Hz、ギターは 150 Hz 前後", "Low edge of the adaptive range; nothing below is touched (1/6-octave soft edge). Also the RES tab at the bottom of the graph. E.g. 200–300 Hz for vocals, about 150 Hz for guitar");
+        setHelp (hi, "HIGH", "適応帯域の上端。歯擦音まで抑えたい時は 10〜12 kHz、空気感を残したい時は 6〜8 kHz", "High edge of the adaptive range: 10–12 kHz to reach sibilance, 6–8 kHz to keep the air");
+        setHelp (depth, "DEPTH", "1 つの周波数から下げる最大量（dB）。3〜6 dB で自然、9 dB を超えると音色が変わり始める", "Most it takes from one frequency (dB). 3–6 dB is natural; past about 9 dB the tone starts to change");
+        setHelp (thr, "THRESHOLD", "周り（SELECT で決まる幅の平均）よりどれだけ突き出たら削るか（dB）。小さいほど多くの帯域を削る。グラフのピンクの面が削っている量", "How far above its surroundings (the average over the SELECT width) a frequency must stick out before it is taken down (dB). Lower takes more. The pink area on the graph is the reduction");
+        setHelp (sel, "SELECT", "選択度。何を「共振」とみなすか。0 %：2 オクターブの平均と比べる（なだらかな山も削る＝トーン補正寄り）／100 %：1/12 オクターブと比べる（針のように鋭いピークだけ）。既定 50 %（約 0.4 オクターブ）", "Selectivity: what counts as a resonance. 0 %: compared with a 2-octave average (broad bumps too, closer to tone shaping) / 100 %: with 1/12 octave (needle-sharp peaks only). Default 50 % (about 0.4 octave)");
+        setHelp (att, "ATTACK", "削り始める速さ（ms）。短いほどアタックの頭の共振も捕まえるが、トランジェントも丸くなる", "How fast it starts to cut (ms). Shorter catches the resonance at the very front, but also softens the transient");
+        setHelp (rel, "RELEASE", "戻る速さ（ms）。短いと音程の変化に追従しやすいが、揺れ（ポンピング）が聴こえやすい。長いと滑らかだが、別の音まで削り続ける", "How fast it lets go (ms). Short follows changing notes but can flutter; long is smooth but keeps cutting into the next note");
+    }
+    void refresh()
+    {
+        const bool on = ph.value (pid::rsOn) > 0.5f;
+        onBtn.setButtonText ("RES"); onBtn.setToggleState (on, juce::dontSendNotification);
+        deltaBtn.setButtonText (juce::String::fromUTF8 ("Res \xce\x94")); deltaBtn.setToggleState (ph.value (pid::rsDelta) > 0.5f, juce::dontSendNotification);
+        for (auto* c : { (juce::Component*) &lo, (juce::Component*) &hi, (juce::Component*) &depth, (juce::Component*) &thr, (juce::Component*) &sel, (juce::Component*) &att, (juce::Component*) &rel, (juce::Component*) &deltaBtn })
+            c->setAlpha (on ? 1.0f : 0.45f);
+        float m = 0; for (auto& d : ph.proc.rs.dispDb) m = std::max (m, d.load());
+        peak = on ? std::max (m, peak * 0.9f) : 0.0f;
+        for (auto* d : { &lo, &hi, &depth, &thr, &sel, &att, &rel }) d->repaint();
+        repaint();
+    }
+    void resized() override
+    {
+        const int W = getWidth() - 16, cw = (W - 4) / 2, c3 = (W - 8) / 3;
+        onBtn.setBounds (8, 28, 40, 22); deltaBtn.setBounds (52, 28, 46, 22);
+        readout = { 102, 28, W - 94, 22 };
+        lo.setBounds (8, 54, cw, 28); hi.setBounds (12 + cw, 54, cw, 28);
+        depth.setBounds (8, 84, cw, 28); thr.setBounds (12 + cw, 84, cw, 28);
+        sel.setBounds (8, 114, c3, 28); att.setBounds (12 + c3, 114, c3, 28); rel.setBounds (16 + 2 * c3, 114, W - 8 - 2 * c3, 28);
+    }
+    void paint (juce::Graphics& g) override
+    {
+        auto r = getLocalBounds().toFloat();
+        g.setColour (theme::panel); g.fillRoundedRectangle (r, 6.0f);
+        g.setColour (ph.value (pid::rsOn) > 0.5f ? theme::res.withAlpha (0.53f) : theme::line); g.drawRoundedRectangle (r.reduced (0.5f), 6.0f, 1.0f);
+        g.setColour (theme::muted); g.setFont (theme::ui (8.5f)); g.drawText ("MAX", readout.withWidth (24), juce::Justification::centredLeft);
+        g.setColour (peak > 0.05f ? theme::res : theme::faint); g.setFont (theme::mono (11.0f, true));
+        g.drawText (peak > 0.05f ? juce::String::fromUTF8 ("\xe2\x88\x92") + juce::String (peak, 1) + " dB" : juce::String ("0.0 dB"), readout, juce::Justification::centredRight);
+    }
+private:
+    ParamHelp& ph;
+    juce::TextButton onBtn, deltaBtn;
+    DragValue lo, hi, depth, thr, sel, att, rel;
+    juce::Rectangle<int> readout; float peak = 0;
 };
 
 // =============================================================================

@@ -126,10 +126,15 @@ EQAnatomyView::EQAnatomyView (EQAnatomyProcessor& p) : proc (p)
     paramToggle (soloBtn, pid::preSolo);
     soloBtn.setColour (juce::TextButton::buttonOnColourId, theme::pre);
 
-    addAndMakeVisible (graph); addAndMakeVisible (satStrip); addAndMakeVisible (detail); addAndMakeVisible (irView);
+    addAndMakeVisible (graph); addAndMakeVisible (satStrip); addChildComponent (resStrip); addAndMakeVisible (detail); addAndMakeVisible (irView);
     addAndMakeVisible (outDrag); addAndMakeVisible (viewSolo); addAndMakeVisible (lesson); addAndMakeVisible (io); addChildComponent (earCard);
 
     addAndMakeVisible (zoom);
+    for (auto* b : { &satTab, &resTab }) { b->setClickingTogglesState (false); b->getProperties().set ("fontPx", 10.0); addAndMakeVisible (*b); }
+    satTab.onClick = [this] { proc.uiState.setProperty ("postTab", 0, nullptr); resized(); };
+    resTab.onClick = [this] { proc.uiState.setProperty ("postTab", 1, nullptr); resized(); };
+    setHelp (satTab, "SAT", "帯域サチュレーターの設定を表示（色付きの点＝オン）", "Show the band saturator (coloured dot = on)");
+    setHelp (resTab, "RES", "レゾナンス・サプレッサーの設定を表示（色付きの点＝オン）。信号の流れは EQ → RES → SAT", "Show the resonance suppressor (coloured dot = on). Signal flow: EQ → RES → SAT");
     setHelp (modeBox, "MODE", "処理の方式。Zero latency：全体の既定。Min のバンドはデジタル IIR（遅れゼロ、位相が回る、ナイキスト付近は形が詰まる）。Lin にしたバンドだけ FIR になり、そのときは全体が FIR 分遅れる。DYN と TRANSIENT/BODY はこのモードの Min バンドだけ／Analog：Min のバンドを、アナログ回路と同じ振幅と位相の最小位相 FIR で処理。高域も形が崩れない。Lin のバンドがなければレイテンシーなし／Linear：全バンドをリニア位相にする（バンドごとの Min/Lin は無視）。位相は回らないが、全体が遅れ、アタックの前にプリリンギングが出る",
              "Processing mode. Zero latency: the default. Min bands run as digital IIR (no delay, phase turns, cramping near Nyquist); bands set to Lin become FIR, which delays everything. DYN and TRANSIENT/BODY work on Min bands in this mode only / Analog: Min bands become a minimum-phase FIR with the analog magnitude and phase; highs keep their shape; no latency unless a band is Lin / Linear: all bands linear phase (per-band Min/Lin is ignored); no phase shift, but everything is delayed and pre-ringing appears before the attack");
     setHelp (resBtn, "RESOLUTION", "リニア位相の FIR の長さ（Low / Mid / High）。長いほど低域が正確だが、レイテンシーとプリリンギングも伸びる", "Linear-phase FIR length. Longer is more accurate in the lows, with more latency and pre-ringing");
@@ -328,11 +333,21 @@ void EQAnatomyView::resized()
     io.setBounds (1096, 54, 52, gh);
     const bool ear = proc.earActive();
     detail.setVisible (false);                     // its settings now open in the floating panel (▾)
-    satStrip.setBounds (12, y, 180, h);
+    satStrip.setBounds (12, y, 180, h); resStrip.setBounds (12, y, 180, h);
+    {
+        const bool rsTab = (int) proc.uiState.getProperty ("postTab", 0) == 1;
+        satTab.setBounds (20, y + 6, 78, 18); resTab.setBounds (102, y + 6, 82, 18);
+        satTab.setVisible (! ear && lower); resTab.setVisible (! ear && lower);
+        satStrip.setVisible (! ear && lower && ! rsTab); resStrip.setVisible (! ear && lower && rsTab);
+    }
     for (auto* c : { (juce::Component*) &detail, (juce::Component*) &irView, (juce::Component*) &outDrag, (juce::Component*) &autoBtn,
                      (juce::Component*) &deltaBtn, (juce::Component*) &viewSolo, (juce::Component*) &bypassBtn, (juce::Component*) &lesson,
                      (juce::Component*) &satStrip })
         c->setVisible (! ear && lower);
+    {
+        const bool rsTab = (int) proc.uiState.getProperty ("postTab", 0) == 1;
+        satStrip.setVisible (! ear && lower && ! rsTab); resStrip.setVisible (! ear && lower && rsTab);
+    }
     detail.setVisible (false);
     earCard.setVisible (ear && lower);
     earCard.setBounds (12, y, getWidth() - 24, h);
@@ -532,7 +547,16 @@ void EQAnatomyView::timerCallback()
     pullAnalyzer();
     refreshTexts();
     graph.update (spec, specB);
-    satStrip.refresh();
+    satStrip.refresh(); resStrip.refresh();
+    {
+        const bool rsTab = (int) proc.uiState.getProperty ("postTab", 0) == 1;
+        const bool satOn = ph.value (pid::satOn) > 0.5f, rsOn = ph.value (pid::rsOn) > 0.5f;
+        satTab.setButtonText (juce::String ("SAT") + (satOn ? juce::String::fromUTF8 ("  â") : juce::String()));
+        resTab.setButtonText (juce::String ("RES") + (rsOn ? juce::String::fromUTF8 ("  â") : juce::String()));
+        satTab.setToggleState (! rsTab, juce::dontSendNotification); resTab.setToggleState (rsTab, juce::dontSendNotification);
+        satTab.setColour (juce::TextButton::textColourOffId, satOn ? theme::sat : theme::text);
+        resTab.setColour (juce::TextButton::textColourOffId, rsOn ? theme::res : theme::text);
+    }
     if (detail.isVisible()) detail.refresh (ph.selected());
     irView.refresh();
     outDrag.repaint();

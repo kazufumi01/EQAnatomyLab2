@@ -193,6 +193,7 @@ inline juce::Font mono (float size, bool bold = false)
    #endif
 }
 
+inline const juce::Colour res (0xffd862b4);      // resonance suppressor
 class LookAndFeel : public juce::LookAndFeel_V4
 {
 public:
