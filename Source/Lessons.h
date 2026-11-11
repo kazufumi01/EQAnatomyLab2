@@ -3,7 +3,7 @@
 #include <vector>
 
 // =============================================================================
-//  22 lessons (same order and settings as the web lab). Each has steps and a
+//  Lessons (the first 22 in the same order and settings as the web lab). Each has steps and a
 //  one-line "why", in Japanese and English, plus the EQ state it loads.
 // =============================================================================
 struct LessonBand { bool on; eqcore::Type type; double f, g, q; int slope; bool dyn = false; float thr = -24, range = -6;
@@ -20,6 +20,7 @@ struct Lesson
     std::vector<LessonBand> bands;             // the rest are switched off
     int select = 0;
     LessonSat sat {};
+    std::vector<std::pair<const char*, float>> extra {};     // Lab 2: any other parameter (RES, bell slope …), after the bands
 };
 
 inline const std::vector<Lesson>& lessons()
@@ -158,6 +159,30 @@ inline const std::vector<Lesson>& lessons()
           { "Press EAR in the header (your EQ is bypassed for now)", "Compare B (EQ) and A (original) and pick the boosted band", "Aim for 7 out of 10 on Normal, then try Hard (1/3 octave, ±3 dB)", "Practise Cut and Both the same way" },
           "周波数を言葉と結びつけておくと、ミックス中に「どこを触るか」をすぐ決められる。ブーストより、カットの方が聴き分けは難しい", "Linking frequencies to words lets you decide where to reach while mixing. Cuts are harder to hear than boosts",
           0, -1, 0, {}, 0 },
+
+        { "レゾナンス・サプレッサーの基本", "Resonance suppressor basics",
+          { "レッスン欄右上の ▶ Sample で「Voice + res」を鳴らす（3.15 kHz に鋭い共鳴を入れてある）", "グラフ上の Resonance を押し、白い線が 3 kHz 付近でピンクの線を超えているのを見る", "RES タブの Δ で、削っている音だけを聴く", "THRESH を 2 dB まで下げ、声の芯まで削れて音がやせるのを確かめてから 6 dB に戻す" },
+          { "Play 'Voice + res' with ▶ Sample at the top right (a sharp resonance sits at 3.15 kHz)", "Press Resonance above the graph and see the white line rise above the pink one near 3 kHz", "Use Δ on the RES tab to hear only what is taken", "Lower THRESH to 2 dB, hear it eat into the voice and thin it, then go back to 6 dB" },
+          "固定の EQ は常に削るが、サプレッサーは「周りより突き出た時だけ」削る。動く共鳴には強く、動かない音色の特徴には弱い", "A static EQ cuts all the time; the suppressor cuts only while something sticks out of its surroundings. Strong on moving resonances, weak on fixed tone",
+          0, -1, 0, {}, 0, {}, { { "rs_on", 1 }, { "rs_depth", 6 }, { "rs_thr", 6 }, { "rs_lo", 300 }, { "rs_hi", 10000 }, { "rs_sel", 50 } } },
+
+        { "固定のベル と サプレッサー", "A fixed bell vs the suppressor",
+          { "▶ Sample の「Voice + res」を鳴らす。3.15 kHz に −8 dB・Q 8 のベルが入っている", "バンド 3 をダブルクリックでオフ・オンし、共鳴が消えるのを確かめる", "バンド 3 をオフにして RES タブの丸を押し、同じ共鳴がどう抑えられるか比べる", "Delta と RES Δ で、それぞれが何を削っているかを聴き比べる" },
+          { "Play 'Voice + res'. A −8 dB, Q 8 bell sits at 3.15 kHz", "Double-click band 3 off and on: the resonance goes", "Turn band 3 off and switch RES on with its circle: compare how the same resonance is held down", "Compare what each takes with Delta and RES Δ" },
+          "共鳴の周波数が決まっているならベルが確実で、遅延もない。音程で動くならサプレッサー。両方を薄く併用するのもよくある", "If the resonance stays put, a bell is precise and adds no latency; if it moves with pitch, the suppressor. A little of both is common",
+          0, -1, 0, { { false, T::Bell, 1000, 0, 1, 3 }, { false, T::Bell, 1000, 0, 1, 3 }, { true, T::Bell, 3150, -8, 8, 3 } }, 2, {}, { { "rs_on", 0 } } },
+
+        { "スレッショルド曲線と M/S", "The threshold curve and M/S",
+          { "RES タブの Graph を押し、EQ のグラフ上でスレッショルド曲線を編集する", "4 番の点（3 kHz）を下げて、その帯域だけを強く削る", "2 番の点（300 Hz）を上げて、低中域の太さを守る", "RES タブのチャンネルを Mid と Side に切り替え、Δ で違いを聴く" },
+          { "Press Graph on the RES tab and edit the threshold curve over the EQ graph", "Pull point 4 (3 kHz) down to work harder there", "Push point 2 (300 Hz) up to protect the low-mid body", "Switch the RES channels to Mid and to Side and hear the difference with Δ" },
+          "全帯域に同じ基準を使うと、低域の豊かさまで共鳴と見なされやすい。曲線で帯域ごとに感度を変えると、削りたい所だけに効く", "One threshold everywhere tends to treat low-end richness as resonance too. Shaping it per band makes it work only where you want",
+          0, -1, 0, {}, 0, {}, { { "rs_on", 1 }, { "rs_mode", 3 }, { "rs_depth", 6 }, { "rs_thr", 5 }, { "rs_n4_g", -3 }, { "rs_n2_g", 4 } } },
+
+        { "ベルの傾き：12・24・48", "Bell slope: 12, 24, 48",
+          { "1 kHz のベル +9 dB（傾き 12）を聴く", "浮き窓の SLOPE を 24、48 に変え、頭が平らに、裾が急になるのを見る", "Q を動かして、平らな部分の幅が変わるのを確かめる", "Phase を見て、48 では山の両端で位相が大きく回るのを確かめる" },
+          { "Listen to a +9 dB bell at 1 kHz (slope 12)", "Set SLOPE in the floating panel to 24 and 48: the top flattens and the sides steepen", "Move Q and watch the width of the flat part change", "Watch the phase: with 48 it turns hard at both edges" },
+          "帯域をまとめて持ち上げたいがその外は触りたくない時に、平らな頭と急な裾が役に立つ。代わりに位相の回りは大きくなる", "A flat top and steep sides help when you want to lift a whole range and leave the rest untouched; the phase turns more in return",
+          0, -1, 0, { { true, T::Bell, 1000, 9, 1, 3 } }, 0, {}, { { "b1_bslope", 0 } } },
     };
     return L;
 }

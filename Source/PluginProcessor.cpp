@@ -67,7 +67,9 @@ std::array<IIRChain::Target, eqcore::kBands> EQAnatomyProcessor::targets() const
         auto v = [&] (const char* w) { return apvts.getRawParameterValue (pid::band (i, w))->load(); };
         const int ch = (int) v ("ch");
         const int mask = (! zero || v ("phase") > 0.5f) ? 0 : (ch == 0 ? 3 : ch == 1 ? 1 : ch == 2 ? 2 : ch == 3 ? 4 : 8);   // only zero-latency min bands run as IIR
-        t[(size_t) i] = { v ("on") > 0.5f, (eqcore::Type) (int) v ("type"), (int) v ("slope"), (double) v ("freq"), (double) v ("gain"), (double) v ("q"), mask };
+        const auto ty = (eqcore::Type) (int) v ("type");
+        const int sl = ty == eqcore::Type::Bell ? (int) v ("bslope") : (int) v ("slope");     // a bell carries its own slope (12 / 24 / 48)
+        t[(size_t) i] = { v ("on") > 0.5f, ty, sl, (double) v ("freq"), (double) v ("gain"), (double) v ("q"), mask };
     }
     return t;
 }
@@ -80,7 +82,7 @@ std::array<eqcore::Band, eqcore::kBands> EQAnatomyProcessor::currentBands() cons
         auto v = [&] (const char* w) { return apvts.getRawParameterValue (pid::band (i, w))->load(); };
         auto& x = b[(size_t) i];
         x.on = v ("on") > 0.5f; x.type = (eqcore::Type) (int) v ("type"); x.f = v ("freq"); x.g = v ("gain"); x.q = v ("q");
-        x.slope = (int) v ("slope"); x.lin = v ("phase") > 0.5f; x.ch = (int) v ("ch");
+        x.slope = x.type == eqcore::Type::Bell ? (int) v ("bslope") : (int) v ("slope"); x.lin = v ("phase") > 0.5f; x.ch = (int) v ("ch");
     }
     return b;
 }
@@ -98,6 +100,8 @@ void EQAnatomyProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     for (auto& d : postDelay) d.prepare (256);
     maskDelay.prepare (eqcore::linearTaps (2) / 2 + 64 + 512 + ResSuppressor::latency());
     rs.prepare (sampleRate); player.prepare (sampleRate);
+    for (auto& d : scDelay) d.prepare (eqcore::linearTaps (2) / 2 + 64);
+    for (auto& b : scBuf) b.assign ((size_t) samplesPerBlock, 0.0f);
     for (int i = 0; i < pid::kRsNodes; ++i) { rsNodeP[(size_t) (2 * i)] = apvts.getRawParameterValue (pid::rsNode (i, "f")); rsNodeP[(size_t) (2 * i + 1)] = apvts.getRawParameterValue (pid::rsNode (i, "g")); } for (auto& d : rsDelay) d.prepare (ResSuppressor::latency() + 8);
     svC = 1.0 - std::exp (-1.0 / (sampleRate * 0.003)); svG[0] = 1.0; for (int k = 1; k < 5; ++k) svG[k] = 0.0;
     maskBuf.assign ((size_t) samplesPerBlock, 0.0); maskDel.assign ((size_t) samplesPerBlock, 0.0);
@@ -392,9 +396,21 @@ void EQAnatomyProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
             for (int i = 0; i < pid::kRsNodes; ++i) { nd.f[(size_t) i] = rsNodeP[(size_t) (2 * i)]->load(); nd.g[(size_t) i] = rsNodeP[(size_t) (2 * i + 1)]->load(); }
             rs.setNodes (nd);
         }
-        rs.setParams (P (pid::rsDepth), P (pid::rsThr), P (pid::rsLo), P (pid::rsHi), P (pid::rsSel), P (pid::rsAtt), P (pid::rsRel), P (pid::rsDelta) > 0.5f);
+        rs.setParams (P (pid::rsDepth), P (pid::rsThr), P (pid::rsLo), P (pid::rsHi), P (pid::rsSel), P (pid::rsAtt), P (pid::rsRel), P (pid::rsDelta) > 0.5f,
+                      (int) P (pid::rsMode), P (pid::rsSc) > 0.5f);
         const bool run = activeRsLat > 0 && P (pid::rsOn) > 0.5f && ! bypass && ! delta && ! solo && ! ear;
-        if (run) { if (! rsWasOn) rs.reset(); rs.process (oL, oR, n); }
+        if (run)
+        {
+            if (! rsWasOn) rs.reset();
+            const float* sl = nullptr; const float* sr2 = nullptr;
+            if (scL != nullptr && P (pid::rsSc) > 0.5f)
+            {
+                for (auto& b : scBuf) if ((int) b.size() < n) b.resize ((size_t) n);
+                for (int i = 0; i < n; ++i) { scBuf[0][(size_t) i] = scDelay[0].process (scL[i], activeKernelLat); scBuf[1][(size_t) i] = scDelay[1].process (scR[i], activeKernelLat); }
+                sl = scBuf[0].data(); sr2 = scBuf[1].data();
+            }
+            rs.process (oL, oR, n, sl, sr2);
+        }
         else
         {
             if (rsWasOn) for (auto& d : rs.dispDb) d = 0.0f;
@@ -703,8 +719,52 @@ void EQAnatomyProcessor::resetToFlat()
     soloBand = -1;
 }
 
+juce::File EQAnatomyProcessor::userPresetDir()
+{
+    return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile ("JPK").getChildFile ("EQ Anatomy Lab 2").getChildFile ("Presets");
+}
+juce::Array<juce::File> EQAnatomyProcessor::userPresets() const
+{
+    auto a = userPresetDir().findChildFiles (juce::File::findFiles, false, "*.xml");
+    std::sort (a.begin(), a.end(), [] (const juce::File& x, const juce::File& y) { return x.getFileNameWithoutExtension().compareNatural (y.getFileNameWithoutExtension()) < 0; });
+    return a;
+}
+bool EQAnatomyProcessor::saveUserPreset (const juce::String& name, const juce::String& note)
+{
+    const auto clean = juce::File::createLegalFileName (name.trim());
+    if (clean.isEmpty()) return false;
+    juce::XmlElement x ("EQAnatomyLab2Preset");
+    x.setAttribute ("name", name.trim()); x.setAttribute ("note", note);
+    for (auto* p : getParameters())
+        if (auto* r = dynamic_cast<juce::RangedAudioParameter*> (p))
+        {
+            const auto id = r->getParameterID();
+            if (id == pid::bypass || id == pid::delta || id == pid::preSolo) continue;
+            auto* e = x.createNewChildElement ("P"); e->setAttribute ("id", id); e->setAttribute ("v", (double) r->convertFrom0to1 (r->getValue()));
+        }
+    userPresetDir().createDirectory();
+    if (! x.writeTo (userPresetDir().getChildFile (clean + ".xml"))) return false;
+    uiState.setProperty ("preset", -1, nullptr); uiState.setProperty ("userPreset", name.trim(), nullptr);
+    return true;
+}
+bool EQAnatomyProcessor::loadUserPreset (const juce::File& f)
+{
+    auto x = juce::XmlDocument::parse (f);
+    if (x == nullptr || ! x->hasTagName ("EQAnatomyLab2Preset")) return false;
+    undo.beginNewTransaction();
+    resetToFlat();                    // parameters a preset does not mention go back to their defaults
+    for (auto* e : x->getChildWithTagNameIterator ("P"))
+        if (auto* p = apvts.getParameter (e->getStringAttribute ("id")))
+        { p->beginChangeGesture(); p->setValueNotifyingHost (p->convertTo0to1 ((float) e->getDoubleAttribute ("v"))); p->endChangeGesture(); }
+    uiState.setProperty ("preset", -1, nullptr);
+    uiState.setProperty ("userPreset", x->getStringAttribute ("name", f.getFileNameWithoutExtension()), nullptr);
+    uiState.setProperty ("userPresetNote", x->getStringAttribute ("note"), nullptr);
+    return true;
+}
+
 void EQAnatomyProcessor::applyPreset (int index)
 {
+    uiState.setProperty ("userPreset", juce::String(), nullptr); uiState.setProperty ("userPresetNote", juce::String(), nullptr);
     undo.beginNewTransaction();
     const auto& P = presets();
     auto apply = [this] (const PresetSlot& s)
@@ -755,6 +815,7 @@ void EQAnatomyProcessor::applyLesson (int index)
         set (pid::band (i, "phase"), 0); set (pid::band (i, "ch"), 0); set (pid::band (i, "tb"), 0);
         set (pid::band (i, "below"), 0); set (pid::band (i, "src"), 0);
         set (pid::band (i, "att"), 5.0f); set (pid::band (i, "rel"), 120.0f); set (pid::band (i, "knee"), 12.0f);   // lessons use the original detector
+        set (pid::band (i, "bslope"), 0.0f);
         if (i < (int) ls.bands.size())
         {
             const auto& b = ls.bands[(size_t) i];
@@ -784,6 +845,12 @@ void EQAnatomyProcessor::applyLesson (int index)
         set (pid::satType, (float) ls.sat.type); set (pid::satLo, ls.sat.lo); set (pid::satHi, ls.sat.hi);
         set (pid::satDrive, ls.sat.drive); set (pid::satMix, ls.sat.mix); set (pid::satOS, (float) ls.sat.os);
     }
+    // the suppressor back to its defaults (off), then whatever the lesson adds
+    for (auto* id : { pid::rsOn, pid::rsDepth, pid::rsThr, pid::rsLo, pid::rsHi, pid::rsSel, pid::rsAtt, pid::rsRel, pid::rsDelta, pid::rsMode, pid::rsSc })
+        if (auto* p = apvts.getParameter (id)) { p->beginChangeGesture(); p->setValueNotifyingHost (p->getDefaultValue()); p->endChangeGesture(); }
+    for (int i = 0; i < pid::kRsNodes; ++i)
+        for (auto* w : { "f", "g" }) if (auto* p = apvts.getParameter (pid::rsNode (i, w))) { p->beginChangeGesture(); p->setValueNotifyingHost (p->getDefaultValue()); p->endChangeGesture(); }
+    for (auto& [id, v] : ls.extra) set (id, v);
     uiState.setProperty ("lesson", index, nullptr);
     uiState.setProperty ("selected", ls.select, nullptr);
 }

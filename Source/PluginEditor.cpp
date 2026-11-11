@@ -13,8 +13,8 @@ EQAnatomyView::EQAnatomyView (EQAnatomyProcessor& p) : proc (p)
     for (int i = 0; i < theme::numSurfaces(); ++i) zoom.surfaceNames.add (theme::surfaceName (i));
     zoom.getSurface = [] { return theme::surface; };
     zoom.setSurface = [this] (int i) { applySurface (i); };
-    for (const char* n : { "+-6", "+-12", "+-20 (default)", "+-30" }) zoom.scaleNames.add (n);
-    zoom.getScale = [] { return juce::jlimit (0, 3, ZoomPrefs::file().getIntValue ("eqanatomy2.gscale", 2)); };
+    for (const char* n : { "+-3 (default)", "+-6", "+-12", "+-20", "+-30" }) zoom.scaleNames.add (n);
+    zoom.getScale = [] { return juce::jlimit (0, 4, ZoomPrefs::file().getIntValue ("eqanatomy2.gscale3", 0)); };
     zoom.setScale = [this] (int i) { applyScale (i); };
     applyScale (zoom.getScale());
     setLookAndFeel (&lnf);
@@ -110,8 +110,26 @@ EQAnatomyView::EQAnatomyView (EQAnatomyProcessor& p) : proc (p)
                     sub.addItem (100 + i, juce::String::fromUTF8 (ja ? P[(size_t) i].nameJa : P[(size_t) i].nameEn), true, i == cur);
             if (sub.getNumItems() > 0) m.addSubMenu (juce::String::fromUTF8 (presetCategoryName (c, ja)), sub);
         }
-        m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&resetBtn), [this] (int r)
+        // user presets
+        const auto users = proc.userPresets();
+        const auto curUser = proc.uiState.getProperty ("userPreset", "").toString();
+        m.addSeparator();
+        m.addSectionHeader (ja ? juce::String::fromUTF8 ("ユーザープリセット") : juce::String ("User presets"));
+        for (int i = 0; i < users.size(); ++i)
+            m.addItem (1000 + i, users[i].getFileNameWithoutExtension(), true, users[i].getFileNameWithoutExtension() == juce::File::createLegalFileName (curUser));
+        if (users.isEmpty()) m.addItem (-1, ja ? juce::String::fromUTF8 ("（まだありません）") : juce::String ("(none yet)"), false);
+        juce::PopupMenu manage;
+        manage.addItem (2, ja ? juce::String::fromUTF8 ("今の設定を新しく保存…") : juce::String ("Save current settings as…"));
+        manage.addItem (3, (ja ? juce::String::fromUTF8 ("上書き保存：") : juce::String ("Overwrite: ")) + (curUser.isEmpty() ? juce::String::fromUTF8 ("\xe2\x80\x94") : curUser), curUser.isNotEmpty());
+        manage.addItem (4, (ja ? juce::String::fromUTF8 ("名前とメモを変更：") : juce::String ("Rename / edit note: ")) + (curUser.isEmpty() ? juce::String::fromUTF8 ("\xe2\x80\x94") : curUser), curUser.isNotEmpty());
+        manage.addItem (5, (ja ? juce::String::fromUTF8 ("削除：") : juce::String ("Delete: ")) + (curUser.isEmpty() ? juce::String::fromUTF8 ("\xe2\x80\x94") : curUser), curUser.isNotEmpty());
+        manage.addSeparator();
+        manage.addItem (6, ja ? juce::String::fromUTF8 ("保存フォルダを開く") : juce::String ("Show the preset folder"));
+        m.addSubMenu (ja ? juce::String::fromUTF8 ("保存・編集") : juce::String ("Save / edit"), manage);
+        m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&resetBtn), [this, users] (int r)
         {
+            if (r >= 1000 && r - 1000 < users.size()) { proc.loadUserPreset (users[r - 1000]); morph.setValue (0.0, juce::dontSendNotification); return; }
+            if (r >= 2 && r <= 6) { userPresetAction (r); return; }
             if (r == 1) proc.applyPreset (-1);
             else if (r >= 100) proc.applyPreset (r - 100);
             morph.setValue (0.0, juce::dontSendNotification);
@@ -120,13 +138,10 @@ EQAnatomyView::EQAnatomyView (EQAnatomyProcessor& p) : proc (p)
     for (juce::TextButton* b : { &resBtn, (juce::TextButton*) &learnBtn, &langBtn, &resetBtn, &undoBtn, &redoBtn, &earBtn, &morphTo })
         addAndMakeVisible (*b);
     addAndMakeVisible (curveBox); addAndMakeVisible (morph);
-    paramToggle (autoBtn, pid::autoGain);
     paramToggle (deltaBtn, pid::delta);
     paramToggle (bypassBtn, pid::bypass);
-    paramToggle (soloBtn, pid::preSolo);
-    soloBtn.setColour (juce::TextButton::buttonOnColourId, theme::pre);
 
-    addAndMakeVisible (graph); addAndMakeVisible (satStrip); addChildComponent (resStrip); addAndMakeVisible (detail); addAndMakeVisible (irView);
+    addAndMakeVisible (graph); addAndMakeVisible (satStrip); addChildComponent (resStrip); addAndMakeVisible (irView);
     addAndMakeVisible (outDrag); addAndMakeVisible (viewSolo); addAndMakeVisible (lesson); addAndMakeVisible (io); addChildComponent (earCard);
 
     addAndMakeVisible (zoom);
@@ -149,11 +164,9 @@ EQAnatomyView::EQAnatomyView (EQAnatomyProcessor& p) : proc (p)
     setHelp (learnBtn, "LEARN", "クリック：レッスン 1 を表示（もう一度でヘルプへ）。長押し：全レッスンの一覧から選ぶ。クリックでレッスン一覧（全タイトル）。選ぶとそのレッスンを表示。EAR とは同時に使えない（片方を選ぶともう片方は閉じる）。「レッスンを閉じる」にすると、この欄に方式とマウス操作、ポインターを置いた部分の説明が出る", "Click: lesson 1 (again: back to help). Long press: the list of every lesson. Not at the same time as EAR (choosing one closes the other). \"Close lessons\" shows the mode, mouse controls and help for whatever you point at here");
     setHelp (langBtn, "LANGUAGE", "説明とレッスンの言語（日本語 / English）", "Language of help and lessons");
     setHelp (zoom, "SIZE / LOOK", "画面の大きさ、外観（10種類）、隙間の質感（6種類）。大きさは右下の角のドラッグでも変えられる。外観と質感はこの Mac のすべてのインスタンスで共通", "Window size, look (ten skins) and surface texture for the gaps (six). Drag the bottom-right corner to resize. Look and surface are shared by every instance on this computer");
-    setHelp (autoBtn, "AUTO GAIN", "EQ による音量変化を打ち消して、音色の違いだけを比べる", "Cancels the level change of the EQ so you compare tone only");
     setHelp (deltaBtn, "DELTA", "EQ で変わった成分だけを聴く（出力 − 原音）。グラフに赤い破線で |H − 1| を表示。注意：位相が 60° 以上回る帯域や +6 dB を超えるブーストでは、原音より大きく聴こえる（異常ではない）",
              "Hear only what the EQ changed (output minus input); the red dashed line shows |H − 1|. Careful: where the phase turns more than 60°, or boosts exceed +6 dB, it is louder than the input — that is expected");
     setHelp (bypassBtn, "BYPASS", "EQ を通さない原音（レイテンシーはそろえたまま）", "The unprocessed signal (latency kept aligned)");
-    setHelp (soloBtn, "PRE-RING SOLO", "リニア位相のプリリンギング（音より前に出る成分）だけを聴く。Lin のバンドがあるときに働く", "Hear only the linear-phase pre-ringing, the part before the sound (needs a Lin band)");
     addMouseListener (this, true);
     setWantsKeyboardFocus (true);
     setSize (1160, 760);
@@ -195,10 +208,55 @@ void EQAnatomyView::applySurface (int i)
 
 void EQAnatomyView::applyScale (int i)
 {
-    i = juce::jlimit (0, 3, i);
-    ZoomPrefs::file().setValue ("eqanatomy2.gscale", i); ZoomPrefs::file().saveIfNeeded();
-    graph.setDbRange (i == 0 ? 6.0f : i == 1 ? 12.0f : i == 2 ? 20.0f : 30.0f);
+    i = juce::jlimit (0, 4, i);
+    ZoomPrefs::file().setValue ("eqanatomy2.gscale3", i); ZoomPrefs::file().saveIfNeeded();
+    static const float r[] = { 3.0f, 6.0f, 12.0f, 20.0f, 30.0f };
+    graph.setDbRange (r[i]);
     repaint();
+}
+
+// user presets: save as / overwrite / rename + note / delete / show folder
+void EQAnatomyView::userPresetAction (int r)
+{
+    const bool ja = ph.ja();
+    const auto cur = proc.uiState.getProperty ("userPreset", "").toString();
+    const auto note = proc.uiState.getProperty ("userPresetNote", "").toString();
+    if (r == 6) { auto d = EQAnatomyProcessor::userPresetDir(); d.createDirectory(); d.revealToUser(); return; }
+    if (r == 3) { proc.saveUserPreset (cur, note); return; }
+    if (r == 5)
+    {
+        auto opts = juce::MessageBoxOptions().withIconType (juce::MessageBoxIconType::WarningIcon)
+                        .withTitle (ja ? juce::String::fromUTF8 ("プリセットを削除") : juce::String ("Delete preset"))
+                        .withMessage ((ja ? juce::String::fromUTF8 ("ゴミ箱に移します：") : juce::String ("Move to the Trash: ")) + cur)
+                        .withButton (ja ? juce::String::fromUTF8 ("削除") : juce::String ("Delete")).withButton (ja ? juce::String::fromUTF8 ("キャンセル") : juce::String ("Cancel"))
+                        .withAssociatedComponent (this);
+        juce::AlertWindow::showAsync (opts, [this, cur] (int b)
+        {
+            if (b != 1) return;
+            EQAnatomyProcessor::userPresetDir().getChildFile (juce::File::createLegalFileName (cur) + ".xml").moveToTrash();
+            proc.uiState.setProperty ("userPreset", juce::String(), nullptr); proc.uiState.setProperty ("userPresetNote", juce::String(), nullptr);
+        });
+        return;
+    }
+    // 2 = save as, 4 = rename / edit note: ask for a name and a note
+    auto* w = new juce::AlertWindow (r == 2 ? (ja ? juce::String::fromUTF8 ("ユーザープリセットを保存") : juce::String ("Save user preset"))
+                                            : (ja ? juce::String::fromUTF8 ("名前とメモを変更") : juce::String ("Rename / edit note")),
+                                     ja ? juce::String::fromUTF8 ("名前と、用途のメモ（説明欄に出る）") : juce::String ("A name, and a note on what it is for (shown in the text panel)"),
+                                     juce::MessageBoxIconType::NoIcon, this);
+    w->addTextEditor ("name", r == 2 ? juce::String() : cur, ja ? juce::String::fromUTF8 ("名前") : juce::String ("Name"));
+    w->addTextEditor ("note", r == 2 ? juce::String() : note, ja ? juce::String::fromUTF8 ("メモ") : juce::String ("Note"));
+    w->addButton ("OK", 1, juce::KeyPress (juce::KeyPress::returnKey));
+    w->addButton (ja ? juce::String::fromUTF8 ("キャンセル") : juce::String ("Cancel"), 0, juce::KeyPress (juce::KeyPress::escapeKey));
+    w->enterModalState (true, juce::ModalCallbackFunction::create ([this, w, r, cur] (int b)
+    {
+        if (b != 1) return;
+        const auto name = w->getTextEditorContents ("name").trim(), nt = w->getTextEditorContents ("note");
+        if (name.isEmpty()) return;
+        auto dst = EQAnatomyProcessor::userPresetDir().getChildFile (juce::File::createLegalFileName (name) + ".xml");
+        if (r == 4 && name != cur) EQAnatomyProcessor::userPresetDir().getChildFile (juce::File::createLegalFileName (cur) + ".xml").moveFileTo (dst);
+        proc.saveUserPreset (name, nt);
+        proc.uiState.setProperty ("userPresetNote", nt, nullptr);
+    }), true);
 }
 
 bool EQAnatomyView::lowerOpen() const { return (bool) proc.uiState.getProperty ("lowerOpen", true); }
@@ -238,7 +296,6 @@ void EQAnatomyView::refreshTexts()
     undoBtn.setEnabled (proc.undo.canUndo()); redoBtn.setEnabled (proc.undo.canRedo());
     undoBtn.setAlpha (proc.undo.canUndo() ? 1.0f : 0.4f); redoBtn.setAlpha (proc.undo.canRedo() ? 1.0f : 0.4f);
     morph.setColour (juce::Slider::thumbColourId, theme::accent); morph.setColour (juce::Slider::trackColourId, theme::accent.withAlpha (0.4f));
-    soloBtn.setColour (juce::TextButton::buttonOnColourId, theme::pre);
     earBtn.setButtonText ("EAR"); earBtn.setToggleState (proc.earActive(), juce::dontSendNotification);
     learnBtn.setButtonText ("Learn");
     helpBtn.setButtonText ("Panel"); helpBtn.setClickingTogglesState (false);
@@ -247,19 +304,16 @@ void EQAnatomyView::refreshTexts()
     langBtn.setButtonText (ph.ja() ? "EN" : juce::String::fromUTF8 ("日本語"));
     {
         const int pi = (int) proc.uiState.getProperty ("preset", -1);
-        resetBtn.setButtonText (pi >= 0 && pi < (int) presets().size() ? juce::String (presets()[(size_t) pi].nameEn) : juce::String::fromUTF8 ("\xe2\x80\x94"));
+        const auto up = proc.uiState.getProperty ("userPreset", "").toString();
+        resetBtn.setButtonText (pi >= 0 && pi < (int) presets().size() ? juce::String (presets()[(size_t) pi].nameEn)
+                                : up.isNotEmpty() ? juce::String::fromUTF8 ("★ ") + up : juce::String::fromUTF8 ("\xe2\x80\x94"));
         resetBtn.getProperties().set ("chevron", 1);
     }
-    autoBtn.getProperties().set ("fontPx", 11.0);
-    autoBtn.setButtonText (ph.value (pid::autoGain) > 0.5f ? "Auto gain " + fmtDb (proc.currentAutoGainDb()) + " dB" : juce::String ("Auto gain"));
     deltaBtn.setButtonText ("Delta");
     bypassBtn.setButtonText ("Bypass");
-    soloBtn.setButtonText ("Pre-ring solo");
-    autoBtn.setToggleState (ph.value (pid::autoGain) > 0.5f, juce::dontSendNotification);
     deltaBtn.setToggleState (ph.value (pid::delta) > 0.5f, juce::dontSendNotification);
     bypassBtn.setToggleState (ph.value (pid::bypass) > 0.5f, juce::dontSendNotification);
-    soloBtn.setToggleState (ph.value (pid::preSolo) > 0.5f, juce::dontSendNotification);
-    soloBtn.setAlpha (anyLin ? 1.0f : 0.4f);
+    juce::ignoreUnused (anyLin);
     lesson.refreshTexts();
     if (earCard.isVisible()) earCard.refresh();
 }
@@ -335,7 +389,6 @@ void EQAnatomyView::resized()
     graph.setBounds (12, 54, 1076, gh);
     io.setBounds (1096, 54, 52, gh);
     const bool ear = proc.earActive();
-    detail.setVisible (false);                     // its settings now open in the floating panel (▾)
     satStrip.setBounds (12, y, 180, h); resStrip.setBounds (12, y, 180, h);
     {
         const bool rsTab = (int) proc.uiState.getProperty ("postTab", 0) == 1;
@@ -343,7 +396,7 @@ void EQAnatomyView::resized()
         satTab.setVisible (! ear && lower); resTab.setVisible (! ear && lower);
         satStrip.setVisible (! ear && lower && ! rsTab); resStrip.setVisible (! ear && lower && rsTab);
     }
-    for (auto* c : { (juce::Component*) &detail, (juce::Component*) &irView, (juce::Component*) &outDrag, (juce::Component*) &autoBtn,
+    for (auto* c : { (juce::Component*) &irView, (juce::Component*) &outDrag,
                      (juce::Component*) &deltaBtn, (juce::Component*) &viewSolo, (juce::Component*) &bypassBtn, (juce::Component*) &lesson,
                      (juce::Component*) &satStrip })
         c->setVisible (! ear && lower);
@@ -351,7 +404,6 @@ void EQAnatomyView::resized()
         const bool rsTab = (int) proc.uiState.getProperty ("postTab", 0) == 1;
         satStrip.setVisible (! ear && lower && ! rsTab); resStrip.setVisible (! ear && lower && rsTab);
     }
-    detail.setVisible (false);
     earCard.setVisible (ear && lower);
     earCard.setBounds (12, y, getWidth() - 24, h);
     irView.setBounds (200, y, 120, h);
@@ -362,9 +414,7 @@ void EQAnatomyView::resized()
     latRect = row (0);
     viewSolo.setBounds (row (1));
     outDrag.setBounds (row (2));
-    autoBtn.setVisible (false);
     { auto r = row (3); deltaBtn.setBounds (r.removeFromLeft (bw / 2 - 2)); r.removeFromLeft (4); bypassBtn.setBounds (r); }
-    soloBtn.setVisible (false);                    // pre-ring solo is the P cell of SOLO
     lesson.setBounds (328, y, bx - 8 - 328, h);
 }
 
@@ -584,7 +634,6 @@ void EQAnatomyView::timerCallback()
         const bool rsTab = (int) proc.uiState.getProperty ("postTab", 0) == 1;
         satTab.repaint(); resTab.repaint(); juce::ignoreUnused (rsTab);
     }
-    if (detail.isVisible()) detail.refresh (ph.selected());
     irView.refresh();
     outDrag.repaint();
     viewSolo.repaint();

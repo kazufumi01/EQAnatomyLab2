@@ -44,6 +44,8 @@ static const char* rsSel = "rs_sel";        // selectivity, %: 0 = broad bumps c
 static const char* rsAtt = "rs_att";        // ms
 static const char* rsRel = "rs_rel";        // ms
 static const char* rsDelta = "rs_delta";    // hear only what is removed
+static const char* rsMode = "rs_mode";      // 0 Stereo (linked), 1 Mid, 2 Side, 3 M/S (each on its own)
+static const char* rsSc = "rs_sc";          // detect from the sidechain input
 // the threshold curve: five nodes, each a frequency and an offset (dB) added to THRESHOLD; straight lines in log frequency between them
 inline juce::String rsNode (int i, const char* what) { return "rs_n" + juce::String (i + 1) + "_" + what; }
 constexpr int kRsNodes = 5;
@@ -181,5 +183,11 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
             l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::rsNode (i, "g"), 5 }, n + "offset", NormalisableRange<float> (-12.0f, 12.0f, 0.1f), 0.0f, AudioParameterFloatAttributes().withLabel ("dB")));
         }
     }
+    // ---- Lab 2: the bell's slope (12 = the usual bell, 24 / 48 = band shelf with a flat top). Apart from "slope" so bells stay 12 ----
+    for (int i = 0; i < eqcore::kBands; ++i)
+        l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::band (i, "bslope"), 6 }, "Band " + String (i + 1) + " Bell slope", StringArray { "12", "24", "48" }, 0));
+    // ---- Lab 2: the suppressor's channels and its sidechain detection ----
+    l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::rsMode, 6 }, "Res channels", StringArray { "Stereo", "Mid", "Side", "M/S" }, 0));
+    l.add (std::make_unique<AudioParameterBool> (ParameterID { pid::rsSc, 6 }, "Res sidechain detect", false));
     return l;
 }

@@ -40,6 +40,7 @@ private:
     juce::Slider morph;
     void setEar (bool on);
     bool lowerOpen() const; void setLower (bool on);
+    void userPresetAction (int r);
     juce::Rectangle<int> latRect, presetGroup;
     void applySkin (int i);
     void applySurface (int i);
@@ -49,11 +50,10 @@ private:
     SatStrip satStrip { ph };
     ResStrip resStrip { ph };
     ModuleTab satTab { ph, pid::satOn, 0, "SAT", theme::sat }, resTab { ph, pid::rsOn, 1, "RES", theme::res };   // SAT | RES share the lower-left slot
-    BandPopup detail { ph, true };     // the selected band's detail panel (replaces the band cards)
     IRView irView { ph };
     OutputDrag outDrag { ph };
     SoloView viewSolo { ph };
-    juce::TextButton autoBtn, deltaBtn, bypassBtn, soloBtn;
+    juce::TextButton deltaBtn, bypassBtn;
     LessonCard lesson { ph };
     IOMeter io { ph };
     EarCard earCard { ph };

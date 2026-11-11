@@ -144,6 +144,32 @@ inline const std::vector<PresetDef>& presetDefs()
           2, { { "b2_on", 1 }, { "b2_type", 1 }, { "b2_freq", 100 }, { "b2_gain", 6 }, { "b2_q", 0.7f },
                { "b3_on", 1 }, { "b3_type", 0 }, { "b3_freq", 1000 }, { "b3_gain", 6 }, { "b3_q", 1 } },
           { { { "qmode", 0 } }, { { "qmode", 2 } }, { { "qmode", 3 } }, { { "qmode", 5 } } } },
+
+        // ---------------------------------------------------------------- Lab 2: resonance suppressor
+        { 0, "ボーカルの耳障りな共鳴（RES）", "Vocal harshness tamer (RES)",
+          "声の 2〜8 kHz で、音程や母音によって出たり消えたりする刺さる共鳴を、出た瞬間だけ下げる", "Turns down the piercing resonances in the 2–8 kHz range that come and go with pitch and vowel, only while they ring",
+          "RES タブの THRESH を下げていき、Δ で削れている音が「キン」「ジー」だけになる所で止める", "Lower THRESH on the RES tab until Δ plays only the 'ting' and 'zz', then stop",
+          "Δ に声の芯（母音）が聞こえたら削りすぎ。DEPTH は 6 dB まで", "If Δ carries the core of the voice (the vowels), it is too much. Keep DEPTH at 6 dB or less",
+          -1, { { "rs_on", 1 }, { "rs_mode", 1 }, { "rs_depth", 6 }, { "rs_thr", 6 }, { "rs_lo", 1500 }, { "rs_hi", 9000 }, { "rs_sel", 60 }, { "rs_att", 5 }, { "rs_rel", 120 },
+                { "b1_on", 1 }, { "b1_type", 3 }, { "b1_freq", 90 }, { "b1_slope", 2 }, { "b1_q", 0.707f } }, {} },
+
+        { 1, "アコギ・ピアノの鳴りすぎ（RES・Mid）", "Acoustic guitar / piano boom and ring (RES, Mid)",
+          "胴鳴りや弦の共鳴が特定の音でだけ膨らむのを、センターだけで抑える（広がりは触らない）", "Holds down body and string resonances that swell on certain notes, in the centre only (the width is left alone)",
+          "SELECT を 40〜80 % で動かし、膨らむ音だけが白い山として突き出る位置を探す（Resonance ボタンで見る）", "Move SELECT between 40 and 80 % until only the swelling notes stick out as white peaks (watch with the Resonance button)",
+          "REL が短いと音程の切り替わりで揺れる。200 ms 前後から", "A short REL flutters as notes change; start around 200 ms",
+          -1, { { "rs_on", 1 }, { "rs_mode", 1 }, { "rs_depth", 4 }, { "rs_thr", 5 }, { "rs_lo", 120 }, { "rs_hi", 3000 }, { "rs_sel", 65 }, { "rs_att", 10 }, { "rs_rel", 250 } }, {} },
+
+        { 3, "マスターの共鳴を薄く（RES・M/S）", "Light resonance control on the master (RES, M/S)",
+          "ミックス全体の、特定の音で出る耳障りな帯域を、センターとサイドで別々に、ごく薄く整える", "Gently evens out harsh spots that pop out on certain notes across the whole mix, centre and sides separately",
+          "DEPTH 2〜3 dB のまま THRESH を下げ、Δ が小さく「チリチリ」聞こえる程度で止める", "Keep DEPTH at 2–3 dB and lower THRESH until Δ is a faint fizz, then stop",
+          "マスターでは 3 dB を超えない。RES の遅延（約 21 ms）が加わる", "On the master, stay under 3 dB. RES adds about 21 ms of latency",
+          -1, { { "rs_on", 1 }, { "rs_mode", 3 }, { "rs_depth", 3 }, { "rs_thr", 8 }, { "rs_lo", 200 }, { "rs_hi", 12000 }, { "rs_sel", 50 }, { "rs_att", 20 }, { "rs_rel", 300 } }, {} },
+
+        { 4, "ボーカルに場所を空ける（RES・サイドチェイン）", "Make room for the vocal (RES, sidechain)",
+          "ギターやシンセに挿し、ボーカルが鳴っている帯域だけを、その瞬間だけ空ける", "On a guitar or synth: clears only the frequencies the vocal is using, only while it sings",
+          "ホストのサイドチェイン欄でボーカルを入力元にし、THRESH を下げて、ボーカルが入った時だけピンクの面が出る所にする", "Pick the vocal as the host's sidechain source, then lower THRESH until the pink area appears only while the vocal sings",
+          "SELECT を下げると広い帯域を譲る（0 % に近いほどダイナミック EQ に近い）。DEPTH は 4〜6 dB", "Lower SELECT gives way over wider bands (near 0 % it acts like a dynamic EQ). DEPTH 4–6 dB",
+          -1, { { "rs_on", 1 }, { "rs_mode", 0 }, { "rs_sc", 1 }, { "rs_depth", 5 }, { "rs_thr", 2 }, { "rs_lo", 250 }, { "rs_hi", 6000 }, { "rs_sel", 20 }, { "rs_att", 5 }, { "rs_rel", 150 } }, {} },
     };
     return P;
 }

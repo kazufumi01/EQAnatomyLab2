@@ -122,7 +122,30 @@ inline void sectionsFor (const Band& b, QMode qm, std::vector<Section>& out)
     const double A = std::pow (10.0, b.g / 40.0), Q = std::max (0.025, effectiveQ (b, qm)), F = effectiveF (b, qm);
     switch (b.type)
     {
-        case Type::Bell:      out.push_back ({ Sec::Bell, A, Q, F }); break;
+        // Bell: slope 0 = the usual second-order bell (12). 1 / 2 = a band shelf (24 / 48): a high shelf up at the lower edge and
+        // a high shelf back down at the upper edge, so the top is flat and the sides steeper. The edges sit half a bell
+        // bandwidth either side of f (BW from Q), and the shelf gains are trimmed so the middle reaches the set gain.
+        // 24: second-order shelves (Q 0.7071). 48: each shelf is two second-order stages (Butterworth Q 0.5412 / 1.3066).
+        case Type::Bell:
+        {
+            const int bs = std::clamp (b.slope, 0, 2);
+            if (bs == 0 || std::abs (b.g) < 1e-6) { out.push_back ({ Sec::Bell, A, Q, F }); break; }
+            const double bw = 2.0 / std::log (2.0) * std::asinh (1.0 / (2.0 * Q));            // octaves, as a bell's Q
+            const double fl = F * std::pow (2.0, -bw / 2.0), fh = F * std::pow (2.0, bw / 2.0);
+            const std::vector<double> qs = bs == 1 ? std::vector<double> { 0.7071 } : std::vector<double> { 0.5412, 1.3066 };
+            double gs = b.g;
+            const size_t first = out.size();
+            for (int it = 0; it < 4; ++it)
+            {
+                out.resize (first);
+                const double a = std::pow (10.0, gs / (40.0 * (double) qs.size()));
+                for (double qq : qs) { out.push_back ({ Sec::HS, a, qq, fl }); out.push_back ({ Sec::HS, 1.0 / a, qq, fh }); }
+                cplx h = 1.0; for (size_t s = first; s < out.size(); ++s) h *= analogSectionFwd (out[s], F / out[s].f0);
+                const double mid = 20.0 * std::log10 (std::max (1e-9, std::abs (h)));
+                if (std::abs (mid) < 1e-9) break;
+                gs *= b.g / mid;
+            }
+        } break;
         // shelves: slope index 0 = first order (6 dB/oct, Q has no effect); any other value = the second-order shelf (12 dB/oct, as before)
         case Type::LowShelf:  out.push_back ({ b.slope == 0 ? Sec::LS1 : Sec::LS, A, Q, F }); break;
         case Type::HighShelf: out.push_back ({ b.slope == 0 ? Sec::HS1 : Sec::HS, A, Q, F }); break;

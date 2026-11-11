@@ -331,6 +331,11 @@ public:
     void morph (int from, int to, float t);     // writes interpolated parameters
     void applyLesson (int index);
     void applyPreset (int index);               // −1 = flat
+    // user presets: one XML file per preset (every parameter except Bypass / Delta / Pre-ring solo), with an optional note
+    static juce::File userPresetDir();
+    juce::Array<juce::File> userPresets() const;
+    bool saveUserPreset (const juce::String& name, const juce::String& note);
+    bool loadUserPreset (const juce::File& f);
     void resetToFlat();
 
 private:
@@ -354,6 +359,7 @@ public:
 private:
     bool rsWasOn = false; Delay rsDelay[2];
     SamplePlayer player; int playerWas = -1;
+    Delay scDelay[2]; std::vector<float> scBuf[2];      // the sidechain, delayed like the EQ's output, for the suppressor's detector
     std::array<std::atomic<float>*, 10> rsNodeP {};      // threshold nodes f / g, looked up once
     std::array<DynDetector, eqcore::kBands> det; std::array<double, eqcore::kBands> dynNow {}; double detAtt = 0.1, detRel = 0.01;
     TransientDetector trans;
