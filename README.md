@@ -28,13 +28,18 @@ by Johan Plus Kei — EQ の中身を「見て・聴いて・触って」学べ�
 - **ダイナミック EQ**、**Mid/Side 処理**（St / M / S と SOLO）、**Transient / Body 分離**
 - **レゾナンス・サプレッサー**（RES）：耳障りな共鳴だけを自動で抑える。Stereo / Mid / Side / M/S、サイドチェイン検出、5 ノードのスレッショルド曲線を EQ グラフ上で編集
 - **周波数特性・位相・群遅延**の重ね描き／上下分割表示、インパルス応答でプリリンギングを確認
-- **Stereo field** 表示（左右の像と相関）、10 Hz〜22 kHz の周波数軸、スペアナ A/B
+- **Stereo field** 表示（帯域ごとの L/R の音量と相関、10 Hz から）、10 Hz〜22 kHz の周波数軸、スペアナ A/B
+- **画面の各部分に説明**：グラフの点・ハンドル・下の枠・軸・スペアナ、メーターの PK / RMS / CREST / CORR にマウスを置くと、表付きの解説が説明欄に出る
+- **キーボード**：↑↓ で最後に触った値（Shift で細かく）。グラフの点と RES の点は ↑↓＝dB、←→＝周波数
+- **配色**：14 種類（明度を抑えた Soft 系 4 種を含む）
 - **サチュレーター**（帯域指定・オーバーサンプリング）、Auto gain、Delta（差分）試聴
 - **A / B / C / D スロット**とモーフ、**ユーザープリセット**（名前とメモ付きで保存）
 - **Ear Training（耳トレ）**と **Learn（レッスン）**：RES の使い方を含む。練習音は Drums / Voice
 - 日本語 / English 切り替え
 
 ![レゾナンス・サプレッサー](docs/screenshot-resonance.png)
+
+![Stereo field](docs/screenshot-field.png)
 
 ---
 
