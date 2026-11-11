@@ -914,8 +914,8 @@ public:
         fdTab.setClickingTogglesState (false); addAndMakeVisible (fdTab);
         fdTab.setButtonText ("Stereo field");
         fdTab.onClick = [this] { lowerToggle (1); };
-        setHelp (fdTab, "STEREO FIELD", "下の枠を帯域ごとのステレオ表示に切り替える。上＝L／R の像（音量に左右されない。中央の線＝左右バランス、上が L・下が R、目盛は dB。線の上下の開き＝広がり＝1−コヒーレンス。モノの音はどこに定位しても細い線、Mid を上げると狭まり、無相関の Side や逆相で開く）、下＝相関（+1 同相、0 無相関、−1 逆相）。灰色が EQ 前、色付きが EQ 後。1/6 オクターブ、約 0.3 s の平均",
-                 "Shows the stereo picture per band in the lower panel. Top: the L / R image, independent of level (the line is the balance, L up / R down in dB; the opening around it is the spread, 1 - coherence: a mono source stays a thin line wherever it is panned, raising Mid narrows it, decorrelated Side or out-of-phase content opens it). Bottom: correlation (+1 in phase, 0 uncorrelated, -1 out of phase). Grey = before the EQ, coloured = after. 1/6 octave, about 0.3 s average");
+        setHelp (fdTab, "STEREO FIELD", "下の枠を帯域ごとのステレオ表示に切り替える。\n| 段 | 表示 |\n| 上 | L（上向き）と R（下向き）の音量。スペアナと同じ目盛り |\n| 下 | 帯域ごとの相関（+1 同じ／0 無関係／−1 逆相） |\n灰色＝EQ 前、色＝EQ 後。1/6 オクターブ、約 0.3 秒の平均",
+                 "Shows the stereo picture per band in the lower panel.\n| Row | Shows |\n| Top | L (up) and R (down) level, analyzer scale |\n| Bottom | correlation per band (+1 same / 0 unrelated / -1 opposite) |\nGrey = before the EQ, colour = after. 1/6 octave, about 0.3 s average");
         phaseBtn.onClick = [this] { ph.proc.uiState.setProperty ("view", (int) ph.proc.uiState.getProperty ("view", 0) == 1 ? 0 : 1, nullptr); };
         setHelp (*this, "MOUSE", mouseHelpJa(), mouseHelpEn());
         for (int i = 0; i <= 400; ++i) fr.push_back (frange::lo * std::pow (frange::ratio, i / 400.0));
@@ -1487,7 +1487,7 @@ public:
             ph.proc.undo.beginNewTransaction();
             if (h < 5 && e.mods.isAltDown()) { ph.resetDefault (pid::rsNode (h, "g")); ph.resetDefault (pid::rsNode (h, "f")); return; }
             rsDrag = h; rsDragG = rsG; rsStartThr = ph.value (pid::rsThr); rsStartY = e.position.y;
-            if (h == 5) ph.begin (pid::rsThr); else { ph.begin (pid::rsNode (h, "f")); ph.begin (pid::rsNode (h, "g")); }
+            if (h == 5) ph.begin (pid::rsThr); else { ph.begin (pid::rsNode (h, "f")); ph.begin (pid::rsNode (h, "g")); }   // lastId = the node's height: up/down dB, left/right Hz
             repaint(); return;
         }
         if (const int k = scopeHit (e.position); k != 0)
@@ -1513,6 +1513,7 @@ public:
         startQ = ph.value (pid::band (drag.band, "q")); startY = e.position.y;
         for (auto w : { "freq", "gain", "q" }) ph.begin (pid::band (drag.band, w));
         if (ph.value (pid::band (drag.band, "on")) < 0.5f) ph.setGesture (pid::band (drag.band, "on"), 1.0f);
+        ph.lastId = pid::band (drag.band, drag.what == 0 ? "gain" : "q");     // arrows: dot = up/down gain, left/right freq; Q handle = up/down Q
     }
     void mouseDrag (const juce::MouseEvent& e) override
     {

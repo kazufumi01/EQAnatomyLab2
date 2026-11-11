@@ -191,9 +191,22 @@ EQAnatomyView::~EQAnatomyView()
     setLookAndFeel (nullptr);
 }
 
-void EQAnatomyView::mouseDown (const juce::MouseEvent&)
+void EQAnatomyView::mouseDown (const juce::MouseEvent& e)
 {
     proc.undo.beginNewTransaction();     // every click starts a new undo step
+    // the arrow keys belong to the editor: menus, sliders and buttons never keep the keyboard focus
+    std::function<void (juce::Component&)> noFocus = [&] (juce::Component& c)
+    {
+        for (auto* ch : c.getChildren())
+        {
+            if (dynamic_cast<juce::TextEditor*> (ch) != nullptr) continue;
+            if (dynamic_cast<juce::ComboBox*> (ch) != nullptr || dynamic_cast<juce::Slider*> (ch) != nullptr || dynamic_cast<juce::Button*> (ch) != nullptr)
+            { ch->setWantsKeyboardFocus (false); ch->setMouseClickGrabsKeyboardFocus (false); }
+            noFocus (*ch);
+        }
+    };
+    noFocus (*this);
+    if (dynamic_cast<juce::TextEditor*> (e.originalComponent) == nullptr) grabKeyboardFocus();
 }
 
 void EQAnatomyView::applySkin (int i)
@@ -432,18 +445,28 @@ bool EQAnatomyView::keyPressed (const juce::KeyPress& k)
     if (k == juce::KeyPress ('z', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0)) { proc.undo.redo(); return true; }
     if (c >= '1' && c <= '0' + eqcore::kBands) { ph.select (c - '1'); return true; }
     // ↑ / ↓: step the parameter last touched (Shift: finer). Hz and ms in ratios, dB in 0.5 / 0.1, choices one at a time
-    if (k.getKeyCode() == juce::KeyPress::upKey || k.getKeyCode() == juce::KeyPress::downKey)
+    const int kc = k.getKeyCode();
+    if (kc == juce::KeyPress::upKey || kc == juce::KeyPress::downKey || kc == juce::KeyPress::leftKey || kc == juce::KeyPress::rightKey)
     {
-        const juce::String id = ph.lastId.isNotEmpty() ? ph.lastId : pid::band (ph.selected(), "gain");
+        juce::String id = ph.lastId.isNotEmpty() ? ph.lastId : pid::band (ph.selected(), "gain");
+        const bool vert = kc == juce::KeyPress::upKey || kc == juce::KeyPress::downKey;
+        // a band dot (freq / gain) and a RES node (f / g): up/down = height (dB), left/right = frequency
+        const auto stem = id.upToLastOccurrenceOf ("_", true, false), leaf = id.fromLastOccurrenceOf ("_", false, false);
+        const bool dot = id.startsWithChar ('b') && (leaf == "freq" || leaf == "gain");
+        const bool node = id.startsWith ("rs_n") && (leaf == "f" || leaf == "g");
+        if (dot) id = stem + (vert ? "gain" : "freq");
+        else if (node) id = stem + (vert ? "g" : "f");
+        else if (! vert) return false;              // left/right only move dots and nodes
         auto* p = ph.get (id); if (p == nullptr) return false;
-        const float dir = k.getKeyCode() == juce::KeyPress::upKey ? 1.0f : -1.0f;
+        const float dir = (kc == juce::KeyPress::upKey || kc == juce::KeyPress::rightKey) ? 1.0f : -1.0f;
         const bool fine = k.getModifiers().isShiftDown();
         const auto lab = p->getLabel(); const float v = ph.value (id); const auto rg = p->getNormalisableRange();
         float nv;
         if (dynamic_cast<juce::AudioParameterBool*> (p) != nullptr) nv = dir > 0 ? 1.0f : 0.0f;     // on / off
         else if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (p)) nv = (float) juce::jlimit (0, c->choices.size() - 1, c->getIndex() + (int) dir);
-        else if (lab == "Hz") nv = v * std::pow (2.0f, dir * (fine ? 1.0f / 48.0f : 1.0f / 12.0f));
-        else if (lab == "ms" || lab.isEmpty()) nv = v * std::pow (fine ? 1.02f : 1.1f, dir);
+        else if ((lab == "Hz" || id.endsWith ("_freq") || (node && ! vert)) && rg.start > 0) nv = v * std::pow (2.0f, dir * (fine ? 1.0f / 48.0f : 1.0f / 12.0f));
+        else if ((lab == "dB" || id.endsWith ("_gain") || (node && vert))) nv = v + dir * (fine ? 0.1f : 0.5f);
+        else if ((lab == "ms" || lab.isEmpty()) && rg.start > 0) nv = v * std::pow (fine ? 1.02f : 1.1f, dir);
         else if (lab == "dB") nv = v + dir * (fine ? 0.1f : 0.5f);
         else nv = v + dir * (fine ? 0.2f : 1.0f) * std::max (0.01f, (rg.end - rg.start) / 100.0f);
         ph.setGesture (id, rg.snapToLegalValue (juce::jlimit (rg.start, rg.end, nv)));
