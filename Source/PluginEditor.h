@@ -9,12 +9,16 @@
 //    bottom row: bands | impulse | buttons | lesson (or ear training)
 // =============================================================================
 class EQAnatomyView : public juce::Component,
-                        private juce::Timer
+                        private juce::Timer,
+                        private juce::AudioProcessorParameter::Listener
 {
 public:
     ZoomButton zoom;
     explicit EQAnatomyView (EQAnatomyProcessor&);
     ~EQAnatomyView() override;
+    // any control that starts a change gesture becomes the target of the arrow keys
+    void parameterValueChanged (int, float) override {}
+    void parameterGestureChanged (int index, bool starting) override;
 
     void paint (juce::Graphics&) override;
     void resized() override;

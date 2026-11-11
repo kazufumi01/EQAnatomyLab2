@@ -37,6 +37,9 @@ struct ParamHelp
         auto& ui = proc.uiState;
         ui.setProperty ("popPinned", false, nullptr);      // the extension stays as it is
         ui.setProperty ("selected", i, nullptr);
+        // the arrow keys follow to the same control of the newly selected band (b2_freq -> b5_freq)
+        if (lastId.startsWithChar ('b') && lastId.containsChar ('_') && lastId.substring (1).upToFirstOccurrenceOf ("_", false, false).containsOnly ("0123456789"))
+            lastId = "b" + juce::String (i + 1) + "_" + lastId.fromFirstOccurrenceOf ("_", false, false);
     }
     // hover help, filled by the editor from the component under the mouse
     juce::String hoverTitle, hoverText;
@@ -67,9 +70,9 @@ private:
 };
 inline void markReset (juce::Component& c) { c.getProperties().set ("resettable", true); }
 
-inline const char* mouseHelpJa() { return "| 操作 | 結果 |\n| 点をドラッグ | 周波数とゲイン |\n| Cmd＋ドラッグ | 縦か横に固定 |\n| Alt＋ドラッグ | そのバンドだけ試聴 |\n| Shift＋上下・ホイール | Q |\n| ダブルクリック | 追加（周波数で形を自動選択）・オフ |\n| 右クリック | 浮き窓の表示切替 |\n| Cmd＋Z | 元に戻す |\nグラフ・メーターの各部分にマウスを置くと、その説明が出る"; }
+inline const char* mouseHelpJa() { return "| 操作 | 結果 |\n| 点をドラッグ | 周波数とゲイン |\n| Cmd＋ドラッグ | 縦か横に固定 |\n| Alt＋ドラッグ | そのバンドだけ試聴 |\n| Shift＋上下・ホイール | Q |\n| ダブルクリック | 追加（周波数で形を自動選択）・オフ |\n| 右クリック | 浮き窓の表示切替 |\n| Cmd＋Z | 元に戻す |\n| ↑ ↓ キー | 最後に触った値を変える（Shift＋↑↓ で細かく） |\nグラフ・メーターの各部分にマウスを置くと、その説明が出る"; }
 inline const char* mouseHelpJaOld() { return "点をドラッグ：周波数とゲイン／Cmd＋ドラッグ：縦か横に固定／Alt＋ドラッグ：そのバンドだけを試聴／幅ハンドル・Shift＋上下・ホイール：Q／ダブルクリック：追加（クリックした周波数で形を自動選択：〜45 Hz ローカット／〜180 Hz ローシェルフ／〜6 kHz ベル／〜14 kHz ハイシェルフ／それ以上ハイカット）・オフ／右クリック：浮き窓の表示切替／DYN の▲▼（塗り＝ABOVE、輪＝BELOW）：上下ドラッグで可動範囲、Option＋クリックで初期値／上部の SAT タブ：サチュレーターの帯域／Cmd＋Z：元に戻す"; }
-inline const char* mouseHelpEn() { return "| Action | Result |\n| Drag a dot | frequency and gain |\n| Cmd + drag | lock to one axis |\n| Alt + drag | solo that band |\n| Shift + drag, wheel | Q |\n| Double-click | add (shape follows the frequency) or switch off |\n| Right-click | show / hide the floating panel |\n| Cmd + Z | undo |\nHover any part of the graph or the meters for its explanation"; }
+inline const char* mouseHelpEn() { return "| Action | Result |\n| Drag a dot | frequency and gain |\n| Cmd + drag | lock to one axis |\n| Alt + drag | solo that band |\n| Shift + drag, wheel | Q |\n| Double-click | add (shape follows the frequency) or switch off |\n| Right-click | show / hide the floating panel |\n| Cmd + Z | undo |\n| Up / Down keys | step the value last touched (Shift: finer) |\nHover any part of the graph or the meters for its explanation"; }
 inline const char* mouseHelpEnOld() { return "Drag a dot: frequency and gain / Cmd + drag: lock to one axis / Alt + drag: solo that band / width handles, Shift + drag or wheel: Q / double-click: add (the shape follows the frequency: below 45 Hz low cut, 180 Hz low shelf, 6 kHz bell, 14 kHz high shelf, above that high cut) or switch off / right-click: show or hide the floating panel / DYN triangles (filled = ABOVE, ring = BELOW): drag up/down for the range, Option+click resets / SAT tabs: saturator band / Cmd + Z: undo"; }
 
 inline juce::String fmtHz (double f)
@@ -127,6 +130,7 @@ public:
     {
         if (e.mods.isPopupMenu()) { if (onRightClick) onRightClick(); return; }
         if (e.mods.isAltDown() && ph.resetDefault (paramID)) { repaint(); return; }      // Option+click: default (no drag)
+        ph.lastId = paramID;      // a click selects the value for the arrow keys, even without a drag
         if (auto* p = ph.get (paramID)) { start = p->getValue(); lastY = e.getScreenPosition().toFloat().y; p->beginChangeGesture(); dragging = true; }
         setMouseCursor (juce::MouseCursor::UpDownResizeCursor);
     }

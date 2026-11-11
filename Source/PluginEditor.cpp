@@ -168,13 +168,21 @@ EQAnatomyView::EQAnatomyView (EQAnatomyProcessor& p) : proc (p)
     setHelp (bypassBtn, "BYPASS", "EQ を通さない原音（レイテンシーはそろえたまま）", "The unprocessed signal (latency kept aligned)");
     addMouseListener (this, true);
     setWantsKeyboardFocus (true);
+    for (auto* p : proc.getParameters()) p->addListener (this);
     setSize (1160, 760);
     refreshTexts();
     startTimerHz (30);
 }
 
+void EQAnatomyView::parameterGestureChanged (int index, bool starting)
+{
+    if (! starting || ! juce::MessageManager::getInstance()->isThisTheMessageThread()) return;
+    if (auto* p = dynamic_cast<juce::RangedAudioParameter*> (proc.getParameters()[index])) ph.lastId = p->paramID;
+}
+
 EQAnatomyView::~EQAnatomyView()
 {
+    for (auto* p : proc.getParameters()) p->removeListener (this);
     if (proc.earActive()) earCard.stop();
     proc.soloBand = -1;
     proc.soloView = 0; proc.analyzerNeedTB = false; proc.scopeNeed = false;      // no hidden solo state once the window is gone (bounce safety)
@@ -432,8 +440,8 @@ bool EQAnatomyView::keyPressed (const juce::KeyPress& k)
         const bool fine = k.getModifiers().isShiftDown();
         const auto lab = p->getLabel(); const float v = ph.value (id); const auto rg = p->getNormalisableRange();
         float nv;
-        if (dynamic_cast<juce::AudioParameterBool*> (p) != nullptr) return false;
-        if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (p)) nv = (float) juce::jlimit (0, c->choices.size() - 1, c->getIndex() + (int) dir);
+        if (dynamic_cast<juce::AudioParameterBool*> (p) != nullptr) nv = dir > 0 ? 1.0f : 0.0f;     // on / off
+        else if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (p)) nv = (float) juce::jlimit (0, c->choices.size() - 1, c->getIndex() + (int) dir);
         else if (lab == "Hz") nv = v * std::pow (2.0f, dir * (fine ? 1.0f / 48.0f : 1.0f / 12.0f));
         else if (lab == "ms" || lab.isEmpty()) nv = v * std::pow (fine ? 1.02f : 1.1f, dir);
         else if (lab == "dB") nv = v + dir * (fine ? 0.1f : 0.5f);
