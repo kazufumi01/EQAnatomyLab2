@@ -1,0 +1,9 @@
+EQ Anatomy Lab 2 (Beta) - Windows
+
+[日本語]
+この Windows 版は、実機での動作確認ができていません（自動ビルドで作成）。
+動作しない・不安定な場合があります。不具合は GitHub の Issues でお知らせください。
+
+[English]
+This Windows build has NOT been tested on a real Windows machine.
+It may not work or may be unstable. Please report problems via GitHub Issues.

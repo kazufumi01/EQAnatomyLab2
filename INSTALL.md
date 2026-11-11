@@ -1,9 +1,9 @@
 # EQ Anatomy Lab 2 β — インストール方法 / Installation
 
 > **ベータ版です。** Mac の Ableton Live で動作確認済み。
-> **Windows 版は今のところありません。**
+> **Windows 版は実機での動作確認ができていません**（自動ビルドで作成）。
 > **Beta.** Tested with Ableton Live on Mac.
-> **There is no Windows build yet.**
+> **The Windows build of Lab 2 has NOT been tested on a real Windows machine.**
 > 不具合は / Problems: [Issues](https://github.com/kazufumi01/EQAnatomyLab2/issues)
 
 ダウンロード / Download：[Releases ページ](https://github.com/kazufumi01/EQAnatomyLab2/releases/latest)
@@ -12,6 +12,8 @@
 |---|---|
 | `EQAnatomyLab2-0.2.0-mac.zip` | Mac・手動インストール（おすすめ） |
 | `EQAnatomyLab2-0.2.0-mac.pkg` | Mac・インストーラー（ターミナルを使いたくない人向け） |
+| `EQAnatomyLab2-0.2.0-win64.zip` | Windows・手動インストール（未検証） |
+| `EQAnatomyLab2-0.2.0-win64.exe` | Windows・インストーラー（未検証） |
 
 ---
 
@@ -37,6 +39,17 @@
 2. **システム設定 › プライバシーとセキュリティ** の下の方にある **「このまま開く」** をクリック → パスワード入力。
 3. 入れたい形式（AU / VST3 / Standalone）を選んでインストール → DAW で再スキャン。
 
+
+### Windows（10 / 11・64bit）— ⚠️ 未検証
+
+**手動（zip）**
+1. 展開前に zip を右クリック › プロパティ › **「許可する」** にチェック › OK。
+2. 展開した `EQ Anatomy Lab 2.vst3` フォルダを丸ごと `C:\Program Files\Common Files\VST3` へコピー。
+3. DAW で再スキャン（Live は「VST3 プラグイン システムフォルダ」をオン）。単体で使う場合は `EQ Anatomy Lab 2.exe` を起動。
+
+**インストーラー（exe）**
+1. `.exe` を実行。「Windows によって PC が保護されました」→ **「詳細情報」→「実行」**。
+2. VST3 は `C:\Program Files\Common Files\VST3` に入ります。DAW で再スキャン。
 
 ### 読み込めない時
 - **AU が出ない**：ターミナルで `killall -9 AudioComponentRegistrar` → DAW 再起動。
@@ -67,3 +80,8 @@
 2. Open **System Settings › Privacy & Security**, scroll down and click **Open Anyway**, then enter your password.
 3. Choose the formats (AU / VST3 / Standalone), install, and rescan in your DAW.
 
+### Windows (10 / 11, 64-bit) — UNTESTED
+
+**Manual (zip):** before extracting, right-click the zip › Properties › tick "Unblock" › OK. Copy the whole `EQ Anatomy Lab 2.vst3` folder to `C:\Program Files\Common Files\VST3` and rescan in your DAW. For standalone use, run `EQ Anatomy Lab 2.exe`.
+
+**Installer (exe):** run it; if "Windows protected your PC" appears, click More info › Run anyway. VST3 is installed to `C:\Program Files\Common Files\VST3`.

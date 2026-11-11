@@ -11,10 +11,11 @@ by Johan Plus Kei — EQ の中身を「見て・聴いて・触って」学べ�
 | | 手動インストール（おすすめ） | インストーラー |
 |---|---|---|
 | **Mac**（macOS 11+, Apple Silicon / Intel） | `EQAnatomyLab2-0.2.0-mac.zip` | `EQAnatomyLab2-0.2.0-mac.pkg` |
+| **Windows**（10 / 11, 64bit）⚠️未検証 | `EQAnatomyLab2-0.2.0-win64.zip` | `EQAnatomyLab2-0.2.0-win64.exe` |
 
 - インストール方法：**[INSTALL.md](INSTALL.md)**（日本語 / English）
-- Windows 版は今のところありません。 / No Windows build yet.
-- Apple の公証をしていないため、初回のみ警告が出ます。
+- ⚠️ **Windows 版は実機での動作確認ができていません**（自動ビルドで作成。VST3 と Standalone）。 / The Windows build of Lab 2 is untested on real hardware.
+- Apple の公証・Windows のコード署名をしていないため、初回のみ警告が出ます。
 - 既存の EQ Anatomy Lab とは別製品なので、両方を同時にインストールできます。
 - 不具合・要望は [Issues](https://github.com/kazufumi01/EQAnatomyLab2/issues) へ。
 
@@ -43,6 +44,7 @@ by Johan Plus Kei — EQ の中身を「見て・聴いて・触って」学べ�
 ./build.sh            # 手元の JUCE を使う（build.sh 内の JUCE_PATH を編集）
 ```
 
+- Windows は GitHub Actions（`.github/workflows/build-win.yml`、手動実行）で VST3 / Standalone をビルドし、Inno Setup でインストーラーを作成
 - Mac のインストーラー作成：`packaging/mac/build_pkg.sh [version]` ／ `packaging/mac/build_zip.sh [version]`（出力は `dist/`）
 
 ## ライセンス
