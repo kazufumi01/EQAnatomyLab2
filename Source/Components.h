@@ -95,7 +95,9 @@ public:
     DragValue (ParamHelp& h, juce::String captionText) : ph (h), caption (std::move (captionText)) { setOpaque (false); markReset (*this); }
     std::function<juce::String (float)> format = [] (float v) { return juce::String (v, 2); };
     std::function<float (const juce::String&)> parse = [] (const juce::String& s) { return s.getFloatValue(); };
-    juce::Colour valueColour = theme::text;
+    juce::Colour valueColour;      // transparent = the skin's text colour (read at paint time, so it follows skin changes)
+    int valueRole = 0;             // 1 = SAT colour, 2 = RES colour, from the current skin
+    juce::Colour valueCol() const { return valueRole == 1 ? theme::sat : valueRole == 2 ? theme::res : valueColour.isTransparent() ? theme::text : valueColour; }
     bool compact = false;                       // caption beside the value instead of under it
     void setParam (const juce::String& id) { if (id != paramID) { paramID = id; repaint(); } }
     void setCaption (const juce::String& c) { if (c != caption) { caption = c; repaint(); } }
@@ -112,12 +114,12 @@ public:
         {
             g.setColour (theme::muted); g.setFont (theme::ui (9.5f));
             g.drawText (caption, 6, 0, getWidth() - 12, 14, juce::Justification::centredLeft);
-            g.setColour (valueColour); g.setFont (theme::mono (12.5f, true));
+            g.setColour (valueCol()); g.setFont (theme::mono (12.5f, true));
             g.drawText (format (v), 6, 12, getWidth() - 12, getHeight() - 14, juce::Justification::centredLeft);
         }
         else
         {
-            g.setColour (valueColour); g.setFont (theme::mono (15.0f, true));
+            g.setColour (valueCol()); g.setFont (theme::mono (15.0f, true));
             g.drawText (format (v), 0, 0, getWidth(), getHeight() - 14, juce::Justification::centred);
             g.setColour (theme::muted); g.setFont (theme::ui (9.5f));
             g.drawText (caption, 0, getHeight() - 15, getWidth(), 14, juce::Justification::centred);
@@ -735,7 +737,7 @@ public:
         for (auto* d : { &lo, &hi }) { d->format = [] (float v) { return fmtHz (v) + " Hz"; }; d->parse = parseHz; }
         drive.format = [] (float v) { return juce::String (v, 1) + " dB"; };
         mix.format = [] (float v) { return juce::String ((int) std::round (v)) + " %"; };
-        for (auto* d : { &lo, &hi, &drive, &mix }) { d->compact = true; d->valueColour = theme::sat; addAndMakeVisible (*d); }
+        for (auto* d : { &lo, &hi, &drive, &mix }) { d->compact = true; d->valueRole = 1; addAndMakeVisible (*d); }
         setHelp (onBtn, "SAT", "帯域サチュレーターのオン・オフ。EQ の後ろで、選んだ帯域だけを歪ませる", "Band saturator on/off. After the EQ, drives only the chosen band");
         setHelp (type, "SAT TYPE", "Tape：対称でなめらか／Tube：非対称、強く入れるほど太く／Clip：硬い／Transformer：低域ほど飽和しやすい／Class A：軽く入れても少し色が付く／Exciter：LOW より上に倍音だけを足す。注意：特定の機材の再現ではなく、回路の傾向を示すモデル",
                  "Tape: smooth / Tube: asymmetric, fatter when pushed / Clip: hard / Transformer: lows saturate first / Class A: a little colour even when light / Exciter: adds harmonics above LOW only. Careful: tendencies, not models of specific units");
@@ -2595,7 +2597,7 @@ public:
         depth.format = thr.format = [] (float v) { return juce::String (v, 1) + " dB"; };
         sel.format = [] (float v) { return juce::String ((int) std::round (v)) + " %"; };
         att.format = rel.format = [] (float v) { return v < 10 ? juce::String (v, 1) : juce::String ((int) std::round (v)); };
-        for (auto* d : { &lo, &hi, &depth, &thr, &sel, &att, &rel }) { d->compact = true; d->valueColour = theme::res; addAndMakeVisible (*d); }
+        for (auto* d : { &lo, &hi, &depth, &thr, &sel, &att, &rel }) { d->compact = true; d->valueRole = 2; addAndMakeVisible (*d); }
         addAndMakeVisible (deltaBtn); addAndMakeVisible (graphBtn);   // on/off lives on the RES tab above
         addAndMakeVisible (chanBtn); chanBtn.getProperties().set ("chevron", 1); chanBtn.getProperties().set ("fontPx", 10.0);
         chanBtn.onClick = [this]

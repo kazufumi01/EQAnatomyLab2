@@ -21,17 +21,18 @@ inline bool lightPanels = false;
 inline int current = 0;
 inline std::array<juce::uint32, 8> bands { 0xff8f86e6, 0xff55b7c5, 0xff7cc66f, 0xffe48f5c, 0xffef7a6e, 0xffde8fbd, 0xffc9b458, 0xff8aa0d8 };
 
-inline int numSkins() { return 10; }
+inline int numSkins() { return 14; }
 inline const char* skinName (int i)
 {
     static const char* n[] = { "Studio", "Lab Light", "Studio Night", "Bridge", "Blueprint", "Lesson Warm",
-                               "Frame Graphite", "Frame Navy", "Bright Edge", "Frame Silver" };
-    return n[juce::jlimit (0, 9, i)];
+                               "Frame Graphite", "Frame Navy", "Bright Edge", "Frame Silver",
+                               "Soft Grey", "Soft Sand", "Soft Sage", "Soft Dusk" };
+    return n[juce::jlimit (0, 13, i)];
 }
 
 inline void setSkin (int i)
 {
-    current = juce::jlimit (0, 9, i);
+    current = juce::jlimit (0, 13, i);
     struct P { juce::uint32 bg, header, panel, well, line, grid, zero, text, muted, faint, accent, onAccent, pre, phase,
                lessonBg, lessonLn, sat, ok, side, analyzer, popup, live, splitWell; bool light; std::array<juce::uint32, 8> b; };
     static const std::array<juce::uint32, 8> darkBands { 0xff8f86e6, 0xff55b7c5, 0xff7cc66f, 0xffe48f5c, 0xffef7a6e, 0xffde8fbd, 0xffc9b458, 0xff8aa0d8 };
@@ -61,6 +62,19 @@ inline void setSkin (int i)
         // 9 Frame Silver: Frame Graphite inverted. Dark panels on a light silver gap
         { 0xffd7dbe0, 0xff191c21, 0xff191c21, 0xff0d0f12, 0xff0a0b0d, 0xff1d2126, 0xff353a42, 0xffe4e1da, 0xff8d929a, 0xff6c727b, 0xfff0b34a, 0xff1a1306, 0xffef7a6e, 0xffe9cf6a,
           0xff1b1a16, 0xff5a4620, 0xffe8a33a, 0xff8fc779, 0xff6fc3d6, 0xff2a2e35, 0xff1c2026, 0xfffff1d6, 0xff0b0d10, false, darkBands },
+        // 10-13 Soft: light skins with lower brightness (less glare in a dim studio), dark ink on muted paper
+        // 10 Soft Grey: neutral grey paper, teal accent
+        { 0xffc9ced4, 0xffd2d6db, 0xffdadee2, 0xffe1e4e7, 0xffa8b0b9, 0xffcfd3d8, 0xff9aa3ad, 0xff1b232c, 0xff4f5a66, 0xff6b7581, 0xff0d6575, 0xffffffff, 0xffa5382f, 0xff8a6d12,
+          0xffe8e0d2, 0xffc9b08c, 0xffad640d, 0xff357a33, 0xff2a6f9a, 0xffc4cad1, 0xffe4e7ea, 0xff1b232c, 0xffd6dade, true, inkBands },
+        // 11 Soft Sand: warm beige paper, bronze accent
+        { 0xffcfc8bb, 0xffd8d2c6, 0xffe0dacf, 0xffe7e2d8, 0xffb0a797, 0xffd6cfc2, 0xffa39a89, 0xff2a241b, 0xff5e5547, 0xff7a7060, 0xff8a5a1c, 0xfffbf3e8, 0xffa5382f, 0xff0d6575,
+          0xffe9dfcc, 0xffc9ae84, 0xffad640d, 0xff4a7a33, 0xff2f6a7f, 0xffcbc3b4, 0xffebe6dd, 0xff2a241b, 0xffdcd5c9, true, inkBands },
+        // 12 Soft Sage: green-grey paper, deep green accent
+        { 0xffc5ccc6, 0xffcfd5d0, 0xffd8ddd9, 0xffdfe3e0, 0xffa2ada5, 0xffcbd2cd, 0xff95a199, 0xff1c2620, 0xff4c5a51, 0xff69766d, 0xff2f6b4f, 0xffffffff, 0xffa5382f, 0xff8a6d12,
+          0xffe6e1d2, 0xffc4b48e, 0xffad640d, 0xff2f7a3a, 0xff2a6a8a, 0xffbfc7c1, 0xffe2e6e3, 0xff1c2620, 0xffd3d9d5, true, inkBands },
+        // 13 Soft Dusk: blue-grey paper, slate-blue accent
+        { 0xffbcc5d0, 0xffc7cfd8, 0xffd1d8e0, 0xffd9dfe6, 0xff98a5b4, 0xffc5cdd7, 0xff8d9aaa, 0xff18212d, 0xff47546a, 0xff657187, 0xff355e9c, 0xffffffff, 0xffa5382f, 0xff8a6d12,
+          0xffe3ded4, 0xffbfae8e, 0xffad640d, 0xff357a33, 0xff1f6f8a, 0xffb8c2ce, 0xffdde3e9, 0xff18212d, 0xffcdd4dc, true, inkBands },
     };
     const auto& s = p[current];
     auto C = [] (juce::uint32 v) { return juce::Colour (v); };

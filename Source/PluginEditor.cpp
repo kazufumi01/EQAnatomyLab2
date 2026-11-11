@@ -525,7 +525,7 @@ void EQAnatomyView::fieldUpdate()
     auto& F = graph.fieldF;
     if (F.empty())
     {
-        for (double f = 20.0 * std::pow (2.0, 1.0 / 12.0); f < frange::hi; f *= std::pow (2.0, 1.0 / 6.0)) F.push_back (f);
+        for (double f = frange::lo * std::pow (2.0, 1.0 / 12.0); f < frange::hi; f *= std::pow (2.0, 1.0 / 6.0)) F.push_back (f);   // from 10 Hz, like the axis (below ~40 Hz a band is one or two FFT bins)
         for (int k = 0; k < 2; ++k) { fPM[(size_t) k].assign (F.size(), 0.0); fPS[(size_t) k].assign (F.size(), 0.0); fX[(size_t) k].assign (F.size(), 0.0); fY[(size_t) k].assign (F.size(), 0.0);
                                       graph.fieldW[(size_t) k].assign (F.size(), std::numeric_limits<float>::quiet_NaN()); graph.fieldC[(size_t) k].assign (F.size(), std::numeric_limits<float>::quiet_NaN()); graph.fieldP[(size_t) k].assign (F.size(), std::numeric_limits<float>::quiet_NaN()); }
     }
