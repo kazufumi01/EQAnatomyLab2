@@ -97,7 +97,8 @@ void EQAnatomyProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     for (auto& d : dryDelay) d.prepare (eqcore::linearTaps (2) / 2 + 64);
     for (auto& d : postDelay) d.prepare (256);
     maskDelay.prepare (eqcore::linearTaps (2) / 2 + 64 + 512 + ResSuppressor::latency());
-    rs.prepare (sampleRate); for (auto& d : rsDelay) d.prepare (ResSuppressor::latency() + 8);
+    rs.prepare (sampleRate); player.prepare (sampleRate);
+    for (int i = 0; i < pid::kRsNodes; ++i) { rsNodeP[(size_t) (2 * i)] = apvts.getRawParameterValue (pid::rsNode (i, "f")); rsNodeP[(size_t) (2 * i + 1)] = apvts.getRawParameterValue (pid::rsNode (i, "g")); } for (auto& d : rsDelay) d.prepare (ResSuppressor::latency() + 8);
     svC = 1.0 - std::exp (-1.0 / (sampleRate * 0.003)); svG[0] = 1.0; for (int k = 1; k < 5; ++k) svG[k] = 0.0;
     maskBuf.assign ((size_t) samplesPerBlock, 0.0); maskDel.assign ((size_t) samplesPerBlock, 0.0);
     sat.prepare (sampleRate, samplesPerBlock);
@@ -160,6 +161,15 @@ void EQAnatomyProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     if (nch == 0 || n == 0) return;
     if (ms.getNumSamples() < n) { ms.setSize (2, n, false, false, true); dryD.setSize (2, n, false, false, true); tmp.setSize (2, n, false, false, true); }
     if ((int) maskBuf.size() < n) { maskBuf.resize ((size_t) n, 0.0); maskDel.resize ((size_t) n, 0.0); }
+
+    // Learn mode: the built-in practice loop replaces the input
+    if (const int src = sampleSrc.load(); src >= 0)
+    {
+        if (playerWas < 0) player.reset();
+        player.render (main.getWritePointer (0), nch > 1 ? main.getWritePointer (1) : nullptr, n, src);
+        playerWas = src;
+    }
+    else playerWas = -1;
 
     // sidechain
     const float* scL = nullptr; const float* scR = nullptr;
@@ -377,6 +387,11 @@ void EQAnatomyProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
 
     // resonance suppressor, after the EQ and before the saturator (left out of Bypass / Delta / Pre-ring solo / ear training)
     {
+        {
+            ResSuppressor::Nodes nd;
+            for (int i = 0; i < pid::kRsNodes; ++i) { nd.f[(size_t) i] = rsNodeP[(size_t) (2 * i)]->load(); nd.g[(size_t) i] = rsNodeP[(size_t) (2 * i + 1)]->load(); }
+            rs.setNodes (nd);
+        }
         rs.setParams (P (pid::rsDepth), P (pid::rsThr), P (pid::rsLo), P (pid::rsHi), P (pid::rsSel), P (pid::rsAtt), P (pid::rsRel), P (pid::rsDelta) > 0.5f);
         const bool run = activeRsLat > 0 && P (pid::rsOn) > 0.5f && ! bypass && ! delta && ! solo && ! ear;
         if (run) { if (! rsWasOn) rs.reset(); rs.process (oL, oR, n); }

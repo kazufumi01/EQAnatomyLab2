@@ -130,11 +130,9 @@ EQAnatomyView::EQAnatomyView (EQAnatomyProcessor& p) : proc (p)
     addAndMakeVisible (outDrag); addAndMakeVisible (viewSolo); addAndMakeVisible (lesson); addAndMakeVisible (io); addChildComponent (earCard);
 
     addAndMakeVisible (zoom);
-    for (auto* b : { &satTab, &resTab }) { b->setClickingTogglesState (false); b->getProperties().set ("fontPx", 10.0); addAndMakeVisible (*b); }
-    satTab.onClick = [this] { proc.uiState.setProperty ("postTab", 0, nullptr); resized(); };
-    resTab.onClick = [this] { proc.uiState.setProperty ("postTab", 1, nullptr); resized(); };
-    setHelp (satTab, "SAT", "帯域サチュレーターの設定を表示（色付きの点＝オン）", "Show the band saturator (coloured dot = on)");
-    setHelp (resTab, "RES", "レゾナンス・サプレッサーの設定を表示（色付きの点＝オン）。信号の流れは EQ → RES → SAT", "Show the resonance suppressor (coloured dot = on). Signal flow: EQ → RES → SAT");
+    for (auto* b : { &satTab, &resTab }) { b->onSelect = [this] { resized(); repaint(); }; addAndMakeVisible (*b); }
+    setHelp (satTab, "SAT", "左の丸＝サチュレーターのオン・オフ（表示を切り替えなくても操作できる）。それ以外の部分＝設定を表示", "Left circle: saturator on / off (no need to switch the view). Rest of the tab: show its controls");
+    setHelp (resTab, "RES", "左の丸＝レゾナンス・サプレッサーのオン・オフ。それ以外の部分＝設定を表示。信号の流れは EQ → RES → SAT", "Left circle: resonance suppressor on / off. Rest of the tab: show its controls. Signal flow: EQ → RES → SAT");
     setHelp (modeBox, "MODE", "処理の方式。Zero latency：全体の既定。Min のバンドはデジタル IIR（遅れゼロ、位相が回る、ナイキスト付近は形が詰まる）。Lin にしたバンドだけ FIR になり、そのときは全体が FIR 分遅れる。DYN と TRANSIENT/BODY はこのモードの Min バンドだけ／Analog：Min のバンドを、アナログ回路と同じ振幅と位相の最小位相 FIR で処理。高域も形が崩れない。Lin のバンドがなければレイテンシーなし／Linear：全バンドをリニア位相にする（バンドごとの Min/Lin は無視）。位相は回らないが、全体が遅れ、アタックの前にプリリンギングが出る",
              "Processing mode. Zero latency: the default. Min bands run as digital IIR (no delay, phase turns, cramping near Nyquist); bands set to Lin become FIR, which delays everything. DYN and TRANSIENT/BODY work on Min bands in this mode only / Analog: Min bands become a minimum-phase FIR with the analog magnitude and phase; highs keep their shape; no latency unless a band is Lin / Linear: all bands linear phase (per-band Min/Lin is ignored); no phase shift, but everything is delayed and pre-ringing appears before the attack");
     setHelp (resBtn, "RESOLUTION", "リニア位相の FIR の長さ（Low / Mid / High）。長いほど低域が正確だが、レイテンシーとプリリンギングも伸びる", "Linear-phase FIR length. Longer is more accurate in the lows, with more latency and pre-ringing");
@@ -286,7 +284,7 @@ void EQAnatomyView::paint (juce::Graphics& g)
     g.setFont (theme::mono (10.0f));
     g.setColour (lat > 0 ? theme::pre : theme::muted);
     const juce::String latTxt = "LAT " + (lat > 0 ? juce::String (lat * 1000.0 / fs, 1) + " ms" : juce::String ("0 ms"));
-    if (latRect.isEmpty() || ! outDrag.isVisible()) g.drawText (latTxt, 718, 15, 58, 16, juce::Justification::centredLeft);
+    if (latRect.isEmpty() || ! outDrag.isVisible()) g.drawText (latTxt, graph.getRight() - 64, graph.getBottom() + 2, 64, 12, juce::Justification::centredRight);
     else
     {
         g.setColour (theme::well); g.fillRoundedRectangle (latRect.toFloat(), 4.0f);
@@ -295,11 +293,11 @@ void EQAnatomyView::paint (juce::Graphics& g)
         g.setColour (lat > 0 ? theme::pre : theme::text); g.setFont (theme::mono (10.5f, true));
         g.drawText (lat > 0 ? juce::String (lat * 1000.0 / fs, 1) + " ms" : juce::String ("0 ms"), latRect.withTrimmedRight (6), juce::Justification::centredRight);
     }
-    // separators: before PRESET, after MORPH
-    g.setColour (theme::muted.withAlpha (0.55f));
-    for (int x : { resetBtn.getX() - 52, morph.getRight() + 3 }) g.drawVerticalLine (x, 8.0f, 36.0f);
-    g.setColour (theme::muted); g.setFont (theme::ui (8.5f));
-    g.drawText ("MORPH", 918, 2, 80, 10, juce::Justification::centredLeft);
+    // the preset group's frame (preset, slots, morph belong together)
+    g.setColour (theme::panel); g.fillRoundedRectangle (presetGroup.toFloat(), 6.0f);
+    g.setColour (theme::line.brighter (0.25f)); g.drawRoundedRectangle (presetGroup.toFloat().reduced (0.5f), 6.0f, 1.0f);
+    g.setColour (theme::muted); g.setFont (theme::ui (8.0f));
+    g.drawText ("MORPH", morph.getX(), 3, 60, 9, juce::Justification::centredLeft);
     // captions for the two menus whose text is a name (curve character, preset)
     g.setColour (theme::muted); g.setFont (theme::ui (8.5f, true));
     g.drawText ("CURVE", curveBox.getX() - 38, 10, 35, 24, juce::Justification::centredRight);
@@ -316,10 +314,15 @@ void EQAnatomyView::resized()
     modeBox.setBounds (x, 10, 112, 24); x += 116;
     resBtn.setBounds (x, 10, 60, 24); x += 64;
     x += 38; curveBox.setBounds (x, 10, 108, 24); x += 112;      // "CURVE" caption on the left
-    x += 42; resetBtn.setBounds (x, 10, 712 - x, 24);           // "PRESET" caption on the left
-    for (int i = 0; i < 4; ++i) slotBtn[i].setBounds (778 + i * 26, 10, 24, 24);
-    morphTo.setBounds (884, 12, 30, 20);
-    morph.setBounds (916, 10, 48, 26);
+    // the preset group, right-aligned in its own frame: PRESET caption, preset menu, slots A–D, morph target, MORPH
+    {
+        const int right = 958;
+        morph.setBounds (right - 50, 12, 48, 24);
+        morphTo.setBounds (right - 84, 12, 30, 20);
+        for (int i = 0; i < 4; ++i) slotBtn[i].setBounds (right - 194 + i * 26, 10, 24, 24);
+        resetBtn.setBounds (right - 194 - 8 - 150, 10, 150, 24);
+        presetGroup = { resetBtn.getX() - 50, 4, right + 4 - (resetBtn.getX() - 50), 38 };
+    }
     helpBtn.setBounds (970, 10, 42, 24);
     earBtn.setBounds (1016, 10, 40, 24);
     learnBtn.setBounds (1060, 10, 48, 24);
@@ -336,7 +339,7 @@ void EQAnatomyView::resized()
     satStrip.setBounds (12, y, 180, h); resStrip.setBounds (12, y, 180, h);
     {
         const bool rsTab = (int) proc.uiState.getProperty ("postTab", 0) == 1;
-        satTab.setBounds (20, y + 6, 78, 18); resTab.setBounds (102, y + 6, 82, 18);
+        satTab.setBounds (8 + 12, y + 5, 78, 20); resTab.setBounds (8 + 12 + 82, y + 5, 78, 20);
         satTab.setVisible (! ear && lower); resTab.setVisible (! ear && lower);
         satStrip.setVisible (! ear && lower && ! rsTab); resStrip.setVisible (! ear && lower && rsTab);
     }
@@ -371,6 +374,24 @@ bool EQAnatomyView::keyPressed (const juce::KeyPress& k)
     if (k == juce::KeyPress ('z', juce::ModifierKeys::commandModifier, 0)) { proc.undo.undo(); return true; }
     if (k == juce::KeyPress ('z', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0)) { proc.undo.redo(); return true; }
     if (c >= '1' && c <= '0' + eqcore::kBands) { ph.select (c - '1'); return true; }
+    // ↑ / ↓: step the parameter last touched (Shift: finer). Hz and ms in ratios, dB in 0.5 / 0.1, choices one at a time
+    if (k.getKeyCode() == juce::KeyPress::upKey || k.getKeyCode() == juce::KeyPress::downKey)
+    {
+        const juce::String id = ph.lastId.isNotEmpty() ? ph.lastId : pid::band (ph.selected(), "gain");
+        auto* p = ph.get (id); if (p == nullptr) return false;
+        const float dir = k.getKeyCode() == juce::KeyPress::upKey ? 1.0f : -1.0f;
+        const bool fine = k.getModifiers().isShiftDown();
+        const auto lab = p->getLabel(); const float v = ph.value (id); const auto rg = p->getNormalisableRange();
+        float nv;
+        if (dynamic_cast<juce::AudioParameterBool*> (p) != nullptr) return false;
+        if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (p)) nv = (float) juce::jlimit (0, c->choices.size() - 1, c->getIndex() + (int) dir);
+        else if (lab == "Hz") nv = v * std::pow (2.0f, dir * (fine ? 1.0f / 48.0f : 1.0f / 12.0f));
+        else if (lab == "ms" || lab.isEmpty()) nv = v * std::pow (fine ? 1.02f : 1.1f, dir);
+        else if (lab == "dB") nv = v + dir * (fine ? 0.1f : 0.5f);
+        else nv = v + dir * (fine ? 0.2f : 1.0f) * std::max (0.01f, (rg.end - rg.start) / 100.0f);
+        ph.setGesture (id, rg.snapToLegalValue (juce::jlimit (rg.start, rg.end, nv)));
+        return true;
+    }
     if (k == juce::KeyPress::deleteKey || k == juce::KeyPress::backspaceKey)
     { ph.setGesture (pid::band (ph.selected(), "on"), 0.0f); return true; }
     return false;
@@ -424,7 +445,7 @@ void EQAnatomyView::fieldUpdate()
     auto& F = graph.fieldF;
     if (F.empty())
     {
-        for (double f = 20.0 * std::pow (2.0, 1.0 / 12.0); f < 20000.0; f *= std::pow (2.0, 1.0 / 6.0)) F.push_back (f);
+        for (double f = 20.0 * std::pow (2.0, 1.0 / 12.0); f < frange::hi; f *= std::pow (2.0, 1.0 / 6.0)) F.push_back (f);
         for (int k = 0; k < 2; ++k) { fPM[(size_t) k].assign (F.size(), 0.0); fPS[(size_t) k].assign (F.size(), 0.0); fX[(size_t) k].assign (F.size(), 0.0); fY[(size_t) k].assign (F.size(), 0.0);
                                       graph.fieldW[(size_t) k].assign (F.size(), std::numeric_limits<float>::quiet_NaN()); graph.fieldC[(size_t) k].assign (F.size(), std::numeric_limits<float>::quiet_NaN()); graph.fieldP[(size_t) k].assign (F.size(), std::numeric_limits<float>::quiet_NaN()); }
     }
@@ -436,7 +457,7 @@ void EQAnatomyView::fieldUpdate()
         fft.performRealOnlyForwardTransform (d.data(), true);      // interleaved re / im, bins 0 .. N/2
     };
     const double a = 0.2;               // ~0.3 s at the 30 Hz refresh
-    const double floorP = std::pow (10.0, -80.0 / 10.0) * (N * N / 16.0);   // about −80 dBFS per band
+    const double floorP = std::pow (10.0, -140.0 / 10.0) * (N * N / 16.0);  // about −140 dBFS per band: only silence is left out
     for (int k = 0; k < 2; ++k)
     {
         auto& m = bins[0]; auto& s = bins[1];
@@ -507,8 +528,8 @@ void EQAnatomyView::layerSpectrum (int src, std::vector<float>& out)
     const float norm = 4.0f / (float) N;
     for (size_t i = 0; i < out.size(); ++i)
     {
-        const double fq = 20.0 * std::pow (1000.0, (double) i / (out.size() - 1));
-        const double fq2 = 20.0 * std::pow (1000.0, (double) (i + 1) / (out.size() - 1));
+        const double fq = frange::lo * std::pow (frange::ratio, (double) i / (out.size() - 1));
+        const double fq2 = frange::lo * std::pow (frange::ratio, (double) (i + 1) / (out.size() - 1));
         int b0 = (int) (fq * N / fs), b1 = std::max (b0 + 1, (int) (fq2 * N / fs));
         b0 = juce::jlimit (1, N / 2 - 1, b0); b1 = juce::jlimit (b0 + 1, N / 2, b1);
         float m = 0;
@@ -557,14 +578,11 @@ void EQAnatomyView::timerCallback()
     refreshTexts();
     graph.update (spec, specB);
     satStrip.refresh(); resStrip.refresh();
+    // the practice loop belongs to Learn: it stops when Learn is no longer shown
+    if (proc.sampleSrc.load() >= 0 && ! (lowerOpen() && (bool) proc.uiState.getProperty ("learn", true) && ! proc.earActive())) { proc.sampleSrc = -1; lesson.refreshTexts(); }
     {
         const bool rsTab = (int) proc.uiState.getProperty ("postTab", 0) == 1;
-        const bool satOn = ph.value (pid::satOn) > 0.5f, rsOn = ph.value (pid::rsOn) > 0.5f;
-        satTab.setButtonText (juce::String ("SAT") + (satOn ? juce::String::fromUTF8 ("  â") : juce::String()));
-        resTab.setButtonText (juce::String ("RES") + (rsOn ? juce::String::fromUTF8 ("  â") : juce::String()));
-        satTab.setToggleState (! rsTab, juce::dontSendNotification); resTab.setToggleState (rsTab, juce::dontSendNotification);
-        satTab.setColour (juce::TextButton::textColourOffId, satOn ? theme::sat : theme::text);
-        resTab.setColour (juce::TextButton::textColourOffId, rsOn ? theme::res : theme::text);
+        satTab.repaint(); resTab.repaint(); juce::ignoreUnused (rsTab);
     }
     if (detail.isVisible()) detail.refresh (ph.selected());
     irView.refresh();
@@ -572,5 +590,5 @@ void EQAnatomyView::timerCallback()
     viewSolo.repaint();
     lesson.repaint();
     io.tick();
-    repaint (716, 0, 62, 44); repaint (latRect);   // LAT readout
+    repaint (latRect); repaint (graph.getRight() - 70, graph.getBottom(), 72, 16);   // LAT readout
 }

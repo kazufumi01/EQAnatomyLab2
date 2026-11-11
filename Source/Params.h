@@ -5,6 +5,8 @@
 // =============================================================================
 //  Parameter IDs and layout
 // =============================================================================
+// Lab 2: the frequency axis and the bands' frequency range, 10 Hz … 22 kHz
+namespace frange { constexpr double lo = 10.0, hi = 22000.0, ratio = hi / lo; }
 namespace pid
 {
 inline juce::String band (int i, const char* what) { return "b" + juce::String (i + 1) + "_" + what; }
@@ -42,6 +44,10 @@ static const char* rsSel = "rs_sel";        // selectivity, %: 0 = broad bumps c
 static const char* rsAtt = "rs_att";        // ms
 static const char* rsRel = "rs_rel";        // ms
 static const char* rsDelta = "rs_delta";    // hear only what is removed
+// the threshold curve: five nodes, each a frequency and an offset (dB) added to THRESHOLD; straight lines in log frequency between them
+inline juce::String rsNode (int i, const char* what) { return "rs_n" + juce::String (i + 1) + "_" + what; }
+constexpr int kRsNodes = 5;
+inline float rsNodeDefaultF (int i) { static const float f[] = { 100.0f, 300.0f, 1000.0f, 3000.0f, 10000.0f }; return f[i]; }
 }
 
 inline const juce::StringArray& typeNames()
@@ -69,8 +75,8 @@ inline const BandDefault& bandDefault (int i)
 inline void addBandMain (juce::AudioProcessorValueTreeState::ParameterLayout& l, int i, int ver)
 {
     using namespace juce;
-    auto freqRange = NormalisableRange<float> (20.0f, 20000.0f, 0.0f, 1.0f);
-    freqRange.setSkewForCentre (632.0f);
+    auto freqRange = NormalisableRange<float> ((float) frange::lo, (float) frange::hi, 0.0f, 1.0f);
+    freqRange.setSkewForCentre ((float) std::sqrt (frange::lo * frange::hi));
     auto qRange = NormalisableRange<float> (0.1f, 18.0f, 0.0f, 1.0f);
     qRange.setSkewForCentre (1.0f);
         const auto& d = bandDefault (i);
@@ -112,8 +118,8 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
 {
     using namespace juce;
     AudioProcessorValueTreeState::ParameterLayout l;
-    auto freqRange = NormalisableRange<float> (20.0f, 20000.0f, 0.0f, 1.0f);
-    freqRange.setSkewForCentre (632.0f);
+    auto freqRange = NormalisableRange<float> ((float) frange::lo, (float) frange::hi, 0.0f, 1.0f);
+    freqRange.setSkewForCentre ((float) std::sqrt (frange::lo * frange::hi));
     auto qRange = NormalisableRange<float> (0.1f, 18.0f, 0.0f, 1.0f);
     qRange.setSkewForCentre (1.0f);
     for (int i = 0; i < 6; ++i) addBandMain (l, i, 1);
@@ -168,6 +174,12 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
         l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::rsAtt, 4 }, "Res attack", msRange (1.0f, 200.0f), 10.0f, AudioParameterFloatAttributes().withLabel ("ms")));
         l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::rsRel, 4 }, "Res release", msRange (10.0f, 2000.0f), 150.0f, AudioParameterFloatAttributes().withLabel ("ms")));
         l.add (std::make_unique<AudioParameterBool> (ParameterID { pid::rsDelta, 4 }, "Res delta", false));
+        for (int i = 0; i < pid::kRsNodes; ++i)
+        {
+            const String n ("Res node " + String (i + 1) + " ");
+            l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::rsNode (i, "f"), 5 }, n + "freq", rsRange, pid::rsNodeDefaultF (i), AudioParameterFloatAttributes().withLabel ("Hz")));
+            l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::rsNode (i, "g"), 5 }, n + "offset", NormalisableRange<float> (-12.0f, 12.0f, 0.1f), 0.0f, AudioParameterFloatAttributes().withLabel ("dB")));
+        }
     }
     return l;
 }

@@ -13,7 +13,7 @@
 //                                                            3 bins so that the random ups and downs of noise are not taken for peaks
 //    ref[k]    = mean of level over ±WIDTH/2 octaves         the "smooth" spectrum around the bin (computed twice;
 //                                                            the second pass clips peaks so they do not lift their own reference)
-//    over[k]   = level − ref − THRESHOLD                     how far the bin sticks out
+//    over[k]   = level − ref − (THRESHOLD + node curve)      how far the bin sticks out (the node curve: five points, as an EQ)
 //    target[k] = clamp(over, 0, DEPTH) · range weight        only inside LOW..HIGH (1/6-octave soft edges)
 //    gain[k]   follows target with ATTACK / RELEASE, then a 3-bin smoothing across frequency
 //  Delta outputs X · (1 − g): only what is being removed.
@@ -25,6 +25,26 @@ public:
     static constexpr int order = 10, N = 1 << order, H = N / 4, K = N / 2 + 1;
     static constexpr int kDisp = 96;                              // display points, log-spaced 20 Hz .. 20 kHz
     std::array<std::atomic<float>, kDisp> dispDb {};              // current reduction (dB, ≥ 0) for the graph
+    std::array<std::atomic<float>, kDisp> dispEx {};              // how far each point sticks out of its surroundings (dB), for the RES panel
+    struct Nodes { std::array<float, 5> f { 100, 300, 1000, 3000, 10000 }, g {}; bool operator!= (const Nodes& o) const { return f != o.f || g != o.g; } };
+    // the threshold offset at f: straight lines in log frequency between the nodes (sorted by frequency), flat outside
+    static float nodeOffset (const Nodes& n, double f)
+    {
+        std::array<int, 5> o { 0, 1, 2, 3, 4 };
+        std::sort (o.begin(), o.end(), [&] (int a, int b) { return n.f[(size_t) a] < n.f[(size_t) b]; });
+        if (f <= n.f[(size_t) o[0]]) return n.g[(size_t) o[0]];
+        for (int i = 0; i < 4; ++i)
+        {
+            const double f0 = n.f[(size_t) o[(size_t) i]], f1 = n.f[(size_t) o[(size_t) i + 1]];
+            if (f <= f1)
+            {
+                const double t = f1 > f0 ? std::log (f / f0) / std::log (f1 / f0) : 1.0;
+                return (float) (n.g[(size_t) o[(size_t) i]] + t * (n.g[(size_t) o[(size_t) i + 1]] - n.g[(size_t) o[(size_t) i]]));
+            }
+        }
+        return n.g[(size_t) o[4]];
+    }
+    void setNodes (const Nodes& n) { if (n != nodes) { nodes = n; dirty = true; } }
 
     void prepare (double sampleRate)
     {
@@ -39,10 +59,11 @@ public:
         std::fill (red.begin(), red.end(), 0.0f); std::fill (pw.begin(), pw.end(), 0.0f);
         w = 0; hop = 0; oq = 0;
         for (auto& d : dispDb) d = 0.0f;
+        for (auto& d : dispEx) d = -60.0f;
     }
     void setParams (float depthDb, float thrDb, float loHz, float hiHz, float selPct, float attMs, float relMs, bool deltaOut)
     {
-        if (depthDb != depth || thrDb != thr || loHz != lo || hiHz != hi || selPct != sel) dirty = true;
+        if (loHz != lo || hiHz != hi || selPct != sel) dirty = true;
         depth = depthDb; thr = thrDb; lo = loHz; hi = hiHz; sel = selPct; delta = deltaOut;
         const double fr = fs / H;                                  // frames per second
         aAtt = (float) (1.0 - std::exp (-1.0 / (fr * std::max (0.5, (double) attMs) * 0.001)));
@@ -73,7 +94,8 @@ private:
     std::array<std::array<float, N>, 2> ring {}, acc {};
     std::array<std::array<float, H>, 2> outq {};
     std::array<std::array<float, 2 * N>, 2> X {};
-    std::array<float, K> red {}, pw {}, lev {}, ref {}, tmp {}, wgt {};
+    std::array<float, K> red {}, pw {}, lev {}, ref {}, tmp {}, wgt {}, thrK {};
+    Nodes nodes;
     std::array<int, K> a0 {}, a1 {};
     std::array<double, K + 1> cs {};
     std::array<int, kDisp + 1> dispBin {};
@@ -93,6 +115,7 @@ private:
             const double dl = std::log2 (f / std::max (20.0, (double) lo)), dh = std::log2 (std::min (20000.0, (double) hi) / f);
             auto edge = [e] (double d) { return d >= 0 ? 1.0 : d <= -e ? 0.0 : 0.5 + 0.5 * std::cos (juce::MathConstants<double>::pi * d / e); };
             wgt[(size_t) k] = (float) (edge (dl) * edge (dh));
+            thrK[(size_t) k] = nodeOffset (nodes, f);
         }
         for (int d = 0; d <= kDisp; ++d)
             dispBin[(size_t) d] = juce::jlimit (1, K - 1, (int) std::round (20.0 * std::pow (1000.0, (double) d / kDisp) * N / fs));
@@ -125,7 +148,7 @@ private:
         const float quiet = 20.0f * std::log10 ((float) N * 0.25f) - 100.0f;     // about −100 dBFS per bin: leave silence alone
         for (int k = 0; k < K; ++k)
         {
-            float t = lev[(size_t) k] > quiet ? juce::jlimit (0.0f, depth, lev[(size_t) k] - ref[(size_t) k] - thr) * wgt[(size_t) k] : 0.0f;
+            float t = lev[(size_t) k] > quiet ? juce::jlimit (0.0f, depth, lev[(size_t) k] - ref[(size_t) k] - thr - thrK[(size_t) k]) * wgt[(size_t) k] : 0.0f;
             auto& rd = red[(size_t) k];
             rd += (t - rd) * (t > rd ? aAtt : aRel);
         }
@@ -139,8 +162,10 @@ private:
         }
         for (int d = 0; d < kDisp; ++d)
         {
-            float m = 0; for (int k = dispBin[(size_t) d]; k <= std::max (dispBin[(size_t) d], dispBin[(size_t) d + 1] - 1); ++k) m = std::max (m, tmp[(size_t) k]);
-            dispDb[(size_t) d] = m;
+            float m = 0, ex = -60.0f;
+            for (int k = dispBin[(size_t) d]; k <= std::max (dispBin[(size_t) d], dispBin[(size_t) d + 1] - 1); ++k)
+            { m = std::max (m, tmp[(size_t) k]); if (lev[(size_t) k] > quiet) ex = std::max (ex, lev[(size_t) k] - ref[(size_t) k]); }
+            dispDb[(size_t) d] = m; dispEx[(size_t) d] = ex;
         }
         // back to time, window again, overlap-add (sqrt-Hann² at 75 % overlap sums to 2)
         for (int c = 0; c < 2; ++c)

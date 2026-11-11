@@ -7,6 +7,7 @@
 #include "XfadeConvolver.h"
 #include "LinkRegistry.h"
 #include "ResSuppressor.h"
+#include "SamplePlayer.h"
 
 // =============================================================================
 //  Zero-latency engine: RBJ biquads with smoothed frequency / gain / Q,
@@ -349,8 +350,11 @@ private:
     BandSaturator sat; bool satWasOn = false;
 public:
     ResSuppressor rs;           // the editor reads rs.dispDb for the graph
+    std::atomic<int> sampleSrc { -1 };   // Learn mode's practice material replacing the input: −1 off, 0 drums, 1 voice, 2 both (not saved)
 private:
     bool rsWasOn = false; Delay rsDelay[2];
+    SamplePlayer player; int playerWas = -1;
+    std::array<std::atomic<float>*, 10> rsNodeP {};      // threshold nodes f / g, looked up once
     std::array<DynDetector, eqcore::kBands> det; std::array<double, eqcore::kBands> dynNow {}; double detAtt = 0.1, detRel = 0.01;
     TransientDetector trans;
     std::vector<double> maskBuf, maskDel;     // per-block transient mask, and the same delayed to match the output
