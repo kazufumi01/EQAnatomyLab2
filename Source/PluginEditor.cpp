@@ -60,12 +60,13 @@ EQAnatomyView::EQAnatomyView (EQAnatomyProcessor& p) : proc (p)
     };
     undoBtn.onClick = [this] { proc.undo.undo(); };
     redoBtn.onClick = [this] { proc.undo.redo(); };
-    earBtn.onClick  = [this] { if (proc.earActive()) setEar (false); else { earCard.setKind (0); setEar (true); } };
+    // Panel / EAR / Learn: one of them fills the lower panel; turning the shown one off closes the panel
+    earBtn.onClick  = [this] { if (proc.earActive()) { setEar (false); setLower (false); } else { earCard.setKind (0); setEar (true); } };
     learnBtn.onClick   = [this]
     {
-        if ((bool) proc.uiState.getProperty ("learn", true) && ! proc.earActive()) { proc.uiState.setProperty ("learn", false, nullptr); return; }
-        if (proc.earActive()) setEar (false);                     // EAR, Learn and Help are exclusive
-        proc.uiState.setProperty ("lesson", 0, nullptr); proc.uiState.setProperty ("learn", true, nullptr);
+        if ((bool) proc.uiState.getProperty ("learn", true) && ! proc.earActive() && lowerOpen()) { proc.uiState.setProperty ("learn", false, nullptr); setLower (false); return; }
+        if (proc.earActive()) setEar (false);                     // EAR, Learn and Panel are exclusive
+        proc.uiState.setProperty ("lesson", 0, nullptr); proc.uiState.setProperty ("learn", true, nullptr); setLower (true);
     };
     // long press: the list of every lesson
     learnBtn.onLongPress = [this]
@@ -80,13 +81,18 @@ EQAnatomyView::EQAnatomyView (EQAnatomyProcessor& p) : proc (p)
         {
             if (r < 100) return;
             if (proc.earActive()) setEar (false);
-            proc.uiState.setProperty ("lesson", r - 100, nullptr); proc.uiState.setProperty ("learn", true, nullptr);
+            proc.uiState.setProperty ("lesson", r - 100, nullptr); proc.uiState.setProperty ("learn", true, nullptr); setLower (true);
         });
     };
-    helpBtn.onClick    = [this] { if (proc.earActive()) setEar (false); proc.uiState.setProperty ("learn", false, nullptr); };
+    helpBtn.onClick    = [this]
+    {
+        if (lowerOpen() && ! proc.earActive() && ! (bool) proc.uiState.getProperty ("learn", true)) { setLower (false); return; }
+        if (proc.earActive()) setEar (false);
+        proc.uiState.setProperty ("learn", false, nullptr); setLower (true);
+    };
     addAndMakeVisible (helpBtn);
-    setHelp (helpBtn, "HELP", "説明欄にヘルプを出す（今の方式、マウス操作、ポインターを置いた部分の説明）。EAR・Learn を閉じる",
-             "Show help in the text panel (the current mode, mouse controls, and whatever you point at). Closes EAR and Learn");
+    setHelp (helpBtn, "PANEL", "下段（サチュレーター・インパルス・説明欄・出力のボタン）を開き、説明欄にヘルプを出す（今の方式、マウス操作、ポインターを置いた部分の説明）。もう一度で下段を閉じ、グラフとメーターが下まで広がる。Panel・EAR・Learn はどれか1つ。どれもオフなら下段は閉じる",
+             "Opens the lower panel (saturator, impulse, text panel, output buttons) with help in the text panel (the current mode, mouse controls, whatever you point at). Click again to close it; the graph and meters then take the whole height. Panel, EAR and Learn are exclusive; with all three off the lower panel is closed");
     langBtn.onClick    = [this] { proc.uiState.setProperty ("lang", ph.ja() ? "en" : "ja", nullptr); };
     resetBtn.onClick   = [this]
     {
@@ -192,6 +198,9 @@ void EQAnatomyView::applyScale (int i)
     repaint();
 }
 
+bool EQAnatomyView::lowerOpen() const { return (bool) proc.uiState.getProperty ("lowerOpen", true); }
+void EQAnatomyView::setLower (bool on) { proc.uiState.setProperty ("lowerOpen", on, nullptr); resized(); repaint(); }
+
 void EQAnatomyView::setEar (bool on)
 {
     if (on) proc.uiState.setProperty ("learn", false, nullptr);   // EAR and Learn are exclusive
@@ -229,14 +238,14 @@ void EQAnatomyView::refreshTexts()
     soloBtn.setColour (juce::TextButton::buttonOnColourId, theme::pre);
     earBtn.setButtonText ("EAR"); earBtn.setToggleState (proc.earActive(), juce::dontSendNotification);
     learnBtn.setButtonText ("Learn");
-    helpBtn.setButtonText (ph.tr ("説明", "Help")); helpBtn.setClickingTogglesState (false);
-    helpBtn.setToggleState (! (bool) proc.uiState.getProperty ("learn", true) && ! proc.earActive(), juce::dontSendNotification);
-    learnBtn.setToggleState ((bool) proc.uiState.getProperty ("learn", true) && ! proc.earActive(), juce::dontSendNotification);
+    helpBtn.setButtonText ("Panel"); helpBtn.setClickingTogglesState (false);
+    helpBtn.setToggleState (lowerOpen() && ! (bool) proc.uiState.getProperty ("learn", true) && ! proc.earActive(), juce::dontSendNotification);
+    learnBtn.setToggleState (lowerOpen() && (bool) proc.uiState.getProperty ("learn", true) && ! proc.earActive(), juce::dontSendNotification);
     langBtn.setButtonText (ph.ja() ? "EN" : juce::String::fromUTF8 ("日本語"));
     {
         const int pi = (int) proc.uiState.getProperty ("preset", -1);
-        resetBtn.setButtonText ((pi >= 0 && pi < (int) presets().size() ? juce::String (presets()[(size_t) pi].nameEn) : juce::String::fromUTF8 ("\xe2\x80\x94"))
-                                + juce::String::fromUTF8 (" \xe2\x96\xbe"));
+        resetBtn.setButtonText (pi >= 0 && pi < (int) presets().size() ? juce::String (presets()[(size_t) pi].nameEn) : juce::String::fromUTF8 ("\xe2\x80\x94"));
+        resetBtn.getProperties().set ("chevron", 1);
     }
     autoBtn.getProperties().set ("fontPx", 11.0);
     autoBtn.setButtonText (ph.value (pid::autoGain) > 0.5f ? "Auto gain " + fmtDb (proc.currentAutoGainDb()) + " dB" : juce::String ("Auto gain"));
@@ -271,7 +280,19 @@ void EQAnatomyView::paint (juce::Graphics& g)
     const double fs = proc.getSampleRateOrDefault();
     g.setFont (theme::mono (10.0f));
     g.setColour (lat > 0 ? theme::pre : theme::muted);
-    g.drawText ("LAT " + (lat > 0 ? juce::String (lat * 1000.0 / fs, 1) + " ms" : juce::String ("0 ms")), 718, 6, 60, 16, juce::Justification::centredLeft);
+    const juce::String latTxt = "LAT " + (lat > 0 ? juce::String (lat * 1000.0 / fs, 1) + " ms" : juce::String ("0 ms"));
+    if (latRect.isEmpty() || ! outDrag.isVisible()) g.drawText (latTxt, 718, 15, 58, 16, juce::Justification::centredLeft);
+    else
+    {
+        g.setColour (theme::well); g.fillRoundedRectangle (latRect.toFloat(), 4.0f);
+        g.setColour (theme::line); g.drawRoundedRectangle (latRect.toFloat().reduced (0.5f), 4.0f, 1.0f);
+        g.setColour (theme::muted); g.setFont (theme::ui (9.0f)); g.drawText (ph.tr ("レイテンシー", "Latency"), latRect.withTrimmedLeft (6), juce::Justification::centredLeft);
+        g.setColour (lat > 0 ? theme::pre : theme::text); g.setFont (theme::mono (10.5f, true));
+        g.drawText (lat > 0 ? juce::String (lat * 1000.0 / fs, 1) + " ms" : juce::String ("0 ms"), latRect.withTrimmedRight (6), juce::Justification::centredRight);
+    }
+    // separators: before PRESET, after MORPH
+    g.setColour (theme::muted.withAlpha (0.55f));
+    for (int x : { resetBtn.getX() - 52, morph.getRight() + 3 }) g.drawVerticalLine (x, 8.0f, 36.0f);
     g.setColour (theme::muted); g.setFont (theme::ui (8.5f));
     g.drawText ("MORPH", 918, 2, 80, 10, juce::Justification::centredLeft);
     // captions for the two menus whose text is a name (curve character, preset)
@@ -293,7 +314,7 @@ void EQAnatomyView::resized()
     x += 42; resetBtn.setBounds (x, 10, 712 - x, 24);           // "PRESET" caption on the left
     for (int i = 0; i < 4; ++i) slotBtn[i].setBounds (778 + i * 26, 10, 24, 24);
     morphTo.setBounds (884, 12, 30, 20);
-    morph.setBounds (916, 10, 50, 26);
+    morph.setBounds (916, 10, 48, 26);
     helpBtn.setBounds (970, 10, 42, 24);
     earBtn.setBounds (1016, 10, 40, 24);
     learnBtn.setBounds (1060, 10, 48, 24);
@@ -316,12 +337,14 @@ void EQAnatomyView::resized()
     earCard.setVisible (ear && lower);
     earCard.setBounds (12, y, getWidth() - 24, h);
     irView.setBounds (320, y, 128, h);
-    const int bw = 112, bx = getWidth() - 12 - bw, bh = (h - 16) / 5;
-    outDrag.setBounds (bx, y, bw, bh);
-    autoBtn.setBounds (bx, y + (bh + 4) * 1, bw, bh);
-    deltaBtn.setBounds (bx, y + (bh + 4) * 2, bw, bh);
-    viewSolo.setBounds (bx, y + (bh + 4) * 3, bw, bh);
-    bypassBtn.setBounds (bx, y + (bh + 4) * 4, bw, bh);
+    // the button column: four rows of the same height, spread over the panel (OUT | Auto gain, latency, SOLO, Delta | Bypass)
+    const int bw = 112, bx = getWidth() - 12 - bw, bh = (h - 16) / 5, gap = (h - 4 * bh) / 3;
+    auto row = [&] (int k) { return juce::Rectangle<int> (bx, y + k * (bh + gap), bw, bh); };
+    outDrag.setBounds (row (0));
+    latRect = row (1);
+    autoBtn.setVisible (false);
+    viewSolo.setBounds (row (2));
+    { auto r = row (3); deltaBtn.setBounds (r.removeFromLeft (bw / 2 - 2)); r.removeFromLeft (4); bypassBtn.setBounds (r); }
     soloBtn.setVisible (false);                    // pre-ring solo is the P cell of SOLO
     lesson.setBounds (456, y, bx - 8 - 456, h);
 }
@@ -368,8 +391,6 @@ void EQAnatomyView::pullAnalyzer()
         if (linkTap == nullptr) b = -1;                // that instance is gone (or not loaded yet)
     }
     // SOLO M / S shows Mid + Side, SOLO T / B shows Trans + Body; the saved choice comes back when the solo ends
-    const int sv = proc.soloViewEffective();
-    if (sv == 1 || sv == 2) { a = 1; b = 2; } else if (sv >= 3) { a = 3; b = 4; }
     proc.analyzerNeedTB = a == 3 || a == 4 || b == 3 || b == 4;
     layerSpectrum (a, spec);
     if (b >= 0) layerSpectrum (b, specB); else std::fill (specB.begin(), specB.end(), -140.0f);
@@ -423,8 +444,10 @@ void EQAnatomyView::fieldUpdate()
             // balance = (PL - PR) / (PL + PR) = 2X / (Pm + Ps); spread = (1 - corr) / 2
             const double corr = juce::jlimit (-1.0, 1.0, (PM - PS) / std::sqrt (std::max (1e-30, t * t - 4.0 * X * X)));
             graph.fieldC[(size_t) k][i] = (float) corr;
-            graph.fieldP[(size_t) k][i] = (float) juce::jlimit (-1.0, 1.0, 2.0 * X / t);
-            graph.fieldW[(size_t) k][i] = (float) (0.5 * (1.0 - corr));
+            // L / R levels of the band (L = M + S, R = M − S), scaled like the analyzer (+3 dB/oct around 1 kHz)
+            const double sc = 20.0 * std::log10 (4.0 / N) + 3.0 * std::log2 (F[i] / 1000.0);
+            graph.fieldW[(size_t) k][i] = (float) (10.0 * std::log10 (std::max (1e-20, t + 2.0 * X)) + sc);
+            graph.fieldP[(size_t) k][i] = (float) (10.0 * std::log10 (std::max (1e-20, t - 2.0 * X)) + sc);
         }
     }
 }
@@ -515,5 +538,5 @@ void EQAnatomyView::timerCallback()
     viewSolo.repaint();
     lesson.repaint();
     io.tick();
-    repaint (716, 0, 62, 44);   // LAT readout
+    repaint (716, 0, 62, 44); repaint (latRect);   // LAT readout
 }

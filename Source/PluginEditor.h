@@ -39,6 +39,8 @@ private:
     ResetCombo curveBox;
     juce::Slider morph;
     void setEar (bool on);
+    bool lowerOpen() const; void setLower (bool on);
+    juce::Rectangle<int> latRect;
     void applySkin (int i);
     void applySurface (int i);
     void applyScale (int i);

@@ -234,6 +234,25 @@ public:
         const float px = (float) (double) b.getProperties().getWithDefault ("fontPx", 12.0);   // a button may ask for a smaller font
         return ui (juce::jmin (px, h * 0.5f));
     }
+    // a button that opens a menu or a panel carries "chevron" (1 = down, 2 = up) and gets the same line arrow as the menus (ComboBox)
+    void drawButtonText (juce::Graphics& g, juce::TextButton& b, bool over, bool down) override
+    {
+        const int ch = (int) b.getProperties().getWithDefault ("chevron", 0);
+        if (ch == 0) { juce::LookAndFeel_V4::drawButtonText (g, b, over, down); return; }
+        auto r = b.getLocalBounds();
+        const bool textless = b.getButtonText().isEmpty();
+        auto az = textless ? r.toFloat() : r.removeFromRight (20).toFloat();
+        if (! textless)
+        {
+            g.setFont (getTextButtonFont (b, b.getHeight()));
+            g.setColour (b.findColour (b.getToggleState() ? juce::TextButton::textColourOnId : juce::TextButton::textColourOffId).withMultipliedAlpha (b.isEnabled() ? 1.0f : 0.5f));
+            g.drawFittedText (b.getButtonText(), r.withTrimmedLeft (6), juce::Justification::centred, 1);
+        }
+        const float cx = az.getCentreX() - (textless ? 0.0f : 2.0f), cy = az.getCentreY(), w = 4.5f, h = 2.5f * (ch == 2 ? -1.0f : 1.0f);
+        juce::Path p; p.startNewSubPath (cx - w, cy - h); p.lineTo (cx, cy + h); p.lineTo (cx + w, cy - h);
+        g.setColour (b.findColour (juce::ComboBox::arrowColourId).withAlpha (b.isEnabled() ? 0.9f : 0.2f));
+        g.strokePath (p, juce::PathStrokeType (2.0f));
+    }
     juce::Font getComboBoxFont (juce::ComboBox&) override { return ui (11.5f); }
     juce::Font getPopupMenuFont() override { return ui (13.0f); }
     juce::Font getLabelFont (juce::Label& l) override { return l.getFont(); }
