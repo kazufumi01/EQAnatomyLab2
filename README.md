@@ -6,7 +6,7 @@ by Johan Plus Kei — EQ の中身を「見て・聴いて・触って」学べ�
 
 ## ⬇️ ダウンロード（ベータ版）/ Download (Beta)
 
-**[最新版をダウンロード / Download latest](https://github.com/kazufumi01/EQAnatomyLab2/releases/latest)** — 期間限定ベータ版無料配布中 / Free beta for a limited time
+**[最新版をダウンロード / Download latest](https://github.com/kazufumi01/EQAnatomyLab2/releases/latest)** — 無料配布中 / Free
 
 | | 手動インストール（おすすめ） | インストーラー |
 |---|---|---|
