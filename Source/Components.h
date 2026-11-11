@@ -734,7 +734,7 @@ public:
                  "Runs the saturator at 2× / 4× to cut aliasing; compare with 1x to hear the grit. Careful: 2x costs about 2–3× CPU, 4x about 4–6×, plus a little latency");
         setHelp (deltaBtn, "SAT Δ", "サチュレーターが足した成分（倍音と潰れ）だけを聴く", "Hear only what the saturator adds (harmonics and squash)");
         setHelp (autoBtn, "AUTO LVL", "潰れたピークの分だけ帯域の RMS を戻し、音量差なしで音色を比べる（Exciter では働かない）", "Restores the RMS the peaks lost so you compare tone, not level (not used by Exciter)");
-        for (auto* c : { (juce::Component*) &onBtn, (juce::Component*) &deltaBtn, (juce::Component*) &autoBtn, (juce::Component*) &type, (juce::Component*) &os }) addAndMakeVisible (*c);
+        for (auto* c : { (juce::Component*) &deltaBtn, (juce::Component*) &autoBtn, (juce::Component*) &type, (juce::Component*) &os }) addAndMakeVisible (*c);   // on/off lives on the SAT tab above
     }
     void refresh()
     {
@@ -755,7 +755,7 @@ public:
         if (getHeight() > 80 && getWidth() < 240)
         {
             const int W = getWidth() - 16, cw = (W - 4) / 2;
-            onBtn.setBounds (8, 28, 40, 22); type.setBounds (52, 28, W - 44 - 40, 22);
+            type.setBounds (8, 28, W - 40, 22);
             curveArea = { getWidth() - 44, 26, 36, 26 };
             lo.setBounds (8, 54, cw, 28); hi.setBounds (12 + cw, 54, cw, 28);
             drive.setBounds (8, 84, cw, 28); mix.setBounds (12 + cw, 84, cw, 28);
@@ -930,6 +930,17 @@ public:
         };
         addAndMakeVisible (anaA); addAndMakeVisible (anaB);
         addChildComponent (popupFull);
+        // EQ graph vertical scale (+-dB): shows the scale in use; the choice is the minimum, widened automatically for big gains
+        addAndMakeVisible (scaleBtn); scaleBtn.getProperties().set ("chevron", 1);
+        scaleBtn.onClick = [this]
+        {
+            juce::PopupMenu m; m.addSectionHeader (ph.tr ("グラフの縦スケール", "Graph scale"));
+            static const float r[] = { 3.0f, 6.0f, 12.0f, 20.0f, 30.0f };
+            for (int i = 0; i < 5; ++i) m.addItem (i + 1, juce::String::fromUTF8 ("\xc2\xb1") + juce::String ((int) r[i]) + " dB", true, std::abs (userRange - r[i]) < 0.1f);
+            m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&scaleBtn), [this] (int x) { if (x > 0 && onScale) onScale (x - 1); });
+        };
+        setHelp (scaleBtn, "SCALE", "EQ グラフの縦の目盛り（±dB）。小さいほど細かな動きが見える。既定 ±3 dB。バンドのゲインが目盛りを超えると自動で広がり（表示は今の目盛り）、戻すと元に戻る",
+                 "Vertical scale of the EQ graph (+-dB). Smaller shows finer moves. Default +-3 dB. Widens automatically when a band's gain goes past it (the label shows the scale in use) and comes back when it drops");
         // analyzer pairs: one menu sets A (filled) and B (line) together; Custom frees the two menus
         addAndMakeVisible (pairBtn);
         pairBtn.onClick = [this]
@@ -987,6 +998,7 @@ public:
             else if (anaB.getSelectedId() != bid) anaB.setSelectedId (bid, juce::dontSendNotification);
             const int pr = juce::jlimit (0, 10, (int) ph.proc.uiState.getProperty ("anPair", 0));
             pairBtn.setButtonText (pairName (pr)); pairBtn.getProperties().set ("chevron", 1);
+            if (shownRange != dbRange) { shownRange = dbRange; scaleBtn.setButtonText (juce::String::fromUTF8 ("\xc2\xb1") + juce::String ((int) std::round (dbRange)) + " dB"); }
             srcA = a; srcB = b - 1;
         }
         {
@@ -1098,8 +1110,9 @@ public:
         resViewBtn.setBounds (getWidth() - 208, 6, 80, 20);
         fdTab.setBounds (getWidth() - 298, 6, 86, 20);
         scopeBtn.setBounds (getWidth() - 378, 6, 76, 20);
-        pairBtn.setBounds (42, 6, 96, 20);
-        anaA.setBounds (142, 6, 84, 20); anaB.setBounds (230, 6, 96, 20);
+        scaleBtn.setBounds (42, 6, 64, 20);
+        pairBtn.setBounds (112, 6, 96, 20);
+        anaA.setBounds (212, 6, 84, 20); anaB.setBounds (300, 6, 96, 20);
         {
             // Lab 2: every T/B Scope setting in one row under the graph (shown while the scope is open)
             const int yr = getHeight() - 32;
@@ -1948,50 +1961,47 @@ private:
         const float hh = (body.getHeight() - 6) * 0.62f;
         const auto rw = body.withHeight (hh), rc = body.withTrimmedTop (hh + 6);
         auto grid = [&] (juce::Rectangle<float> r) { g.setColour (theme::grid); for (double f : { 50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0 }) g.drawVerticalLine ((int) xOf (f), r.getY(), r.getBottom()); };
-        // L / R image per band, independent of level: the centre line is the balance (L up, R down, ±18 dB),
-        // the opening around it is the spread (1 − coherence; narrowed toward the side the band leans to).
-        // grey = before the EQ, colour = after
+        // L / R per band: L's level upward from the centre line, R's downward (same scale as the analyzer, −90 to −10 dB).
+        // A band leaning left is taller above than below; grey = before the EQ, colour = after
         {
             const auto r = rw; grid (r);
-            auto y = [&] (float v) { return juce::jmap (juce::jlimit (-1.0f, 1.0f, v), -1.0f, 1.0f, r.getBottom() - 1.0f, r.getY() + 1.0f); };
+            const float cy = r.getCentreY(), H = r.getHeight() * 0.5f - 1.0f;
+            auto hOf = [&] (float db) { return H * juce::jlimit (0.0f, 1.0f, (db + 90.0f) / 80.0f); };
             g.setFont (theme::mono (9.0f));
-            for (float db : { -12.0f, -6.0f, 6.0f, 12.0f })
-            {
-                g.setColour (theme::grid.brighter (0.15f)); g.drawHorizontalLine ((int) y (db / 18.0f), r.getX(), r.getRight());
-                g.setColour (theme::muted); g.drawText ((db > 0 ? "L+" : "R+") + juce::String ((int) std::abs (db)), (int) r.getRight() - 44, (int) y (db / 18.0f) - 7, 40, 14, juce::Justification::centredRight);
-            }
-            g.setColour (theme::zero); g.drawHorizontalLine ((int) y (0), r.getX(), r.getRight());
-            g.setColour (theme::muted); g.drawText ("C", (int) r.getRight() - 44, (int) y (0) - 7, 40, 14, juce::Justification::centredRight);
-            g.setFont (theme::ui (10.0f, true)); g.setColour (theme::side);
-            g.drawText ("L", (int) r.getX() + 6, (int) r.getY() + 1, 20, 13, juce::Justification::centredLeft);
-            g.drawText ("R", (int) r.getX() + 6, (int) r.getBottom() - 14, 20, 13, juce::Justification::centredLeft);
-            g.setColour (theme::muted); g.setFont (theme::ui (9.0f));
-            g.drawText ("line = balance, opening = spread (1 - coherence)", (int) r.getX() + 22, (int) r.getY() + 1, 300, 13, juce::Justification::centredLeft);
+            for (float db : { -10.0f, -30.0f, -50.0f, -70.0f })
+                for (int sgn : { -1, 1 })
+                {
+                    const float y = cy - sgn * hOf (db);
+                    g.setColour (theme::grid.brighter (0.15f)); g.drawHorizontalLine ((int) y, r.getX(), r.getRight());
+                    if (db == -10.0f || db == -50.0f) { g.setColour (theme::muted); g.drawText (juce::String ((int) db), (int) r.getRight() - 44, (int) y - (sgn > 0 ? 0 : 13), 40, 13, juce::Justification::centredRight); }
+                }
+            g.setColour (theme::zero); g.drawHorizontalLine ((int) cy, r.getX(), r.getRight());
+            const juce::Colour cL = theme::bandColour (0).interpolatedWith (theme::text, 0.15f), cR = theme::side;
+            g.setFont (theme::ui (10.0f, true));
+            g.setColour (cL); g.drawText ("L", (int) r.getX() + 6, (int) r.getY() + 1, 20, 13, juce::Justification::centredLeft);
+            g.setColour (cR); g.drawText ("R", (int) r.getX() + 6, (int) r.getBottom() - 14, 20, 13, juce::Justification::centredLeft);
             for (int k = 0; k < 2; ++k)
             {
                 if (fieldW[(size_t) k].size() != fieldF.size() || fieldP[(size_t) k].size() != fieldF.size()) continue;
-                juce::Path top, bot, ctr, fill; bool open = false;
+                juce::Path top, bot, fL, fR;
                 for (size_t i = 0; i < fieldF.size(); ++i)
                 {
-                    const float sp = fieldW[(size_t) k][i], c = fieldP[(size_t) k][i];
-                    if (! std::isfinite (sp) || ! std::isfinite (c)) { open = false; continue; }
-                    const float h = sp * (1.0f - std::abs (c));
-                    const float x = xOf (fieldF[i]), yt = y (c + h), yb = y (c - h), yc = y (c);
-                    if (! open) { top.startNewSubPath (x, yt); bot.startNewSubPath (x, yb); ctr.startNewSubPath (x, yc); open = true; }
-                    else { top.lineTo (x, yt); bot.lineTo (x, yb); ctr.lineTo (x, yc); }
-                    if (k == 1) { const float w = std::max (1.0f, (float) (xOf (fieldF[std::min (i + 1, fieldF.size() - 1)]) - x)); fill.addRectangle (x, yt, w, std::max (1.0f, yb - yt)); }
+                    const float l = fieldW[(size_t) k][i], rr = fieldP[(size_t) k][i];
+                    const float x = xOf (fieldF[i]);
+                    const float yt = cy - hOf (std::isfinite (l) ? l : -90.0f), yb = cy + hOf (std::isfinite (rr) ? rr : -90.0f);
+                    if (i == 0) { top.startNewSubPath (x, yt); bot.startNewSubPath (x, yb); } else { top.lineTo (x, yt); bot.lineTo (x, yb); }
+                    if (k == 1)
+                    {
+                        const float w = std::max (1.0f, (float) (xOf (fieldF[std::min (i + 1, fieldF.size() - 1)]) - x));
+                        fL.addRectangle (x, yt, w, cy - yt); fR.addRectangle (x, cy, w, yb - cy);
+                    }
                 }
                 if (k == 1)
                 {
-                    g.setColour (theme::side.withAlpha (0.25f)); g.fillPath (fill);
-                    g.setColour (theme::side); g.strokePath (top, juce::PathStrokeType (1.3f)); g.strokePath (bot, juce::PathStrokeType (1.3f));
-                    g.setColour (theme::text.withAlpha (0.8f)); g.strokePath (ctr, juce::PathStrokeType (1.2f));
+                    g.setColour (cL.withAlpha (0.28f)); g.fillPath (fL); g.setColour (cR.withAlpha (0.28f)); g.fillPath (fR);
+                    g.setColour (cL); g.strokePath (top, juce::PathStrokeType (1.5f)); g.setColour (cR); g.strokePath (bot, juce::PathStrokeType (1.5f));
                 }
-                else
-                {
-                    g.setColour (theme::muted.withAlpha (0.9f)); g.strokePath (top, juce::PathStrokeType (1.0f)); g.strokePath (bot, juce::PathStrokeType (1.0f));
-                    juce::Path d; const float dash[] = { 3.0f, 3.0f }; juce::PathStrokeType (1.0f).createDashedStroke (d, ctr, dash, 2); g.fillPath (d);
-                }
+                else { g.setColour (theme::muted.withAlpha (0.9f)); g.strokePath (top, juce::PathStrokeType (1.1f)); g.strokePath (bot, juce::PathStrokeType (1.1f)); }
             }
         }
         auto panel = [&] (juce::Rectangle<float> r, const std::array<std::vector<float>, 2>& v, float lo, float hi, std::initializer_list<float> marks,
@@ -2099,6 +2109,7 @@ public:
     float userRange = 20.0f;    // scale chosen in the menu (6 / 12 / 20 / 30); 20 = as before
     bool scaleHold = false;     // frozen while a dot is dragged, so the mapping under the mouse does not jump
     void setDbRange (float r) { userRange = r; updateAutoRange(); repaint(); }
+    std::function<void (int)> onScale;   // graph scale menu choice (0..4), handled by the editor
     // magnitude scale only (the phase scale stays manual): widen to the smallest step that shows the
     // largest band gain with 1 dB headroom, and fall back to the chosen scale when gains come down again
     void updateAutoRange()
@@ -2190,7 +2201,8 @@ private:
     bool anyMS = false, anyLR = false, lastSplit = false, altSolo = false;
     std::vector<float> spectrum, spectrumB; juce::String lastSig;
     juce::ComboBox anaA, anaB;
-    juce::TextButton pairBtn;
+    juce::TextButton pairBtn, scaleBtn;
+    float shownRange = -1.0f;
     // pair index → (A source, B id). Sources: 0 Out, 1 Mid, 2 Side, 3 Trans, 4 Body, 5 Input, 6 SC, 7 link. B id = source + 1
     static juce::String pairName (int i)
     {
@@ -2248,7 +2260,7 @@ private:
     bool lastField = false; int lastLower = -1;
 public:
     // stereo field per band, filled by the editor: [0] before the EQ, [1] after. NaN = too quiet to show
-    std::vector<double> fieldF; std::array<std::vector<float>, 2> fieldW, fieldC, fieldP;   // W = spread (1 - coherence), P = balance (+1 = L 18 dB louder), C = correlation
+    std::vector<double> fieldF; std::array<std::vector<float>, 2> fieldW, fieldC, fieldP;   // W = L level, P = R level (dB, analyzer scale), C = correlation
     bool fieldWanted() const { return lastScope && lastLower == 1 && ! ph.proc.earActive(); }
 private:
     bool lastScope = false, autoAna = false; int srcA = 0, srcB = -1, scDrag = 0; float scStartY = 0, scStartSens = 0, scStartWidth = 6;
@@ -2326,7 +2338,7 @@ public:
         sel.format = [] (float v) { return juce::String ((int) std::round (v)) + " %"; };
         att.format = rel.format = [] (float v) { return v < 10 ? juce::String (v, 1) : juce::String ((int) std::round (v)); };
         for (auto* d : { &lo, &hi, &depth, &thr, &sel, &att, &rel }) { d->compact = true; d->valueColour = theme::res; addAndMakeVisible (*d); }
-        addAndMakeVisible (onBtn); addAndMakeVisible (deltaBtn); addAndMakeVisible (graphBtn);
+        addAndMakeVisible (deltaBtn); addAndMakeVisible (graphBtn);   // on/off lives on the RES tab above
         addAndMakeVisible (chanBtn); chanBtn.getProperties().set ("chevron", 1); chanBtn.getProperties().set ("fontPx", 10.0);
         chanBtn.onClick = [this]
         {
@@ -2385,8 +2397,8 @@ public:
     void resized() override
     {
         const int W = getWidth() - 16, cw = (W - 4) / 2, c3 = (W - 8) / 3;
-        onBtn.setBounds (8, 28, 36, 22); deltaBtn.setBounds (48, 28, 28, 22); graphBtn.setBounds (80, 28, 40, 22);
-        chanBtn.setBounds (124, 28, W - 116, 22);
+        graphBtn.setBounds (8, 28, 44, 22); deltaBtn.setBounds (56, 28, 28, 22);
+        chanBtn.setBounds (88, 28, W - 80, 22);
         readout = {};
         lo.setBounds (8, 54, cw, 28); hi.setBounds (12 + cw, 54, cw, 28);
         depth.setBounds (8, 84, cw, 28); thr.setBounds (12 + cw, 84, cw, 28);

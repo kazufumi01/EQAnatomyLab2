@@ -13,9 +13,8 @@ EQAnatomyView::EQAnatomyView (EQAnatomyProcessor& p) : proc (p)
     for (int i = 0; i < theme::numSurfaces(); ++i) zoom.surfaceNames.add (theme::surfaceName (i));
     zoom.getSurface = [] { return theme::surface; };
     zoom.setSurface = [this] (int i) { applySurface (i); };
-    for (const char* n : { "+-3 (default)", "+-6", "+-12", "+-20", "+-30" }) zoom.scaleNames.add (n);
     zoom.getScale = [] { return juce::jlimit (0, 4, ZoomPrefs::file().getIntValue ("eqanatomy2.gscale3", 0)); };
-    zoom.setScale = [this] (int i) { applyScale (i); };
+    graph.onScale = [this] (int i) { applyScale (i); };   // the scale menu is on the graph (top left), not in the zoom menu
     applyScale (zoom.getScale());
     setLookAndFeel (&lnf);
     juce::LookAndFeel::setDefaultLookAndFeel (&lnf);
@@ -531,19 +530,10 @@ void EQAnatomyView::fieldUpdate()
             // balance = (PL - PR) / (PL + PR) = 2X / (Pm + Ps); spread = (1 - corr) / 2
             const double corr = juce::jlimit (-1.0, 1.0, (PM - PS) / std::sqrt (std::max (1e-30, t * t - 4.0 * X * X)));
             graph.fieldC[(size_t) k][i] = (float) corr;
-            // Level-independent picture of the band (L = M + S, R = M − S):
-            //   balance  = PL / PR in dB (where the band sits between L and R)
-            //   spread   = 1 − coherence, where coherence = |Σ L·R*| / √(PL·PR) and Σ L·R* = (Pm − Ps) + 2j·Σ Im(S·M*).
-            //              Coherence ignores level and pan: a mono source stays a thin line wherever it is panned;
-            //              raising Mid makes the band more coherent (narrower), decorrelated Side makes it wider.
-            //              Out-of-phase content (Re Σ L·R* < 0) counts as wide too.
-            const double PL = std::max (1e-30, t + 2.0 * X), PR = std::max (1e-30, t - 2.0 * X);
-            const double bal = juce::jlimit (-18.0, 18.0, 10.0 * std::log10 (PL / PR));
-            const double re = PM - PS, im = 2.0 * Y, den = std::sqrt (PL * PR);
-            double spread = 1.0 - juce::jlimit (0.0, 1.0, std::sqrt (re * re + im * im) / den);
-            if (re < 0) spread = std::max (spread, juce::jlimit (0.0, 1.0, -re / den));
-            graph.fieldP[(size_t) k][i] = (float) (bal / 18.0);
-            graph.fieldW[(size_t) k][i] = (float) spread;
+            // L / R levels of the band (L = M + S, R = M − S), scaled like the analyzer (+3 dB/oct around 1 kHz)
+            const double sc = 20.0 * std::log10 (4.0 / N) + 3.0 * std::log2 (F[i] / 1000.0);
+            graph.fieldW[(size_t) k][i] = (float) (10.0 * std::log10 (std::max (1e-20, t + 2.0 * X)) + sc);
+            graph.fieldP[(size_t) k][i] = (float) (10.0 * std::log10 (std::max (1e-20, t - 2.0 * X)) + sc);
         }
     }
 }
