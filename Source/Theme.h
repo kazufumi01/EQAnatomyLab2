@@ -224,6 +224,12 @@ public:
     {
         auto r = b.getLocalBounds().toFloat().reduced (0.5f);
         const bool on = b.getToggleState();
+        if (b.getProperties().getWithDefault ("selector", false))
+        {
+            g.setColour ((over || down) ? panel.brighter (0.10f) : panel); g.fillRoundedRectangle (r, 4.0f);
+            g.setColour (accent.withAlpha (0.75f)); g.drawRoundedRectangle (r.reduced (0.5f), 4.0f, 1.2f);
+            return;
+        }
         auto col = b.findColour (on ? juce::TextButton::buttonOnColourId : juce::TextButton::buttonColourId);
         if (! on && (over || down)) col = lightPanels ? col.darker (0.06f) : col.brighter (0.12f);
         g.setColour (col); g.fillRoundedRectangle (r, 4.0f);
@@ -238,6 +244,12 @@ public:
     void drawButtonText (juce::Graphics& g, juce::TextButton& b, bool over, bool down) override
     {
         const int ch = (int) b.getProperties().getWithDefault ("chevron", 0);
+        if (ch == 0 && b.getProperties().getWithDefault ("selector", false))
+        {
+            g.setFont (getTextButtonFont (b, b.getHeight())); g.setColour (accent);
+            g.drawFittedText (b.getButtonText(), b.getLocalBounds().reduced (4, 0), juce::Justification::centred, 1);
+            return;
+        }
         if (ch == 0) { juce::LookAndFeel_V4::drawButtonText (g, b, over, down); return; }
         auto r = b.getLocalBounds();
         const bool textless = b.getButtonText().isEmpty();

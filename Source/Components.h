@@ -846,7 +846,8 @@ public:
         setHelp (scWidth, "T/B WIDTH", "マスクが 0→1 に上がる幅（dB）。小さいほどハード", "Width over which the mask rises 0 → 1 (dB). Smaller is harder");
         setHelp (scAtt, "T/B ATTACK", "マスクが上がる速さ（ms、既定 2）。小さいほどアタックの頭が Body に漏れにくい", "How fast the mask rises (ms, default 2). Smaller keeps the front of the attack out of Body");
         // one button each: it shows the current choice and a click switches to the other one (its help says which)
-        for (auto* b : { &phaseBtn, &overlayBtn }) { b->setClickingTogglesState (false); b->setToggleState (true, juce::dontSendNotification); addAndMakeVisible (*b); }
+        // two-way switches (always "on" in one of two states): outlined, not filled, so they never read as an active on/off
+        for (auto* b : { &phaseBtn, &overlayBtn }) { b->setClickingTogglesState (false); b->setToggleState (false, juce::dontSendNotification); b->getProperties().set ("selector", true); addAndMakeVisible (*b); }
         overlayBtn.onClick = [this] { ph.proc.uiState.setProperty ("split", ! (bool) ph.proc.uiState.getProperty ("split", false), nullptr); resized(); };
         // the lower panel while the scope is open: T/B scope or the stereo field (width and correlation per band)
         fdTab.setClickingTogglesState (false); addAndMakeVisible (fdTab);
@@ -1552,8 +1553,8 @@ private:
     bool panelShown() const { return (lastSplit || lastScope) && ! ph.proc.earActive(); }
     float panelFrac() const { return juce::jlimit (0.15f, 0.85f, (float) (double) ph.proc.uiState.getProperty ("panelFrac", 0.56)); }
     juce::Rectangle<float> panelArea() const { auto p = fullPlot(); return p.withTrimmedTop (p.getHeight() * panelFrac()); }
-    // the EQ curve uses the part above the panel; the analyzer and the grid run under the (translucent) panel to the bottom
-    juce::Rectangle<float> plot() const { auto p = fullPlot(); return panelShown() ? p.withBottom (panelArea().getY() - 6) : p; }
+    // in Split the EQ curve uses the part above the panel; the analyzer and the grid run under the (translucent) panel to the bottom
+    juce::Rectangle<float> plot() const { auto p = fullPlot(); return panelShown() && lastSplit ? p.withBottom (panelArea().getY() - 6) : p; }   // Split: fit above the panel, Overlay: fixed full height
     juce::Rectangle<float> phasePlot() const { return panelArea().withTrimmedTop (20).withTrimmedBottom (6); }
     // where the scope goes: the phase panel in Split, the lower part of the graph in Overlay
     juce::Rectangle<float> scopeArea() const { return panelArea(); }
