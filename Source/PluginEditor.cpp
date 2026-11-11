@@ -584,6 +584,11 @@ void EQAnatomyView::layerSpectrum (int src, std::vector<float>& out)
 void EQAnatomyView::updateHover()
 {
     juce::String t, x;
+    bool region = false;
+    if (auto* c = juce::Desktop::getInstance().getMainMouseSource().getComponentUnderMouse())
+        if (auto* hh = dynamic_cast<HoverHelp*> (c); hh != nullptr && isParentOf (c))
+            region = hh->hoverHelp (c->getLocalPoint (nullptr, juce::Desktop::getInstance().getMainMouseSource().getScreenPosition()), t, x);
+    if (! region)
     if (auto* c = juce::Desktop::getInstance().getMainMouseSource().getComponentUnderMouse())
         if (c == this || isParentOf (c))
             for (auto* k = c; k != nullptr && k != this; k = k->getParentComponent())
@@ -605,6 +610,13 @@ void EQAnatomyView::updateHover()
             t = ht; x = k->getProperties()[ph.ja() ? "helpJ" : "helpE"].toString();
             if (k->getProperties().contains ("resettable")) x += ph.tr ("\nOption＋クリック：初期値に戻す", "\nOption+click: back to the default value");
         }
+    }
+    // test hook (screenshots): "graph:x,y" or "io:x,y" shows the region help at that point
+    if (const auto hp = proc.uiState.getProperty ("hoverPt", {}).toString(); hp.isNotEmpty())
+    {
+        juce::StringArray v; v.addTokens (hp.fromFirstOccurrenceOf (":", false, false), ",;", "");
+        const juce::Point<float> pt (v[0].getFloatValue(), v[1].getFloatValue());
+        if (hp.startsWith ("graph")) graph.hoverHelp (pt, t, x); else io.hoverHelp (pt, t, x);
     }
     // the graph itself is covered by the MOUSE section that is always shown
     if (t == "MOUSE") t = {};

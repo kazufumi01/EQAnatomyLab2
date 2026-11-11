@@ -48,6 +48,13 @@ inline void setHelp (juce::Component& c, const char* title, const char* ja, cons
     auto& p = c.getProperties();
     p.set ("helpT", juce::String::fromUTF8 (title)); p.set ("helpJ", juce::String::fromUTF8 (ja)); p.set ("helpE", juce::String::fromUTF8 (en));
 }
+// A component that explains the spot under the mouse (graph areas, handles, meter rows).
+// Help text: "\n" breaks lines; lines starting with "|" form a table ("| a | b |"), the first row is the header
+struct HoverHelp
+{
+    virtual ~HoverHelp() = default;
+    virtual bool hoverHelp (juce::Point<float> p, juce::String& title, juce::String& text) const = 0;
+};
 // ComboBox that jumps to the default on Option+click instead of opening its menu
 struct ResetCombo : public juce::ComboBox
 {
@@ -60,8 +67,10 @@ private:
 };
 inline void markReset (juce::Component& c) { c.getProperties().set ("resettable", true); }
 
-inline const char* mouseHelpJa() { return "点をドラッグ：周波数とゲイン／Cmd＋ドラッグ：縦か横に固定／Alt＋ドラッグ：そのバンドだけを試聴／幅ハンドル・Shift＋上下・ホイール：Q／ダブルクリック：追加（クリックした周波数で形を自動選択：〜45 Hz ローカット／〜180 Hz ローシェルフ／〜6 kHz ベル／〜14 kHz ハイシェルフ／それ以上ハイカット）・オフ／右クリック：浮き窓の表示切替／DYN の▲▼（塗り＝ABOVE、輪＝BELOW）：上下ドラッグで可動範囲、Option＋クリックで初期値／上部の SAT タブ：サチュレーターの帯域／Cmd＋Z：元に戻す"; }
-inline const char* mouseHelpEn() { return "Drag a dot: frequency and gain / Cmd + drag: lock to one axis / Alt + drag: solo that band / width handles, Shift + drag or wheel: Q / double-click: add (the shape follows the frequency: below 45 Hz low cut, 180 Hz low shelf, 6 kHz bell, 14 kHz high shelf, above that high cut) or switch off / right-click: show or hide the floating panel / DYN triangles (filled = ABOVE, ring = BELOW): drag up/down for the range, Option+click resets / SAT tabs: saturator band / Cmd + Z: undo"; }
+inline const char* mouseHelpJa() { return "| 操作 | 結果 |\n| 点をドラッグ | 周波数とゲイン |\n| Cmd＋ドラッグ | 縦か横に固定 |\n| Alt＋ドラッグ | そのバンドだけ試聴 |\n| Shift＋上下・ホイール | Q |\n| ダブルクリック | 追加（周波数で形を自動選択）・オフ |\n| 右クリック | 浮き窓の表示切替 |\n| Cmd＋Z | 元に戻す |\nグラフ・メーターの各部分にマウスを置くと、その説明が出る"; }
+inline const char* mouseHelpJaOld() { return "点をドラッグ：周波数とゲイン／Cmd＋ドラッグ：縦か横に固定／Alt＋ドラッグ：そのバンドだけを試聴／幅ハンドル・Shift＋上下・ホイール：Q／ダブルクリック：追加（クリックした周波数で形を自動選択：〜45 Hz ローカット／〜180 Hz ローシェルフ／〜6 kHz ベル／〜14 kHz ハイシェルフ／それ以上ハイカット）・オフ／右クリック：浮き窓の表示切替／DYN の▲▼（塗り＝ABOVE、輪＝BELOW）：上下ドラッグで可動範囲、Option＋クリックで初期値／上部の SAT タブ：サチュレーターの帯域／Cmd＋Z：元に戻す"; }
+inline const char* mouseHelpEn() { return "| Action | Result |\n| Drag a dot | frequency and gain |\n| Cmd + drag | lock to one axis |\n| Alt + drag | solo that band |\n| Shift + drag, wheel | Q |\n| Double-click | add (shape follows the frequency) or switch off |\n| Right-click | show / hide the floating panel |\n| Cmd + Z | undo |\nHover any part of the graph or the meters for its explanation"; }
+inline const char* mouseHelpEnOld() { return "Drag a dot: frequency and gain / Cmd + drag: lock to one axis / Alt + drag: solo that band / width handles, Shift + drag or wheel: Q / double-click: add (the shape follows the frequency: below 45 Hz low cut, 180 Hz low shelf, 6 kHz bell, 14 kHz high shelf, above that high cut) or switch off / right-click: show or hide the floating panel / DYN triangles (filled = ABOVE, ring = BELOW): drag up/down for the range, Option+click resets / SAT tabs: saturator band / Cmd + Z: undo"; }
 
 inline juce::String fmtHz (double f)
 {
@@ -844,7 +853,7 @@ private:
 // =============================================================================
 //  The big graph: magnitude, phase / group delay overlay, analyzer, nodes
 // =============================================================================
-class GraphView : public juce::Component
+class GraphView : public juce::Component, public HoverHelp
 {
 public:
     explicit GraphView (ParamHelp& h) : ph (h), popup (h), popupFull (h, true), scSens (h, "SENS dB"), scWidth (h, "WIDTH dB"), scAtt (h, "ATTACK ms"),
@@ -1205,7 +1214,10 @@ public:
         { g.setColour (theme::faint); g.drawText (fmtHz (f), (int) xOf (f) - 20, (int) lp, 40, 14, juce::Justification::centred); }
         g.setColour (theme::faint);
         g.drawText ("10", (int) pr.getX() + 2, (int) lp, 30, 14, juce::Justification::centredLeft);
-        g.drawText ("22k", (int) pr.getRight() - 32, (int) lp, 30, 14, juce::Justification::centredRight);
+        // the audible range's ends get their own figures (brighter, like their lines); 22 kHz is the right edge of the axis
+        g.setColour (theme::muted);
+        g.drawText ("20", (int) xOf (20.0) - 20, (int) lp, 40, 14, juce::Justification::centred);
+        g.drawText ("20k", (int) xOf (20000.0) - 38, (int) lp, 36, 14, juce::Justification::centredRight);
         for (double f : { 20., 20000. }) { g.setColour (theme::grid.brighter (0.3f)); g.drawVerticalLine ((int) xOf (f), pr.getY(), pr.getBottom()); }
         const int dbStep = dbRange <= 3.5f ? 1 : dbRange <= 6.5f ? 2 : dbRange <= 12.5f ? 4 : dbRange <= 20.5f ? 6 : 10;
         const int dbTop = ((int) (dbRange + 0.5f) / dbStep) * dbStep;
@@ -1639,6 +1651,247 @@ public:
         const float dir = (w.isReversed ? -1.0f : 1.0f) * w.deltaY;
         const float stepPow = juce::jlimit (-1.0f, 1.0f, dir * 4.0f);       // proportional, max ±10 % per event
         ph.setGesture (pid::band (b, "q"), juce::jlimit (0.1f, 18.0f, q * std::pow (1.1f, stepPow)));
+    }
+
+    // ---- help for the spot under the mouse (the editor shows it in the info card) ----
+    bool hoverHelp (juce::Point<float> p, juce::String& title, juce::String& text) const override
+    {
+        if (ph.proc.earActive()) return false;
+        auto T = [this] (const char* j, const char* e) { return ph.tr (j, e); };
+        const bool gd = (int) ph.proc.uiState.getProperty ("view", 0) == 1;
+        // handles first: they sit on top of everything else
+        if (const int h = rsHit (p); h >= 0)
+        {
+            if (h < 5)
+            {
+                title = "RES NODE " + juce::String (h + 1);
+                text = T ("スレッショルド曲線の点（全 5 点）。周波数ごとに「どれだけ突き出たら削るか」を変える。\n"
+                          "| 操作 | 結果 |\n| ドラッグ | 点の周波数と高さ |\n| 線をドラッグ | 曲線全体を上下（THRESHOLD） |\n| Option＋クリック | 初期値に戻す |\n"
+                          "| 点を上げる | その帯域は削りにくく（残す） |\n| 点を下げる | その帯域は削りやすく |\n"
+                          "例：ボーカルの 2〜5 kHz だけ下げ、低域は上げて守る。",
+                          "One of the 5 points of the threshold curve: how far a frequency must stick out before it is cut.\n"
+                          "| Action | Result |\n| Drag | the point's frequency and height |\n| Drag the line | the whole curve (THRESHOLD) |\n| Option+click | back to default |\n"
+                          "| Raise | that range is cut less (kept) |\n| Lower | that range is cut more easily |\n"
+                          "E.g. lower it at 2-5 kHz on a vocal and raise it in the lows to protect them.");
+            }
+            else
+            {
+                title = "RES THRESHOLD";
+                text = T ("スレッショルド曲線（ピンク）。白い線（周りより突き出た量）がこの線を超えた所だけを削る。\n"
+                          "| 操作 | 結果 |\n| 上下ドラッグ | 曲線全体を上下（THRESHOLD） |\n| 点をドラッグ | 帯域ごとの形 |\n"
+                          "目安：6 dB で穏やか、3 dB で積極的、0 dB 以下は常にどこかを削る。",
+                          "The threshold curve (pink). Only where the white line (how far a frequency sticks out) crosses it is cut.\n"
+                          "| Action | Result |\n| Drag up/down | moves the whole curve (THRESHOLD) |\n| Drag a point | the shape per range |\n"
+                          "Guide: 6 dB is gentle, 3 dB active, 0 dB or below always cuts somewhere.");
+            }
+            return true;
+        }
+        if (const int m = dynHit (p); m >= 0)
+        {
+            const int b = m / 2; const bool above = m % 2 == 0;
+            title = "DYN " + juce::String (above ? "ABOVE" : "BELOW") + "  B" + juce::String (b + 1);
+            text = above ? T ("ダイナミック EQ の可動範囲（▲ 塗り＝ABOVE）。音がスレッショルドを超えた時、カーブがこの位置まで動く。\n"
+                              "| 操作 | 結果 |\n| 上下ドラッグ | 動く量（dB） |\n| Option＋クリック | 初期値 |\n"
+                              "影の帯＝静かな時（点の位置）から大きい時（▲）までの幅。",
+                              "Dynamic EQ range (filled triangle = ABOVE). When the signal goes over the threshold the curve moves up to here.\n"
+                              "| Action | Result |\n| Drag up/down | amount (dB) |\n| Option+click | default |\n"
+                              "The shaded band spans quiet (the dot) to loud (the triangle).")
+                         : T ("ダイナミック EQ の BELOW（◯ 輪）。音がスレッショルドより小さい時に、カーブがこの位置まで動く。\n"
+                              "| 操作 | 結果 |\n| 上下ドラッグ | 動く量（dB） |\n| Option＋クリック | 初期値 |\n"
+                              "例：小さい時だけ高域を持ち上げる（ささやき声の明瞭度）。",
+                              "Dynamic EQ BELOW (ring). When the signal is under the threshold the curve moves to here.\n"
+                              "| Action | Result |\n| Drag up/down | amount (dB) |\n| Option+click | default |\n"
+                              "E.g. lift the highs only when quiet (whispers).");
+            return true;
+        }
+        if (panelEdgeHit (p))
+        {
+            title = "PANEL EDGE";
+            text = T ("下の枠の上端。上下にドラッグして枠の高さを変える。\n| 表示 | 枠の中身 |\n| Split | 位相（群遅延） |\n| T/B scope | 波形と検出器 |\n| Stereo field | 帯域ごとの L/R と相関 |\n| Resonance | サプレッサーの検出 |",
+                      "Top edge of the lower panel. Drag up/down to resize it.\n| View | Panel shows |\n| Split | phase (group delay) |\n| T/B scope | waveform and detector |\n| Stereo field | L/R per band and correlation |\n| Resonance | the suppressor's detection |");
+            return true;
+        }
+        if (const int sh = scopeHit (p); sh != 0)
+        {
+            title = sh == 1 ? "T/B SENS LINE" : "T/B WIDTH LINE";
+            text = sh == 1 ? T ("検出の下の線（SENS）。上下ドラッグで感度。線より上に出た部分がアタック（Transient）になり始める。\n下げる＝小さなアタックも拾う／上げる＝強いアタックだけ。",
+                                "Lower detector line (SENS). Drag up/down for sensitivity: above it a sound starts to count as attack (Transient).\nLower = small attacks too / higher = only strong attacks.")
+                           : T ("検出の上の線（SENS＋WIDTH）。ここで完全にアタック扱い。下の線との間は少しずつ切り替わる。\n狭い＝ハッキリ分かれる／広い＝なめらかに混ざる。",
+                                "Upper detector line (SENS + WIDTH): fully attack from here. Between the two lines it blends.\nNarrow = hard split / wide = smooth blend.");
+            return true;
+        }
+        if (const auto pk = pick (p); pk.what > 0 || pk.band >= 0)
+        {
+            if (pk.what == 3 || pk.what == 4)
+            {
+                title = pk.what == 3 ? "SAT LOW EDGE" : "SAT HIGH EDGE";
+                text = T ("サチュレーターが掛かる帯域の端（上のオレンジのタブ）。左右ドラッグで帯域を変える。\n"
+                          "| 例 | 帯域 |\n| ベースの倍音で存在感 | 100〜800 Hz |\n| ボーカルの張り | 1〜5 kHz |\n| ドラムの空気感 | 6 kHz〜 |",
+                          "Edge of the saturator's band (the orange tabs at the top). Drag left/right.\n"
+                          "| Example | Band |\n| Bass harmonics for presence | 100-800 Hz |\n| Vocal edge | 1-5 kHz |\n| Drum air | 6 kHz up |");
+                return true;
+            }
+            if (pk.what == 5 || pk.what == 6)
+            {
+                title = pk.what == 5 ? "RES LOW EDGE" : "RES HIGH EDGE";
+                text = T ("レゾナンス・サプレッサーが働く帯域の端（下のピンクのタブ）。左右ドラッグ。範囲の外は一切触らない。\n"
+                          "| 素材 | LOW | HIGH |\n| ボーカル | 200〜300 Hz | 10〜12 kHz |\n| アコギ | 150 Hz | 8 kHz |\n| マスター | 100 Hz | 16 kHz |",
+                          "Edge of the suppressor's range (the pink tabs at the bottom). Drag left/right; nothing outside is touched.\n"
+                          "| Source | LOW | HIGH |\n| Vocal | 200-300 Hz | 10-12 kHz |\n| Acoustic guitar | 150 Hz | 8 kHz |\n| Master | 100 Hz | 16 kHz |");
+                return true;
+            }
+            if (pk.what == 1 || pk.what == 2)
+            {
+                title = "Q HANDLE  B" + juce::String (pk.band + 1);
+                text = T ("帯域幅（Q）のハンドル。左右にドラッグで幅を変える。\n"
+                          "| Q | 幅 | 用途 |\n| 0.5 | 約 2.5 oct | なだらかな音色作り |\n| 1.0 | 約 1.4 oct | 一般的な補正 |\n| 4〜8 | 1/3〜1/6 oct | 共振のピンポイント除去 |\n"
+                          "Shift＋上下ドラッグ・ホイールでも変えられる。",
+                          "Bandwidth (Q) handle. Drag left/right.\n"
+                          "| Q | Width | Use |\n| 0.5 | about 2.5 oct | broad tone shaping |\n| 1.0 | about 1.4 oct | everyday fixes |\n| 4-8 | 1/3-1/6 oct | notching a resonance |\n"
+                          "Shift + drag or the wheel also change it.");
+                return true;
+            }
+            const auto bands = ph.proc.currentBands(); const auto& b = bands[(size_t) pk.band];
+            const auto tn = typeNames()[(int) b.type];
+            static const char* chn[] = { "Stereo", "Mid", "Side", "L", "R" };
+            title = "BAND " + juce::String (pk.band + 1) + "  " + tn + (b.on ? "" : "  (off)");
+            text = "| " + T ("項目", "Item") + " | " + T ("値", "Value") + " |\n"
+                 + "| FREQ | " + fmtHz (b.f) + " Hz |\n| GAIN | " + fmtDb (b.g) + " dB |\n| Q | " + juce::String (b.q, 2) + " |\n"
+                 + "| CH | " + chn[juce::jlimit (0, 4, b.ch)] + " |\n| PHASE | " + (b.lin ? "Linear" : "Min") + " |\n\n"
+                 + T ("| 操作 | 結果 |\n| ドラッグ | 周波数とゲイン |\n| Cmd＋ドラッグ | 縦か横に固定 |\n| Alt＋ドラッグ | このバンドだけ試聴 |\n| ダブルクリック | オフ |\n| 右クリック | 浮き窓の表示切替 |",
+                      "| Action | Result |\n| Drag | frequency and gain |\n| Cmd + drag | lock to one axis |\n| Alt + drag | solo this band |\n| Double-click | switch off |\n| Right-click | show / hide the floating panel |");
+            return true;
+        }
+        // the lower panel
+        if (panelShown() && panelArea().contains (p))
+        {
+            if (lastScope && lastLower == 1)
+            {
+                auto body = scopeArea().withTrimmedTop (22).withTrimmedBottom (2);
+                const float hh = (body.getHeight() - 6) * 0.62f;
+                if (p.y < body.getY() + hh)
+                {
+                    title = "STEREO FIELD  L / R";
+                    text = T ("帯域ごとの左右の音量。中央線から上＝L、下＝R（スペアナと同じ目盛り、−90〜−10 dB）。灰色＝EQ 前、色＝EQ 後。\n"
+                              "| 見え方 | 意味 |\n| 上下が同じ高さ | 中央（モノ）か左右均等 |\n| 上だけ高い | 左に寄っている |\n| 下だけ高い | 右に寄っている |\n| 灰色と色がずれる | EQ（M/S や L/R バンド）で左右のバランスが変わった |\n"
+                              "使い方：Side バンドで高域を上げると、上下が同じだけ伸びる（広がりは相関で確認）。",
+                              "Left and right level per band. Above the centre line = L, below = R (analyzer scale, -90 to -10 dB). Grey = before the EQ, colour = after.\n"
+                              "| Picture | Meaning |\n| Same height both ways | centred (mono) or balanced |\n| Taller above | leans left |\n| Taller below | leans right |\n| Grey and colour differ | the EQ (M/S or L/R bands) moved the balance |\n"
+                              "Tip: a Side boost raises both halves alike; read the width on the correlation below.");
+                }
+                else
+                {
+                    title = "CORRELATION (per band)";
+                    text = T ("帯域ごとの位相相関。右の IO メーターの CORR を周波数別にしたもの。\n"
+                              "| 値 | 意味 | モノラルにすると |\n| +1 | 左右が同じ（モノ） | そのまま |\n| 0 | 無関係（広い） | 少し痩せる |\n| −1 | 逆相 | 消える |\n"
+                              "注意：低域（〜150 Hz）は +0.5 以上が安全。マイナスの帯域は Side を下げるか M/S バンドで調整。",
+                              "Phase correlation per band: the CORR meter on the right, split by frequency.\n"
+                              "| Value | Meaning | Summed to mono |\n| +1 | identical L/R (mono) | unchanged |\n| 0 | unrelated (wide) | a little thinner |\n| -1 | opposite polarity | cancels |\n"
+                              "Careful: keep the lows (up to 150 Hz) above +0.5. Negative bands: lower the Side or fix with an M/S band.");
+                }
+                return true;
+            }
+            if (lastScope && lastLower == 2)
+            {
+                title = "RESONANCE VIEW";
+                text = T ("レゾナンス・サプレッサーが何を見て、どこを削っているか。\n"
+                          "| 表示 | 意味 |\n| 白い線 | 周り（SELECT の幅）より何 dB 突き出ているか |\n| ピンクの線 | スレッショルド（点で形、線で全体） |\n| ピンクの塗り | いま削っている量 |\n| 範囲の外（暗い） | LOW〜HIGH の外。触らない |\n"
+                          "白い山がピンクの線を超えた所だけが削られる。削りすぎは RES の Δ で聴いて確認。",
+                          "What the resonance suppressor sees and where it cuts.\n"
+                          "| Element | Meaning |\n| White line | how far a frequency sticks out of its surroundings (SELECT width) |\n| Pink line | the threshold (points shape it, the line moves it) |\n| Pink fill | the reduction right now |\n| Dark outside | outside LOW-HIGH: untouched |\n"
+                          "Only white peaks above the pink line are cut. Check for over-cutting with RES delta.");
+                return true;
+            }
+            if (lastScope)
+            {
+                if (p.y < scopeWave().getBottom())
+                {
+                    title = "T/B SCOPE  WAVE";
+                    text = T ("入力の波形を右から左へ流して表示。色が検出結果。\n"
+                              "| 色 | 意味 |\n| オレンジ | Transient（アタック）と判定された部分 |\n| 青緑 | Body（胴鳴り・余韻） |\n"
+                              "Transient バンドはオレンジの部分だけ、Body バンドは青緑の部分だけに効く。Pause で止めて調整できる。",
+                              "The input waveform scrolling right to left, coloured by the detector.\n"
+                              "| Colour | Meaning |\n| Orange | judged as Transient (attack) |\n| Teal | Body (sustain, ring) |\n"
+                              "Transient bands act only on the orange part, Body bands only on the teal. Pause to adjust on a frozen picture.");
+                }
+                else
+                {
+                    title = "T/B SCOPE  DETECTOR";
+                    text = T ("検出器の出力（速い包絡と遅い包絡の差、dB）。2 本の線で判定する。\n"
+                              "| 位置 | 判定 |\n| 下の線（SENS）より下 | Body |\n| 2 本の間 | 少しずつ切り替わる |\n| 上の線（SENS＋WIDTH）より上 | Transient |\n"
+                              "線は上下にドラッグで動かせる。",
+                              "The detector (fast envelope over slow envelope, dB) and its two lines.\n"
+                              "| Where | Judged as |\n| Below the lower line (SENS) | Body |\n| Between the lines | blending |\n| Above the upper line (SENS + WIDTH) | Transient |\n"
+                              "Drag the lines up/down.");
+                }
+                return true;
+            }
+            if (lastSplit)
+            {
+                title = gd ? "GROUP DELAY PANEL" : "PHASE PANEL";
+                text = gd ? T ("周波数ごとの遅れ（群遅延、ms）。0 ms＝遅れなし。\n"
+                               "| モード | 見え方 |\n| Zero latency / Analog | 動かした帯域の周りだけ遅れる（山） |\n| Linear | 全体が同じだけ遅れる（平ら＝レイテンシー） |\n"
+                               "ローカットやシェルフの急な所ほど遅れが大きい。キックとベースの距離感に影響する。",
+                               "Delay per frequency (group delay, ms). 0 ms = no delay.\n"
+                               "| Mode | Picture |\n| Zero latency / Analog | delay only around the moved bands (a bump) |\n| Linear | everything delayed equally (flat = latency) |\n"
+                               "Steep cuts and shelves delay the most; it changes how kick and bass line up.")
+                          : T ("周波数ごとの位相のずれ（±360°）。0°＝ずれなし。\n"
+                               "| モード | 見え方 |\n| Zero latency / Analog | ゲインが変わる帯域で回る |\n| Linear | 常に 0°（その代わりプリリンギング） |\n"
+                               "ブーストで＋、カットで−側に回る。並列処理や同じ音源の重ね録りで打ち消しの原因になる。",
+                               "Phase shift per frequency (±360°). 0° = no shift.\n"
+                               "| Mode | Picture |\n| Zero latency / Analog | turns where the gain changes |\n| Linear | always 0° (but pre-ringing instead) |\n"
+                               "Boosts turn it one way, cuts the other: a source of cancellation in parallel chains and multi-miked sources.");
+                return true;
+            }
+        }
+        const auto fp = fullPlot();
+        if (p.y > fp.getBottom() && p.y < fp.getBottom() + 18 && p.x >= fp.getX() - 4)
+        {
+            title = juce::String ("FREQUENCY  ") + fmtHz (fOf (p.x)) + " Hz";
+            text = T ("周波数の軸（10 Hz〜22 kHz、対数）。太い線が人の可聴範囲の端（20 Hz と 20 kHz）。\n"
+                      "| 帯域 | 周波数 | 聴こえ方 |\n| 超低域 | 20〜60 Hz | 体で感じる揺れ |\n| 低域 | 60〜250 Hz | 太さ・キックとベース |\n| 中低域 | 250〜800 Hz | こもり・箱鳴り |\n"
+                      "| 中域 | 800 Hz〜3 kHz | 芯・前に出る力 |\n| 中高域 | 3〜6 kHz | 明瞭さ・耳障り |\n| 高域 | 6〜12 kHz | 輝き・歯擦音 |\n| 超高域 | 12〜20 kHz | 空気感 |",
+                      "The frequency axis (10 Hz to 22 kHz, log). The heavier lines mark the ends of human hearing (20 Hz and 20 kHz).\n"
+                      "| Range | Frequency | Sounds like |\n| Sub | 20-60 Hz | felt more than heard |\n| Low | 60-250 Hz | weight: kick and bass |\n| Low-mid | 250-800 Hz | mud, boxiness |\n"
+                      "| Mid | 800 Hz-3 kHz | body, projection |\n| Upper-mid | 3-6 kHz | clarity, harshness |\n| High | 6-12 kHz | brilliance, sibilance |\n| Air | 12-20 kHz | air |");
+            return true;
+        }
+        if (p.x < fp.getX() && p.y >= fp.getY() && p.y <= fp.getBottom())
+        {
+            title = juce::String::fromUTF8 ("GAIN SCALE  \xc2\xb1") + juce::String ((int) std::round (dbRange)) + " dB";
+            text = T ("EQ カーブの縦軸（dB）。左上の ±dB ボタンで選ぶ。バンドのゲインが目盛りを超えると自動で広がる。\n"
+                      "| 目盛り | 向いている用途 |\n| ±3 dB | ミックス・マスタリングの細かな補正 |\n| ±6〜12 dB | 一般的な音作り |\n| ±20〜30 dB | ローカットの傾きや大きなブースト |\n"
+                      "スペアナはこの目盛りとは別（右の音量は相対表示）。",
+                      "The EQ curve's vertical scale (dB). Pick it with the ±dB button at the top left; it widens on its own when a band goes past it.\n"
+                      "| Scale | Good for |\n| ±3 dB | fine mix and mastering moves |\n| ±6-12 dB | everyday tone shaping |\n| ±20-30 dB | cut slopes and big boosts |\n"
+                      "The analyzer has its own (relative) level scale.");
+            return true;
+        }
+        if (fp.contains (p))
+        {
+            const bool split = lastSplit && panelShown();
+            const juce::String a = anaA.getText(), b = anaB.getText();
+            if (p.x > fp.getRight() - 46)
+            {
+                title = gd ? "GROUP DELAY SCALE" : "PHASE SCALE";
+                text = T ("右側の黄色の目盛り：点線（位相 ±360°、または群遅延 ms）用。EQ カーブの dB とは別の目盛り。\nPhase ボタンで位相 ⇄ 群遅延、Overlay ボタンで重ね描き ⇄ 下の枠（Split）。",
+                          "The yellow scale on the right is for the dotted line (phase ±360° or group delay ms), separate from the EQ's dB.\nPhase button: phase vs group delay. Overlay button: on the curve vs the lower panel (Split).");
+                return true;
+            }
+            title = "EQ GRAPH / SPECTRUM";
+            text = T ("EQ のカーブと、音のスペクトラム（周波数ごとの音量）を重ねて表示。\n", "The EQ curve over the spectrum of the audio (level per frequency).\n")
+                 + "| " + T ("表示", "Element") + " | " + T ("意味", "Meaning") + " |\n"
+                 + T ("| 塗り（A） | ", "| Fill (A) | ") + a + T ("：スペアナ A |\n", ": analyzer A |\n")
+                 + T ("| 線（B） | ", "| Line (B) | ") + b + T ("：スペアナ B（比較用） |\n", ": analyzer B (to compare) |\n")
+                 + T ("| オレンジの曲線 | EQ 全体の周波数特性 |\n| 色付きの塗り | 選んだバンドだけの形 |\n", "| Orange curve | the whole EQ response |\n| Coloured fill | the selected band alone |\n")
+                 + (split ? juce::String() : T ("| 黄色の点線 | 位相（または群遅延）。右の目盛り |\n", "| Yellow dotted | phase (or group delay), right scale |\n"))
+                 + T ("スペアナ：8192 点 FFT。高域ほど持ち上げて表示（+3 dB/oct、1 kHz 基準）するので、普通の音楽はほぼ平らに見える。上がる時は即、下がる時はゆっくり。\n"
+                      "| 操作 | 結果 |\n| ダブルクリック | バンド追加（周波数で形を自動選択） |\n| 点をドラッグ | 周波数とゲイン |\n| Cmd＋Z | 元に戻す |",
+                      "Analyzer: 8192-point FFT, tilted +3 dB/oct around 1 kHz so typical music reads about flat. Rises at once, falls slowly.\n"
+                      "| Action | Result |\n| Double-click | add a band (shape follows the frequency) |\n| Drag a dot | frequency and gain |\n| Cmd + Z | undo |");
+            return true;
+        }
+        return false;
     }
     void mouseMove (const juce::MouseEvent& e) override
     {
@@ -2746,13 +2999,110 @@ private:
     }
     void drawHelp (juce::Graphics& g, const juce::String& raw, juce::Rectangle<int> r, float maxPx = 16.0f) const
     {
-        juce::TextLayout tl;
-        for (float px = maxPx; px >= 9.5f; px -= 0.5f)
+        // blocks: running text (helpLayout) and tables ("| a | b |" lines, first row = header; a blank line ends a table)
+        struct Block { bool table = false; juce::String text; std::vector<juce::StringArray> rows; };
+        std::vector<Block> blocks;
+        for (auto line : juce::StringArray::fromLines (raw))
         {
-            tl.createLayout (helpLayout (raw, px), (float) r.getWidth());
-            if (tl.getHeight() <= (float) r.getHeight()) break;
+            const auto t = line.trim();
+            if (t.startsWithChar ('|'))
+            {
+                juce::StringArray cells;
+                cells.addTokens (t.substring (1, t.endsWithChar ('|') ? t.length() - 1 : t.length()), "|", "");
+                cells.trim();
+                if (cells.size() > 0 && cells[0].isNotEmpty() && cells[0].containsOnly ("-: ")) continue;    // markdown separator row
+                if (blocks.empty() || ! blocks.back().table) blocks.push_back ({ true, {}, {} });
+                blocks.back().rows.push_back (cells);
+            }
+            else if (t.isEmpty()) { if (! blocks.empty() && blocks.back().table) blocks.push_back ({ false, {}, {} }); }
+            else
+            {
+                if (blocks.empty() || blocks.back().table) blocks.push_back ({ false, {}, {} });
+                blocks.back().text << line << "\n";
+            }
         }
-        tl.draw (g, r.toFloat());
+        blocks.erase (std::remove_if (blocks.begin(), blocks.end(), [] (const Block& b) { return b.table ? b.rows.empty() : b.text.trim().isEmpty(); }), blocks.end());
+        if (blocks.empty()) return;
+        const bool ja = ph.ja();
+        auto cellLayout = [&] (juce::TextLayout& tl, const juce::String& txt, float px, float w, juce::Colour c, bool bold)
+        {
+            juce::AttributedString as; as.setWordWrap (ja ? juce::AttributedString::byChar : juce::AttributedString::byWord);
+            as.append (txt, theme::ui (px, bold), c); tl.createLayout (as, w);
+        };
+        // one block at (x, y), width W: returns its height, draws when g2 != nullptr
+        auto block = [&] (const Block& b, float px, float x0, float y, float W, juce::Graphics* g2) -> float
+        {
+            if (! b.table)
+            {
+                juce::TextLayout tl; tl.createLayout (helpLayout (b.text, px), W);
+                if (g2) tl.draw (*g2, { x0, y, W, tl.getHeight() });
+                return tl.getHeight();
+            }
+            size_t nc = 0; for (auto& row : b.rows) nc = std::max (nc, (size_t) row.size());
+            if (nc == 0) return 0.0f;
+            const float tp = px - 1.0f;
+            std::vector<float> cw (nc, 0.0f);
+            for (size_t ri = 0; ri < b.rows.size(); ++ri)
+                for (size_t c = 0; c + 1 < nc && c < (size_t) b.rows[ri].size(); ++c)
+                { juce::TextLayout tl; cellLayout (tl, b.rows[ri][(int) c], tp, 10000.0f, theme::text, ri == 0); cw[c] = std::max (cw[c], tl.getWidth() + tp * 1.1f); }
+            const float capEach = W * (nc <= 2 ? 0.44f : 0.64f / (float) (nc - 1));
+            float used = 0; for (size_t c = 0; c + 1 < nc; ++c) { cw[c] = std::min (cw[c], capEach); used += cw[c]; }
+            cw[nc - 1] = std::max (W * 0.25f, W - used);
+            const float y0 = y;
+            for (size_t ri = 0; ri < b.rows.size(); ++ri)
+            {
+                const bool head = ri == 0 && b.rows.size() > 1;
+                float rh = 0, x = x0;
+                std::vector<juce::TextLayout> tls (nc);
+                for (size_t c = 0; c < nc; ++c)
+                {
+                    const auto txt = c < (size_t) b.rows[ri].size() ? b.rows[ri][(int) c] : juce::String();
+                    const auto col = head ? theme::muted : c == 0 ? theme::accent : theme::text;
+                    cellLayout (tls[c], txt, tp, cw[c] - tp * 0.7f, col, head);
+                    rh = std::max (rh, tls[c].getHeight());
+                }
+                rh += tp * 0.3f;
+                if (g2)
+                {
+                    if (head) { g2->setColour (theme::line.withAlpha (0.35f)); g2->fillRect (juce::Rectangle<float> (x0, y, W, rh)); }
+                    for (size_t c = 0; c < nc; ++c) { tls[c].draw (*g2, { x + tp * 0.35f, y + tp * 0.15f, cw[c] - tp * 0.7f, rh }); x += cw[c]; }
+                    g2->setColour (theme::line.withAlpha (0.8f)); g2->drawHorizontalLine ((int) (y + rh), x0, x0 + W);
+                }
+                y += rh;
+            }
+            return y - y0;
+        };
+        const float W = (float) r.getWidth(), H = (float) r.getHeight(), gap = 18.0f;
+        // a column of blocks [from, to): total height
+        auto column = [&] (size_t from, size_t to, float px, float x, float w, juce::Graphics* g2) -> float
+        {
+            float y = (float) r.getY();
+            for (size_t i = from; i < to; ++i) { if (i > from) y += px * 0.4f; y += block (blocks[i], px, x, y, w, g2); }
+            return y - (float) r.getY();
+        };
+        // one column if it fits at a readable size, otherwise two columns side by side (split between blocks)
+        const float W2 = (W - gap) * 0.5f;
+        for (float px = maxPx; px >= 9.0f; px -= 0.5f)
+        {
+            if (px >= 11.5f && column (0, blocks.size(), px, 0, W, nullptr) <= H)
+            { juce::Graphics::ScopedSaveState ss (g); g.reduceClipRegion (r); column (0, blocks.size(), px, (float) r.getX(), W, &g); return; }
+            if (blocks.size() >= 2 && W >= 420)
+            {
+                size_t best = 1; float bh = 1e9f;
+                for (size_t k = 1; k < blocks.size(); ++k)
+                { const float h = std::max (column (0, k, px, 0, W2, nullptr), column (k, blocks.size(), px, 0, W2, nullptr)); if (h < bh) { bh = h; best = k; } }
+                if (bh <= H || px <= 9.0f)
+                {
+                    juce::Graphics::ScopedSaveState ss (g); g.reduceClipRegion (r);
+                    column (0, best, px, (float) r.getX(), W2, &g);
+                    g.setColour (theme::line); g.drawVerticalLine ((int) (r.getX() + W2 + gap * 0.5f), (float) r.getY(), (float) r.getBottom());
+                    column (best, blocks.size(), px, (float) r.getX() + W2 + gap, W2, &g);
+                    return;
+                }
+            }
+            else if (px <= 9.0f || column (0, blocks.size(), px, 0, W, nullptr) <= H)
+            { juce::Graphics::ScopedSaveState ss (g); g.reduceClipRegion (r); column (0, blocks.size(), px, (float) r.getX(), W, &g); return; }
+        }
     }
     void paintInfo (juce::Graphics& g, juce::Rectangle<int> a)
     {
@@ -2805,13 +3155,69 @@ private:
 // =============================================================================
 //  IN · OUT meters (peak with 1.5 s hold, RMS) and output correlation
 // =============================================================================
-class IOMeter : public juce::Component
+class IOMeter : public juce::Component, public HoverHelp
 {
 public:
     explicit IOMeter (ParamHelp& h) : ph (h)
     {
         setHelp (*this, "IN / OUT", "入出力のピーク（細い線は 1.5 秒ホールド）と RMS（300 ms）。Auto gain の効き具合や、次のプラグインへの送り量の確認に。CREST＝直近 1 秒のピーク − RMS（dB）。上から入力・出力・変化量（マイナス＝密度が上がった、プラス＝メリハリが増えた）。下の CORR は出力の位相相関：+1 で左右同じ、0 で無相関、マイナスはモノラルで打ち消し合う",
                  "Input and output peak (thin line: 1.5 s hold) and RMS (300 ms): check Auto gain and what you send to the next plugin. CREST = peak (last 1 s) minus RMS, dB: input, output, change (minus = the EQ / saturation made it denser, plus = more punch). CORR below is output correlation: +1 identical, 0 unrelated, negative cancels in mono");
+    }
+
+    // rows: bars | PK | RMS | CREST | CORR (same layout as paint)
+    bool hoverHelp (juce::Point<float> p, juce::String& title, juce::String& text) const override
+    {
+        auto T = [this] (const char* j, const char* e) { return ph.tr (j, e); };
+        const float bottom = (float) getHeight() - 160, pkY = bottom + 6, rmsY = pkY + 35, crY = rmsY + 35, coY = crY + 48;
+        if (p.y < pkY)
+        {
+            title = "IN / OUT METERS";
+            text = T ("左＝入力、右＝出力（オレンジ）。−60〜+3 dBFS、目盛りは 12 dB ごと。\n"
+                      "| 表示 | 意味 |\n| 濃い棒 | RMS（300 ms の平均＝聴感の大きさに近い） |\n| 薄い棒 | ピーク（瞬間の最大） |\n| 横線 | ピークのホールド（1.5 秒）。赤＝0 dB 超え |\n"
+                      "入力と出力の RMS をそろえると、EQ の良し悪しを音量差にだまされずに判断できる（Auto gain）。",
+                      "Left = input, right = output (orange). -60 to +3 dBFS, ticks every 12 dB.\n"
+                      "| Element | Meaning |\n| Solid bar | RMS (300 ms average, close to loudness) |\n| Faint bar | peak (instant maximum) |\n| Tick | peak hold (1.5 s), red over 0 dB |\n"
+                      "Match input and output RMS to judge the EQ without being fooled by level (Auto gain).");
+        }
+        else if (p.y < rmsY)
+        {
+            title = "PK  (peak)";
+            text = T ("ピーク値（dBFS、1.5 秒ホールド）。上＝入力、下＝出力。\n"
+                      "| 値 | 目安 |\n| 0 dB 以上 | クリップ。次のプラグインで歪む可能性 |\n| −6〜−1 dB | マスター段の一般的な上限 |\n| −18〜−10 dB | ミックス中のトラックの適正な余裕 |\n"
+                      "ブーストやサチュレーションで出力のピークが上がっていないかを確認。",
+                      "Peak level (dBFS, 1.5 s hold). Top = input, bottom = output.\n"
+                      "| Value | Guide |\n| 0 dB or above | clipping; the next plugin may distort |\n| -6 to -1 dB | usual ceiling on the master |\n| -18 to -10 dB | healthy headroom on a mix track |\n"
+                      "Check that boosts or saturation did not raise the output peak.");
+        }
+        else if (p.y < crY)
+        {
+            title = "RMS";
+            text = T ("RMS 値（dBFS、300 ms 平均）。上＝入力、下＝出力。聴感の音量に近い。\n"
+                      "| 比べ方 | 判断 |\n| 出力 ≒ 入力 | 音量差なしで EQ を比較できている |\n| 出力が大きい | ブーストで「良く聴こえる」錯覚に注意 |\n| 出力が小さい | カット分を OUT か Auto gain で補う |",
+                      "RMS level (dBFS, 300 ms average). Top = input, bottom = output. Close to perceived loudness.\n"
+                      "| Comparison | Reading |\n| Output = input | you compare the EQ at equal level |\n| Output louder | beware 'louder sounds better' |\n| Output quieter | make up with OUT or Auto gain |");
+        }
+        else if (p.y < coY)
+        {
+            title = "CREST  (peak - RMS)";
+            text = T ("クレストファクター＝直近 1 秒のピーク − RMS（dB）。音のメリハリ（ダイナミクス）の大きさ。上から入力・出力・変化量。\n"
+                      "| 値 | 音の傾向 |\n| 15 dB 以上 | 生のドラムなどアタックが鋭い |\n| 8〜12 dB | 一般的なミックス |\n| 6 dB 以下 | 強く圧縮・リミッティングされた音 |\n\n"
+                      "| 変化量 | 意味 |\n| マイナス（赤） | 密度が上がった（サチュレーションや低域ブースト） |\n| プラス（緑） | メリハリが増えた（低域カットなど） |",
+                      "Crest factor = the last second's peak minus RMS (dB): how punchy the sound is. Input, output, change.\n"
+                      "| Value | Character |\n| 15 dB or more | sharp attacks (raw drums) |\n| 8-12 dB | typical mix |\n| 6 dB or less | heavily compressed or limited |\n\n"
+                      "| Change | Meaning |\n| Minus (red) | denser (saturation, low boost) |\n| Plus (green) | punchier (e.g. low cut) |");
+        }
+        else
+        {
+            title = "CORR  (correlation)";
+            text = T ("出力の位相相関（全帯域）。L と R がどれだけ同じか。\n"
+                      "| 値 | 意味 | モノラルにすると |\n| +1 | 左右が同じ（モノ） | そのまま |\n| +0.3〜+0.8 | 普通のステレオ | ほぼ問題なし |\n| 0 付近 | 無関係（とても広い） | 痩せる |\n| マイナス（赤） | 逆相が多い | 打ち消し合って消える |\n"
+                      "帯域ごとに見るには、グラフ上部の Stereo field。",
+                      "Output phase correlation (full band): how alike L and R are.\n"
+                      "| Value | Meaning | Summed to mono |\n| +1 | identical (mono) | unchanged |\n| +0.3 to +0.8 | normal stereo | fine |\n| About 0 | unrelated (very wide) | thinner |\n| Minus (red) | mostly opposite polarity | cancels |\n"
+                      "Per band: Stereo field at the top of the graph.");
+        }
+        return true;
     }
     void tick()
     {
