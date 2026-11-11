@@ -425,7 +425,7 @@ void EQAnatomyView::fieldUpdate()
     if (F.empty())
     {
         for (double f = 20.0 * std::pow (2.0, 1.0 / 12.0); f < 20000.0; f *= std::pow (2.0, 1.0 / 6.0)) F.push_back (f);
-        for (int k = 0; k < 2; ++k) { fPM[(size_t) k].assign (F.size(), 0.0); fPS[(size_t) k].assign (F.size(), 0.0); fX[(size_t) k].assign (F.size(), 0.0);
+        for (int k = 0; k < 2; ++k) { fPM[(size_t) k].assign (F.size(), 0.0); fPS[(size_t) k].assign (F.size(), 0.0); fX[(size_t) k].assign (F.size(), 0.0); fY[(size_t) k].assign (F.size(), 0.0);
                                       graph.fieldW[(size_t) k].assign (F.size(), std::numeric_limits<float>::quiet_NaN()); graph.fieldC[(size_t) k].assign (F.size(), std::numeric_limits<float>::quiet_NaN()); graph.fieldP[(size_t) k].assign (F.size(), std::numeric_limits<float>::quiet_NaN()); }
     }
     auto load = [&] (int ring, std::vector<float>& d)
@@ -445,25 +445,34 @@ void EQAnatomyView::fieldUpdate()
         {
             const double lo = F[i] * std::pow (2.0, -1.0 / 12.0), hi = F[i] * std::pow (2.0, 1.0 / 12.0);
             int b0 = juce::jlimit (1, N / 2 - 1, (int) std::ceil (lo * N / fs)), b1 = juce::jlimit (b0, N / 2 - 1, (int) std::floor (hi * N / fs));
-            double pm = 0, ps = 0, x = 0;
+            double pm = 0, ps = 0, x = 0, yy = 0;
             for (int b = b0; b <= b1; ++b)
             {
                 const double mr = m[(size_t) (2 * b)], mi = m[(size_t) (2 * b + 1)], sr = s[(size_t) (2 * b)], si = s[(size_t) (2 * b + 1)];
-                pm += mr * mr + mi * mi; ps += sr * sr + si * si; x += mr * sr + mi * si;
+                pm += mr * mr + mi * mi; ps += sr * sr + si * si; x += mr * sr + mi * si; yy += si * mr - sr * mi;
             }
             const double n = (double) (b1 - b0 + 1);
-            pm /= n; ps /= n; x /= n;
-            auto& PM = fPM[(size_t) k][i]; auto& PS = fPS[(size_t) k][i]; auto& X = fX[(size_t) k][i];
-            PM += a * (pm - PM); PS += a * (ps - PS); X += a * (x - X);
+            pm /= n; ps /= n; x /= n; yy /= n;
+            auto& PM = fPM[(size_t) k][i]; auto& PS = fPS[(size_t) k][i]; auto& X = fX[(size_t) k][i]; auto& Y = fY[(size_t) k][i];
+            PM += a * (pm - PM); PS += a * (ps - PS); X += a * (x - X); Y += a * (yy - Y);
             const double t = PM + PS;
             if (t < floorP) { graph.fieldW[(size_t) k][i] = graph.fieldC[(size_t) k][i] = graph.fieldP[(size_t) k][i] = std::numeric_limits<float>::quiet_NaN(); continue; }
             // balance = (PL - PR) / (PL + PR) = 2X / (Pm + Ps); spread = (1 - corr) / 2
             const double corr = juce::jlimit (-1.0, 1.0, (PM - PS) / std::sqrt (std::max (1e-30, t * t - 4.0 * X * X)));
             graph.fieldC[(size_t) k][i] = (float) corr;
-            // L / R levels of the band (L = M + S, R = M − S), scaled like the analyzer (+3 dB/oct around 1 kHz)
-            const double sc = 20.0 * std::log10 (4.0 / N) + 3.0 * std::log2 (F[i] / 1000.0);
-            graph.fieldW[(size_t) k][i] = (float) (10.0 * std::log10 (std::max (1e-20, t + 2.0 * X)) + sc);
-            graph.fieldP[(size_t) k][i] = (float) (10.0 * std::log10 (std::max (1e-20, t - 2.0 * X)) + sc);
+            // Level-independent picture of the band (L = M + S, R = M − S):
+            //   balance  = PL / PR in dB (where the band sits between L and R)
+            //   spread   = 1 − coherence, where coherence = |Σ L·R*| / √(PL·PR) and Σ L·R* = (Pm − Ps) + 2j·Σ Im(S·M*).
+            //              Coherence ignores level and pan: a mono source stays a thin line wherever it is panned;
+            //              raising Mid makes the band more coherent (narrower), decorrelated Side makes it wider.
+            //              Out-of-phase content (Re Σ L·R* < 0) counts as wide too.
+            const double PL = std::max (1e-30, t + 2.0 * X), PR = std::max (1e-30, t - 2.0 * X);
+            const double bal = juce::jlimit (-18.0, 18.0, 10.0 * std::log10 (PL / PR));
+            const double re = PM - PS, im = 2.0 * Y, den = std::sqrt (PL * PR);
+            double spread = 1.0 - juce::jlimit (0.0, 1.0, std::sqrt (re * re + im * im) / den);
+            if (re < 0) spread = std::max (spread, juce::jlimit (0.0, 1.0, -re / den));
+            graph.fieldP[(size_t) k][i] = (float) (bal / 18.0);
+            graph.fieldW[(size_t) k][i] = (float) spread;
         }
     }
 }

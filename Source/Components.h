@@ -879,8 +879,8 @@ public:
         fdTab.setClickingTogglesState (false); addAndMakeVisible (fdTab);
         fdTab.setButtonText ("Stereo field");
         fdTab.onClick = [this] { lowerToggle (1); };
-        setHelp (fdTab, "STEREO FIELD", "下の枠を帯域ごとのステレオ表示に切り替える。上＝L／R（帯域ごとの L のレベルを中央から上へ、R を下へ。上下の差が左右の偏り）、下＝相関（+1 同相、0 無相関、−1 逆相）。灰色が EQ 前、色付きが EQ 後。1/6 オクターブ、約 0.3 s の平均",
-                 "Shows the stereo picture per band in the lower panel. Top: L / R (each band's L level drawn up from the centre line, R down; the difference shows which side it leans to). Bottom: correlation (+1 in phase, 0 uncorrelated, -1 out of phase). Grey = before the EQ, coloured = after. 1/6 octave, about 0.3 s average");
+        setHelp (fdTab, "STEREO FIELD", "下の枠を帯域ごとのステレオ表示に切り替える。上＝L／R の像（音量に左右されない。中央の線＝左右バランス、上が L・下が R、目盛は dB。線の上下の開き＝広がり＝1−コヒーレンス。モノの音はどこに定位しても細い線、Mid を上げると狭まり、無相関の Side や逆相で開く）、下＝相関（+1 同相、0 無相関、−1 逆相）。灰色が EQ 前、色付きが EQ 後。1/6 オクターブ、約 0.3 s の平均",
+                 "Shows the stereo picture per band in the lower panel. Top: the L / R image, independent of level (the line is the balance, L up / R down in dB; the opening around it is the spread, 1 - coherence: a mono source stays a thin line wherever it is panned, raising Mid narrows it, decorrelated Side or out-of-phase content opens it). Bottom: correlation (+1 in phase, 0 uncorrelated, -1 out of phase). Grey = before the EQ, coloured = after. 1/6 octave, about 0.3 s average");
         phaseBtn.onClick = [this] { ph.proc.uiState.setProperty ("view", (int) ph.proc.uiState.getProperty ("view", 0) == 1 ? 0 : 1, nullptr); };
         setHelp (*this, "MOUSE", mouseHelpJa(), mouseHelpEn());
         for (int i = 0; i <= 400; ++i) fr.push_back (20.0 * std::pow (1000.0, i / 400.0));
@@ -1763,47 +1763,50 @@ private:
         const float hh = (body.getHeight() - 6) * 0.62f;
         const auto rw = body.withHeight (hh), rc = body.withTrimmedTop (hh + 6);
         auto grid = [&] (juce::Rectangle<float> r) { g.setColour (theme::grid); for (double f : { 50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0 }) g.drawVerticalLine ((int) xOf (f), r.getY(), r.getBottom()); };
-        // L / R per band: L's level upward from the centre line, R's downward (same scale as the analyzer, −90 to −10 dB).
-        // A band leaning left is taller above than below; grey = before the EQ, colour = after
+        // L / R image per band, independent of level: the centre line is the balance (L up, R down, ±18 dB),
+        // the opening around it is the spread (1 − coherence; narrowed toward the side the band leans to).
+        // grey = before the EQ, colour = after
         {
             const auto r = rw; grid (r);
-            const float cy = r.getCentreY(), H = r.getHeight() * 0.5f - 1.0f;
-            auto hOf = [&] (float db) { return H * juce::jlimit (0.0f, 1.0f, (db + 90.0f) / 80.0f); };
+            auto y = [&] (float v) { return juce::jmap (juce::jlimit (-1.0f, 1.0f, v), -1.0f, 1.0f, r.getBottom() - 1.0f, r.getY() + 1.0f); };
             g.setFont (theme::mono (9.0f));
-            for (float db : { -10.0f, -30.0f, -50.0f, -70.0f })
-                for (int sgn : { -1, 1 })
-                {
-                    const float y = cy - sgn * hOf (db);
-                    g.setColour (theme::grid.brighter (0.15f)); g.drawHorizontalLine ((int) y, r.getX(), r.getRight());
-                    if (db == -10.0f || db == -50.0f) { g.setColour (theme::muted); g.drawText (juce::String ((int) db), (int) r.getRight() - 44, (int) y - (sgn > 0 ? 0 : 13), 40, 13, juce::Justification::centredRight); }
-                }
-            g.setColour (theme::zero); g.drawHorizontalLine ((int) cy, r.getX(), r.getRight());
-            const juce::Colour cL = theme::bandColour (0).interpolatedWith (theme::text, 0.15f), cR = theme::side;
-            g.setFont (theme::ui (10.0f, true));
-            g.setColour (cL); g.drawText ("L", (int) r.getX() + 6, (int) r.getY() + 1, 20, 13, juce::Justification::centredLeft);
-            g.setColour (cR); g.drawText ("R", (int) r.getX() + 6, (int) r.getBottom() - 14, 20, 13, juce::Justification::centredLeft);
+            for (float db : { -12.0f, -6.0f, 6.0f, 12.0f })
+            {
+                g.setColour (theme::grid.brighter (0.15f)); g.drawHorizontalLine ((int) y (db / 18.0f), r.getX(), r.getRight());
+                g.setColour (theme::muted); g.drawText ((db > 0 ? "L+" : "R+") + juce::String ((int) std::abs (db)), (int) r.getRight() - 44, (int) y (db / 18.0f) - 7, 40, 14, juce::Justification::centredRight);
+            }
+            g.setColour (theme::zero); g.drawHorizontalLine ((int) y (0), r.getX(), r.getRight());
+            g.setColour (theme::muted); g.drawText ("C", (int) r.getRight() - 44, (int) y (0) - 7, 40, 14, juce::Justification::centredRight);
+            g.setFont (theme::ui (10.0f, true)); g.setColour (theme::side);
+            g.drawText ("L", (int) r.getX() + 6, (int) r.getY() + 1, 20, 13, juce::Justification::centredLeft);
+            g.drawText ("R", (int) r.getX() + 6, (int) r.getBottom() - 14, 20, 13, juce::Justification::centredLeft);
+            g.setColour (theme::muted); g.setFont (theme::ui (9.0f));
+            g.drawText ("line = balance, opening = spread (1 - coherence)", (int) r.getX() + 22, (int) r.getY() + 1, 300, 13, juce::Justification::centredLeft);
             for (int k = 0; k < 2; ++k)
             {
                 if (fieldW[(size_t) k].size() != fieldF.size() || fieldP[(size_t) k].size() != fieldF.size()) continue;
-                juce::Path top, bot, fL, fR;
+                juce::Path top, bot, ctr, fill; bool open = false;
                 for (size_t i = 0; i < fieldF.size(); ++i)
                 {
-                    const float l = fieldW[(size_t) k][i], rr = fieldP[(size_t) k][i];
-                    const float x = xOf (fieldF[i]);
-                    const float yt = cy - hOf (std::isfinite (l) ? l : -90.0f), yb = cy + hOf (std::isfinite (rr) ? rr : -90.0f);
-                    if (i == 0) { top.startNewSubPath (x, yt); bot.startNewSubPath (x, yb); } else { top.lineTo (x, yt); bot.lineTo (x, yb); }
-                    if (k == 1)
-                    {
-                        const float w = std::max (1.0f, (float) (xOf (fieldF[std::min (i + 1, fieldF.size() - 1)]) - x));
-                        fL.addRectangle (x, yt, w, cy - yt); fR.addRectangle (x, cy, w, yb - cy);
-                    }
+                    const float sp = fieldW[(size_t) k][i], c = fieldP[(size_t) k][i];
+                    if (! std::isfinite (sp) || ! std::isfinite (c)) { open = false; continue; }
+                    const float h = sp * (1.0f - std::abs (c));
+                    const float x = xOf (fieldF[i]), yt = y (c + h), yb = y (c - h), yc = y (c);
+                    if (! open) { top.startNewSubPath (x, yt); bot.startNewSubPath (x, yb); ctr.startNewSubPath (x, yc); open = true; }
+                    else { top.lineTo (x, yt); bot.lineTo (x, yb); ctr.lineTo (x, yc); }
+                    if (k == 1) { const float w = std::max (1.0f, (float) (xOf (fieldF[std::min (i + 1, fieldF.size() - 1)]) - x)); fill.addRectangle (x, yt, w, std::max (1.0f, yb - yt)); }
                 }
                 if (k == 1)
                 {
-                    g.setColour (cL.withAlpha (0.28f)); g.fillPath (fL); g.setColour (cR.withAlpha (0.28f)); g.fillPath (fR);
-                    g.setColour (cL); g.strokePath (top, juce::PathStrokeType (1.5f)); g.setColour (cR); g.strokePath (bot, juce::PathStrokeType (1.5f));
+                    g.setColour (theme::side.withAlpha (0.25f)); g.fillPath (fill);
+                    g.setColour (theme::side); g.strokePath (top, juce::PathStrokeType (1.3f)); g.strokePath (bot, juce::PathStrokeType (1.3f));
+                    g.setColour (theme::text.withAlpha (0.8f)); g.strokePath (ctr, juce::PathStrokeType (1.2f));
                 }
-                else { g.setColour (theme::muted.withAlpha (0.9f)); g.strokePath (top, juce::PathStrokeType (1.1f)); g.strokePath (bot, juce::PathStrokeType (1.1f)); }
+                else
+                {
+                    g.setColour (theme::muted.withAlpha (0.9f)); g.strokePath (top, juce::PathStrokeType (1.0f)); g.strokePath (bot, juce::PathStrokeType (1.0f));
+                    juce::Path d; const float dash[] = { 3.0f, 3.0f }; juce::PathStrokeType (1.0f).createDashedStroke (d, ctr, dash, 2); g.fillPath (d);
+                }
             }
         }
         auto panel = [&] (juce::Rectangle<float> r, const std::array<std::vector<float>, 2>& v, float lo, float hi, std::initializer_list<float> marks,
@@ -2060,7 +2063,7 @@ private:
     bool lastField = false;
 public:
     // stereo field per band, filled by the editor: [0] before the EQ, [1] after. NaN = too quiet to show
-    std::vector<double> fieldF; std::array<std::vector<float>, 2> fieldW, fieldC, fieldP;   // W = L level, P = R level (dB, analyzer scale), C = correlation
+    std::vector<double> fieldF; std::array<std::vector<float>, 2> fieldW, fieldC, fieldP;   // W = spread (1 - coherence), P = balance (+1 = L 18 dB louder), C = correlation
     bool fieldWanted() const { return lastScope && lastField && ! ph.proc.earActive(); }
 private:
     bool lastScope = false, autoAna = false; int srcA = 0, srcB = -1, scDrag = 0; float scStartY = 0, scStartSens = 0, scStartWidth = 6;

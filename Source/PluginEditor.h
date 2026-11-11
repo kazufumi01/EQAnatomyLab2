@@ -75,7 +75,7 @@ private:
     std::vector<float> spec = std::vector<float> (401, -140.0f), specB = std::vector<float> (401, -140.0f);
     // stereo field per band (1/6 octave): smoothed Mid / Side powers and their cross term, [0] input, [1] output
     void fieldUpdate();
-    std::array<std::vector<double>, 2> fPM, fPS, fX;
+    std::array<std::vector<double>, 2> fPM, fPS, fX, fY;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EQAnatomyView)
 };
