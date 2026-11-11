@@ -46,7 +46,7 @@ public:
                 {
                     const double f = 45.0 + 75.0 * std::exp (-kickT / 0.03);
                     kickPh += f / fs;
-                    const double k = std::sin (2 * M_PI * kickPh) * std::exp (-kickT / 0.25) * 0.55 + (kickT < 0.002 ? 0.3 * (1 - kickT / 0.002) : 0.0);
+                    const double k = std::sin (2 * juce::MathConstants<double>::pi * kickPh) * std::exp (-kickT / 0.25) * 0.55 + (kickT < 0.002 ? 0.3 * (1 - kickT / 0.002) : 0.0);
                     dl += k; dr += k; kickT += 1.0 / fs;
                 } else kickPh = 0;
                 const double nz = noise();
@@ -54,7 +54,7 @@ public:
                 if (snT < 0.4)
                 {
                     hpN += 0.35 * (nz - hpN);
-                    const double s = (nz - hpN) * std::exp (-snT / 0.15) * 0.35 + std::sin (2 * M_PI * 190.0 * snT) * std::exp (-snT / 0.08) * 0.25;
+                    const double s = (nz - hpN) * std::exp (-snT / 0.15) * 0.35 + std::sin (2 * juce::MathConstants<double>::pi * 190.0 * snT) * std::exp (-snT / 0.08) * 0.25;
                     dl += s; dr += s; snT += 1.0 / fs;
                 }
                 // hats
@@ -67,7 +67,7 @@ public:
             }
             if (source != 0 && lastNote >= 0)
             {
-                const double vib = noteT > 0.15 ? 0.15 * std::sin (2 * M_PI * vibPh) : 0.0;     // ±15 cents after 150 ms
+                const double vib = noteT > 0.15 ? 0.15 * std::sin (2 * juce::MathConstants<double>::pi * vibPh) : 0.0;     // ±15 cents after 150 ms
                 vibPh += 5.5 / fs;
                 const double f = 440.0 * std::pow (2.0, (lastNote - 69 + vib * 0.1) / 12.0);
                 const double dt = f / fs;
@@ -88,10 +88,10 @@ private:
     struct Biquad
     {
         double b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0, z1 = 0, z2 = 0;
-        void bandpass (double f, double q, double fs) { const double w = 2 * M_PI * f / fs, al = std::sin (w) / (2 * q), a0 = 1 + al; b0 = al / a0; b1 = 0; b2 = -al / a0; a1 = -2 * std::cos (w) / a0; a2 = (1 - al) / a0; }
+        void bandpass (double f, double q, double fs) { const double w = 2 * juce::MathConstants<double>::pi * f / fs, al = std::sin (w) / (2 * q), a0 = 1 + al; b0 = al / a0; b1 = 0; b2 = -al / a0; a1 = -2 * std::cos (w) / a0; a2 = (1 - al) / a0; }
         void peak (double f, double q, double db, double fs)
         {
-            const double A = std::pow (10.0, db / 40.0), w = 2 * M_PI * f / fs, al = std::sin (w) / (2 * q), a0 = 1 + al / A;
+            const double A = std::pow (10.0, db / 40.0), w = 2 * juce::MathConstants<double>::pi * f / fs, al = std::sin (w) / (2 * q), a0 = 1 + al / A;
             b0 = (1 + al * A) / a0; b1 = -2 * std::cos (w) / a0; b2 = (1 - al * A) / a0; a1 = b1; a2 = (1 - al / A) / a0;
         }
         double process (double x) { const double y = b0 * x + z1; z1 = b1 * x - a1 * y + z2; z2 = b2 * x - a2 * y; return y; }
