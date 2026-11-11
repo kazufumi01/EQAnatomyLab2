@@ -733,6 +733,19 @@ public:
     }
     void resized() override
     {
+        if (getHeight() > 80 && getWidth() < 240)
+        {
+            const int W = getWidth() - 16, cw = (W - 4) / 2;
+            onBtn.setBounds (8, 8, 40, 22); type.setBounds (52, 8, W - 44 - 40, 22);
+            curveArea = { getWidth() - 44, 6, 36, 26 };
+            lo.setBounds (8, 36, cw, 30); hi.setBounds (12 + cw, 36, cw, 30);
+            drive.setBounds (8, 70, cw, 30); mix.setBounds (12 + cw, 70, cw, 30);
+            os.setBounds (8, 106, 68, 18);
+            deltaBtn.setBounds (80, 104, 40, 22); autoBtn.setBounds (124, 104, W - 116, 22);
+            makeupArea = { 8, 128, W, 16 };
+            textArea = {};
+            return;
+        }
         if (getHeight() > 80)
         {
             const int W = getWidth() - 16, cw = (W - 9) / 4;
@@ -764,12 +777,20 @@ public:
         auto r = getLocalBounds().toFloat();
         g.setColour (theme::panel); g.fillRoundedRectangle (r, 6.0f);
         g.setColour (ph.value (pid::satOn) > 0.5f ? theme::sat.withAlpha (0.53f) : theme::line); g.drawRoundedRectangle (r.reduced (0.5f), 6.0f, 1.0f);
-        g.setColour (theme::muted); g.setFont (theme::ui (9.5f));
-        g.drawText ("MAKEUP", makeupArea.withHeight (14), juce::Justification::centredLeft);
-        g.setColour (ph.value (pid::satAuto) > 0.5f && ph.value (pid::satOn) > 0.5f ? theme::sat : theme::faint);
-        g.setFont (theme::mono (12.0f, true));
-        g.drawText (fmtDb (ph.value (pid::satOn) > 0.5f && ph.value (pid::satAuto) > 0.5f ? ph.proc.satMakeupDb.load() : 0.0f),
-                    makeupArea.withTrimmedTop (14), juce::Justification::centredLeft);
+        const juce::String mk = fmtDb (ph.value (pid::satOn) > 0.5f && ph.value (pid::satAuto) > 0.5f ? ph.proc.satMakeupDb.load() : 0.0f);
+        const juce::Colour mc = ph.value (pid::satAuto) > 0.5f && ph.value (pid::satOn) > 0.5f ? theme::sat : theme::faint;
+        if (makeupArea.getHeight() < 24)      // narrow layout: one line
+        {
+            g.setColour (theme::muted); g.setFont (theme::ui (9.5f)); g.drawText ("MAKEUP", makeupArea, juce::Justification::centredLeft);
+            g.setColour (mc); g.setFont (theme::mono (11.0f, true)); g.drawText (mk, makeupArea, juce::Justification::centredRight);
+        }
+        else
+        {
+            g.setColour (theme::muted); g.setFont (theme::ui (9.5f));
+            g.drawText ("MAKEUP", makeupArea.withHeight (14), juce::Justification::centredLeft);
+            g.setColour (mc); g.setFont (theme::mono (12.0f, true));
+            g.drawText (mk, makeupArea.withTrimmedTop (14), juce::Justification::centredLeft);
+        }
         auto c = curveArea.toFloat();
         g.setColour (theme::well); g.fillRoundedRectangle (c, 3.0f);
         g.setColour (theme::grid); g.drawLine (c.getX(), c.getCentreY(), c.getRight(), c.getCentreY()); g.drawLine (c.getCentreX(), c.getY(), c.getCentreX(), c.getBottom());
@@ -787,8 +808,11 @@ public:
                                     "低域ほど飽和しやすい。低音の太さと密度感", "軽く入れても少し色が付く。中低域の厚み", "倍音だけを LOW より上に足す。こもらずに抜けが増える" };
         static const char* en[] = { "Symmetric and smooth; mostly odd harmonics", "Asymmetric; even harmonics, fatter when pushed", "Hard, edgy clipping",
                                     "Lows saturate first: weight and density", "A little colour even when light: low-mid body", "Adds harmonics above LOW only: more air without mud" };
-        g.setColour (theme::muted); g.setFont (theme::ui (10.0f));
-        g.drawFittedText (juce::String::fromUTF8 (ph.ja() ? ja[juce::jlimit (0, 5, t)] : en[juce::jlimit (0, 5, t)]), textArea, juce::Justification::centredLeft, 3, 0.9f);
+        if (! textArea.isEmpty())
+        {
+            g.setColour (theme::muted); g.setFont (theme::ui (10.0f));
+            g.drawFittedText (juce::String::fromUTF8 (ph.ja() ? ja[juce::jlimit (0, 5, t)] : en[juce::jlimit (0, 5, t)]), textArea, juce::Justification::centredLeft, 3, 0.9f);
+        }
     }
 private:
     ParamHelp& ph;
@@ -2457,10 +2481,10 @@ private:
         }
         return as;
     }
-    void drawHelp (juce::Graphics& g, const juce::String& raw, juce::Rectangle<int> r) const
+    void drawHelp (juce::Graphics& g, const juce::String& raw, juce::Rectangle<int> r, float maxPx = 16.0f) const
     {
         juce::TextLayout tl;
-        for (float px = 16.0f; px >= 10.0f; px -= 0.5f)
+        for (float px = maxPx; px >= 9.5f; px -= 0.5f)
         {
             tl.createLayout (helpLayout (raw, px), (float) r.getWidth());
             if (tl.getHeight() <= (float) r.getHeight()) break;
@@ -2489,23 +2513,20 @@ private:
             const auto& pr = presets()[(size_t) pi];
             const bool ja = ph.ja();
             header ("PRESET  " + juce::String::fromUTF8 (ja ? pr.nameJa : pr.nameEn), a.getY(), theme::accent);
-            g.setColour (theme::text); g.setFont (theme::ui (12.0f));
-            g.drawFittedText (juce::String::fromUTF8 (ja ? pr.purposeJa : pr.purposeEn), a.getX(), a.getY() + 18, a.getWidth(), 36, juce::Justification::topLeft, 2, 0.9f);
-            g.setFont (theme::ui (12.0f, true));
-            g.drawFittedText ((ja ? juce::String::fromUTF8 ("まず：") : juce::String ("First: ")) + juce::String::fromUTF8 (ja ? pr.firstJa : pr.firstEn),
-                              a.getX(), a.getY() + 58, a.getWidth(), 36, juce::Justification::topLeft, 2, 0.9f);
-            g.setColour (theme::pre); g.setFont (theme::ui (11.5f));
-            g.drawFittedText ((ja ? juce::String::fromUTF8 ("注意：") : juce::String ("Careful: ")) + juce::String::fromUTF8 (ja ? pr.cautionJa : pr.cautionEn),
-                              a.getX(), a.getY() + 98, a.getWidth(), a.getHeight() - 98, juce::Justification::topLeft, 3, 0.9f);
+            const juce::String raw = juce::String::fromUTF8 (ja ? pr.purposeJa : pr.purposeEn) + "\n"
+                + (ja ? juce::String::fromUTF8 ("まず：") : juce::String ("First: ")) + juce::String::fromUTF8 (ja ? pr.firstJa : pr.firstEn) + "\n"
+                + (ja ? juce::String::fromUTF8 ("注意：") : juce::String ("Careful: ")) + juce::String::fromUTF8 (ja ? pr.cautionJa : pr.cautionEn);
+            drawHelp (g, raw, a.withTrimmedTop (18));
             return;
         }
-        header ("CURRENT MODE", a.getY(), theme::muted);
-        g.setColour (theme::text); g.setFont (theme::ui (12.0f));
-        g.drawFittedText (juce::String::fromUTF8 (ph.ja() ? ja[m] : en[m]), a.getX(), a.getY() + 18, a.getWidth(), 50, juce::Justification::topLeft, 3, 0.9f);
-        header ("MOUSE", a.getY() + 64, theme::muted);
-        g.setColour (theme::text); g.setFont (theme::ui (12.0f));
-        g.drawFittedText (juce::String::fromUTF8 (ph.ja() ? mouseHelpJa() : mouseHelpEn()), a.getX(), a.getY() + 82, a.getWidth(), a.getHeight() - 82,
-                          juce::Justification::topLeft, 4, 0.9f);
+        const bool two = a.getWidth() >= 520;
+        auto left = two ? a.removeFromLeft (a.getWidth() * 34 / 100) : a.removeFromTop (60);
+        if (two) a.removeFromLeft (16); else a.removeFromTop (6);
+        g.setColour (theme::muted); g.setFont (theme::mono (10.0f, true)); g.drawText ("CURRENT MODE", left.getX(), left.getY(), left.getWidth(), 14, juce::Justification::centredLeft);
+        drawHelp (g, juce::String::fromUTF8 (ph.ja() ? ja[m] : en[m]), left.withTrimmedTop (18), 13.0f);
+        if (two) { g.setColour (theme::line); g.drawVerticalLine (a.getX() - 8, (float) a.getY(), (float) a.getBottom()); }
+        header ("MOUSE", a.getY(), theme::muted);
+        drawHelp (g, juce::String::fromUTF8 (ph.ja() ? mouseHelpJa() : mouseHelpEn()), a.withTrimmedTop (18), 14.0f);
     }
     ParamHelp& ph;
     juce::TextButton prev, load, next;

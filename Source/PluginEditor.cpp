@@ -328,7 +328,7 @@ void EQAnatomyView::resized()
     io.setBounds (1096, 54, 52, gh);
     const bool ear = proc.earActive();
     detail.setVisible (false);                     // its settings now open in the floating panel (▾)
-    satStrip.setBounds (12, y, 300, h);
+    satStrip.setBounds (12, y, 180, h);
     for (auto* c : { (juce::Component*) &detail, (juce::Component*) &irView, (juce::Component*) &outDrag, (juce::Component*) &autoBtn,
                      (juce::Component*) &deltaBtn, (juce::Component*) &viewSolo, (juce::Component*) &bypassBtn, (juce::Component*) &lesson,
                      (juce::Component*) &satStrip })
@@ -336,17 +336,18 @@ void EQAnatomyView::resized()
     detail.setVisible (false);
     earCard.setVisible (ear && lower);
     earCard.setBounds (12, y, getWidth() - 24, h);
-    irView.setBounds (320, y, 128, h);
-    // the button column: four rows of the same height, spread over the panel (OUT | Auto gain, latency, SOLO, Delta | Bypass)
-    const int bw = 112, bx = getWidth() - 12 - bw, bh = (h - 16) / 5, gap = (h - 4 * bh) / 3;
-    auto row = [&] (int k) { return juce::Rectangle<int> (bx, y + k * (bh + gap), bw, bh); };
-    outDrag.setBounds (row (0));
-    latRect = row (1);
+    irView.setBounds (200, y, 120, h);
+    // the button column, packed to the bottom. Top to bottom: read-only first, the most-pressed last, nearest the corner:
+    // latency (info) / SOLO (what to hear) / OUT | Auto gain (level match) / Delta | Bypass (the before-after check)
+    const int bw = 104, bx = getWidth() - 12 - bw, bh = (h - 16) / 5, gap = 4;
+    auto row = [&] (int k) { return juce::Rectangle<int> (bx, y + h - (4 - k) * bh - (3 - k) * gap, bw, bh); };
+    latRect = row (0);
+    viewSolo.setBounds (row (1));
+    outDrag.setBounds (row (2));
     autoBtn.setVisible (false);
-    viewSolo.setBounds (row (2));
     { auto r = row (3); deltaBtn.setBounds (r.removeFromLeft (bw / 2 - 2)); r.removeFromLeft (4); bypassBtn.setBounds (r); }
     soloBtn.setVisible (false);                    // pre-ring solo is the P cell of SOLO
-    lesson.setBounds (456, y, bx - 8 - 456, h);
+    lesson.setBounds (328, y, bx - 8 - 328, h);
 }
 
 bool EQAnatomyView::keyPressed (const juce::KeyPress& k)
