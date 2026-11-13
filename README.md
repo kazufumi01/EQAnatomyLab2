@@ -64,6 +64,6 @@ JUCE は **Starter ライセンス** で使用。配布物はフリーウェア�
 
 ## Support / 支援
 
-EQ Anatomy Lab 2 is free. If it helps your mixing or your classes, you can support development with a one-time tip via [PayPal](https://paypal.me/johanpluskei). More ways to help: <https://kazufumi01.github.io/support/>
+EQ Anatomy Lab 2 is free. A one-time tip via [PayPal](https://paypal.me/johanpluskei) is always welcome — **but what helps even more is sharing it and playing my music on [Spotify](https://open.spotify.com/artist/30PV2gqUbDDwvuWtKaok0x)!** Please do! More ways to help: <https://kazufumi01.github.io/support/>
 
-EQ Anatomy Lab 2 は無料です。ミックスや授業で役立ったら、[PayPal](https://paypal.me/johanpluskei) からの投げ銭で開発を支えていただけるとうれしいです。
+EQ Anatomy Lab 2 は無料です。[PayPal](https://paypal.me/johanpluskei) からの投げ銭も歓迎ですが、**それ以上にうれしいのは記事の拡散と曲の再生です！** [ブログ記事](https://jpk.seesaa.net/article/521891797.html)のシェアや [Spotify](https://open.spotify.com/artist/30PV2gqUbDDwvuWtKaok0x) での再生、ぜひよろしくお願いします！
