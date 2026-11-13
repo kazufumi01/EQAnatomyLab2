@@ -163,3 +163,9 @@
 **Johan Plus Kei** — dream pop / indie pop / post-rock · [Learning labs](https://kazufumi01.github.io/)
 
 PayPal からの投げ銭も歓迎です / Tips via [PayPal](https://paypal.me/johanpluskei) are welcome too. More: <https://kazufumi01.github.io/support/>
+
+---
+
+**© 2026 Johan Plus Kei. All rights reserved.**
+プラグイン・ソースコード・画像・文章の著作権その他の権利は Johan Plus Kei に帰属します。プラグインは無料で使えますが、ソースは学習のために公開しているもので、無断での転用・再配布・販売はできません。JUCE（Starter ライセンス）と VST3 SDK を使用しています。VST は Steinberg Media Technologies GmbH の登録商標です。
+The copyright and all other rights in the plug-in, source code, images and text belong to Johan Plus Kei. The plug-in is free to use; the source is published for learning only and may not be reused, redistributed or sold without permission. Built with JUCE (Starter licence) and the VST3 SDK. VST is a registered trademark of Steinberg Media Technologies GmbH.
