@@ -1,30 +1,43 @@
-# EQ Anatomy Lab 2 β（JUCE プラグイン）
+# EQ Anatomy Lab 2（JUCE プラグイン）
 
-by Johan Plus Kei — EQ の中身を「見て・聴いて・触って」学べる VST・AU 対応プラグイン（VST3 / AU / Standalone）。[EQ Anatomy Lab](https://github.com/kazufumi01/EQAnatomyLab) の後継ベータ版（別製品）
+by Johan Plus Kei — EQ の中身を「見て・聴いて・触って」学べる VST・AU 対応プラグイン（VST3 / AU / Standalone）。[EQ Anatomy Lab](https://github.com/kazufumi01/EQAnatomyLab) の後継（別製品）。
 
 ![EQ Anatomy Lab 2](docs/screenshot-main.png)
 
-## ⬇️ ダウンロード（ベータ版）/ Download (Beta)
+## ⬇️ ダウンロード / Download
 
 **[最新版をダウンロード / Download latest](https://github.com/kazufumi01/EQAnatomyLab2/releases/latest)** — 無料配布中 / Free
 
 | | 手動インストール（おすすめ） | インストーラー |
 |---|---|---|
-| **Mac**（macOS 11+, Apple Silicon / Intel） | `EQAnatomyLab2-0.2.0-mac.zip` | `EQAnatomyLab2-0.2.0-mac.pkg` |
-| **Windows**（10 / 11, 64bit）⚠️未検証 | `EQAnatomyLab2-0.2.0-win64.zip` | `EQAnatomyLab2-0.2.0-win64.exe` |
+| **Mac**（macOS 11+, Apple Silicon / Intel） | `EQAnatomyLab2v1-1.0.0-mac.zip` | `EQAnatomyLab2v1-1.0.0-mac.pkg` |
+| **Windows**（10 / 11, 64bit）⚠️未検証 | `EQAnatomyLab2v1-1.0.0-win64.zip` | `EQAnatomyLab2v1-1.0.0-win64.exe` |
 
 - 紹介記事（日本語）：**[このEQを触ると、自分に必要なEQが分かる](https://jpk.seesaa.net/article/521995892.html)**
 - インストール方法：**[INSTALL.md](INSTALL.md)**（日本語 / English）
-- ⚠️ **Windows 版は実機での動作確認ができていません**（自動ビルドで作成。VST3 と Standalone）。 / The Windows build of Lab 2 is untested on real hardware.
+- DAW 上の名前は **EQ Anatomy Lab 2 v1**。β 版（EQ Anatomy Lab 2）や EQ Anatomy Lab とは別製品なので、すべて同時にインストールできます。β 版は [過去のリリース](https://github.com/kazufumi01/EQAnatomyLab2/releases) から入手できます。
+- ⚠️ **Windows 版は実機での動作確認ができていません**（自動ビルドで作成。VST3 と Standalone）。 / The Windows build is untested on real hardware.
 - Apple の公証・Windows のコード署名をしていないため、初回のみ警告が出ます。
-- 既存の EQ Anatomy Lab とは別製品なので、両方を同時にインストールできます。
 - 不具合・要望は [Issues](https://github.com/kazufumi01/EQAnatomyLab2/issues) へ。
 
 ---
 
+## 1.0 の新機能
+
+- **アナログEQモデル 9 種**：真空管パッシブ・マスター、精密マスタリング、固定バンドのエアリフト、英国ステップ式バスEQ、60年代スタジオ7バンド、ヴィンテージ真空管ブースト／アッテン、70年代英国インダクター、80年代英国大型卓、米国ディスクリート。実機のパネルを参考にした操作パネルと、モデルごとの回路の歪み付き（どれも学習用の汎用モデルで、特定の製品の再現ではありません）
+- **EQに展開**：アナログモデルを、普通のベル・シェルフ・カットのバンドに分解してメインEQに並べる。展開後もパネルのつまみでバンドを動かせるので、「アナログEQは普通のEQのどんな組み合わせか」がグラフの点で見える
+- **バンドは 24 まで**（B9〜B24 は使うときだけ表示）
+- **サチュレーターに Analog Tube / Trans / Class A**：アナログモデルと同じ回路・同じ DRIVE の目盛り
+- **カーブの性格をバンドごとに**（浮き窓の CURVE、11 種）
+- **参照カーブ C**：音声ファイルをグラフにドロップすると平均的な周波数バランスを解析して表示（無音や小さすぎる部分は除外）。研究ベースの平均・ジャンル・年代などの内蔵カーブ付き
+- **プリセット**：用途別とアナログタイプ別のメニュー、◀ ▶ で順送り、ユーザープリセットとカーブはフォルダで整理（Finder での整理もそのまま反映）
+- 配色に **Studio Lift**（EQ 以外を少し明るくした Studio）を追加し、全 15 種
+
+![アナログEQモデルをEQに展開](docs/screenshot-analog.png)
+
 ## 主な機能
 
-- **6 バンド EQ**：Bell / Shelf / Cut など。動作モードは Zero latency／Analog／Linear（リニアフェイズ）。位相はバンドごとに Min / Lin を選択
+- **EQ**：Bell / Shelf / Cut など。動作モードは Zero latency／Analog／Linear（リニアフェイズ）。位相はバンドごとに Min / Lin を選択
 - **ベルの傾き**：12 / 24 / 48 dB。24・48 はバンドシェルフ（中心が設定ゲインになるよう補正）
 - **ダイナミック EQ**、**Mid/Side 処理**（St / M / S と SOLO）、**Transient / Body 分離**
 - **レゾナンス・サプレッサー**（RES）：耳障りな共鳴だけを自動で抑える。Stereo / Mid / Side / M/S、サイドチェイン検出、5 ノードのスレッショルド曲線を EQ グラフ上で編集
@@ -32,10 +45,9 @@ by Johan Plus Kei — EQ の中身を「見て・聴いて・触って」学べ�
 - **Stereo field** 表示（帯域ごとの L/R の音量と相関、10 Hz から）、10 Hz〜22 kHz の周波数軸、スペアナ A/B
 - **画面の各部分に説明**：グラフの点・ハンドル・下の枠・軸・スペアナ、メーターの PK / RMS / CREST / CORR にマウスを置くと、表付きの解説が説明欄に出る
 - **キーボード**：↑↓ で最後に触った値（Shift で細かく）。グラフの点と RES の点は ↑↓＝dB、←→＝周波数
-- **配色**：14 種類（明度を抑えた Soft 系 4 種を含む）
 - **サチュレーター**（帯域指定・オーバーサンプリング）、Auto gain、Delta（差分）試聴
 - **A / B / C / D スロット**とモーフ、**ユーザープリセット**（名前とメモ付きで保存）
-- **Ear Training（耳トレ）**と **Learn（レッスン）**：RES の使い方を含む。練習音は Drums / Voice
+- **Ear Training（耳トレ）**と **Learn（レッスン）**。練習音は Drums / Voice
 - 日本語 / English 切り替え
 
 ![レゾナンス・サプレッサー](docs/screenshot-resonance.png)

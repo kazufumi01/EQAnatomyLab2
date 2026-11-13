@@ -31,7 +31,7 @@ Requires macOS 11+ (Apple Silicon / Intel)
    - EQ Anatomy Lab 2 v1.vst3      -> Library/Audio/Plug-Ins/VST3
    - EQ Anatomy Lab 2 v1.app       -> Applications (optional, standalone)
 3. Open Terminal, paste this line and press Return (removes the quarantine flag
-   from this un-notarized beta):
+   from this un-notarized build):
 
 xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/Components/"EQ Anatomy Lab 2 v1.component" ~/Library/Audio/Plug-Ins/VST3/"EQ Anatomy Lab 2 v1.vst3" /Applications/"EQ Anatomy Lab 2 v1.app"
 
