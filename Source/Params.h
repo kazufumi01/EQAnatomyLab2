@@ -63,6 +63,11 @@ inline const juce::StringArray& typeNames()
     static const juce::StringArray t { "Bell", "Low shelf", "High shelf", "Low cut", "High cut", "Notch", "All-pass", "Tilt shelf", "Flat tilt" };
     return t;
 }
+inline const juce::StringArray& curveNames()
+{
+    static const juce::StringArray c = [] { juce::StringArray a; for (int i = 0; i < eqcore::kCurves; ++i) a.add (eqcore::curveName (i)); return a; }();
+    return c;
+}
 inline const juce::StringArray& slopeNames()
 {
     static const juce::StringArray s { "6 dB/oct", "12 dB/oct", "18 dB/oct", "24 dB/oct", "36 dB/oct", "48 dB/oct" };
@@ -133,7 +138,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     for (int i = 0; i < 6; ++i) addBandMain (l, i, 1);
     l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::mode, 1 }, "Mode", StringArray { "Zero latency", "Analog", "Linear" }, 0));
     l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::res, 1 }, "Linear resolution", StringArray { "Low", "Mid", "High" }, 1));
-    l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::qmode, 1 }, "Curve", StringArray { "Clean Const", "Clean Prop", "British A", "US 500", "Console E", "Tube Passive", "Precision" }, 0));
+    l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::qmode, 1 }, "Curve", curveNames(), 0));   // 1.0: a "set every band" value; each band has its own curve (bN_cv)
     l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::output, 1 }, "Output", NormalisableRange<float> (-18.0f, 18.0f, 0.1f), 0.0f,
                                                   AudioParameterFloatAttributes().withLabel ("dB")));
     l.add (std::make_unique<AudioParameterBool> (ParameterID { pid::autoGain, 1 }, "Auto gain", false));   // Lab 2: off by default
@@ -202,5 +207,8 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::anOut, 7 }, "Analog output", NormalisableRange<float> (-12.0f, 12.0f, 0.1f), 0.0f, AudioParameterFloatAttributes().withLabel ("dB")));
     for (int i = 0; i < 16; ++i)
         l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::anK (i), 7 }, "Analog control " + String (i + 1), NormalisableRange<float> (0.0f, 1.0f, 0.0f), 0.5f));
+    // ---- 1.0: each band's curve style (was one setting for all bands) ----
+    for (int i = 0; i < eqcore::kBands; ++i)
+        l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::band (i, "cv"), 8 }, "Band " + String (i + 1) + " Curve", curveNames(), 0));
     return l;
 }

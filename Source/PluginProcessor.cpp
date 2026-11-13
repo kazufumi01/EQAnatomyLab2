@@ -2,6 +2,7 @@
 #include "PluginEditor.h"
 #include "Lessons.h"
 #include "Presets.h"
+#include "FolderTree.h"
 
 EQAnatomyProcessor::EQAnatomyProcessor()
     : AudioProcessor (BusesProperties().withInput ("Input", juce::AudioChannelSet::stereo(), true)
@@ -69,7 +70,7 @@ std::array<IIRChain::Target, eqcore::kBands> EQAnatomyProcessor::targets() const
         const int mask = (! zero || v ("phase") > 0.5f) ? 0 : (ch == 0 ? 3 : ch == 1 ? 1 : ch == 2 ? 2 : ch == 3 ? 4 : 8);   // only zero-latency min bands run as IIR
         const auto ty = (eqcore::Type) (int) v ("type");
         const int sl = ty == eqcore::Type::Bell ? (int) v ("bslope") : (int) v ("slope");     // a bell carries its own slope (12 / 24 / 48)
-        t[(size_t) i] = { v ("on") > 0.5f, ty, sl, (double) v ("freq"), (double) v ("gain"), (double) v ("q"), mask };
+        t[(size_t) i] = { v ("on") > 0.5f, ty, sl, (double) v ("freq"), (double) v ("gain"), (double) v ("q"), mask, (int) v ("cv") };
     }
     return t;
 }
@@ -81,7 +82,7 @@ std::array<eqcore::Band, eqcore::kBands> EQAnatomyProcessor::currentBands() cons
     {
         auto v = [&] (const char* w) { return apvts.getRawParameterValue (pid::band (i, w))->load(); };
         auto& x = b[(size_t) i];
-        x.on = v ("on") > 0.5f; x.type = (eqcore::Type) (int) v ("type"); x.f = v ("freq"); x.g = v ("gain"); x.q = v ("q");
+        x.on = v ("on") > 0.5f; x.type = (eqcore::Type) (int) v ("type"); x.f = v ("freq"); x.g = v ("gain"); x.q = v ("q"); x.qm = (int) v ("cv");
         x.slope = x.type == eqcore::Type::Bell ? (int) v ("bslope") : (int) v ("slope"); x.lin = v ("phase") > 0.5f; x.ch = (int) v ("ch");
     }
     return b;
@@ -739,11 +740,9 @@ juce::File EQAnatomyProcessor::userPresetDir()
 }
 juce::Array<juce::File> EQAnatomyProcessor::userPresets() const
 {
-    auto a = userPresetDir().findChildFiles (juce::File::findFiles, false, "*.xml");
-    std::sort (a.begin(), a.end(), [] (const juce::File& x, const juce::File& y) { return x.getFileNameWithoutExtension().compareNatural (y.getFileNameWithoutExtension()) < 0; });
-    return a;
+    return ftree::all (userPresetDir(), "*.xml");      // every sub-folder too, in menu order
 }
-bool EQAnatomyProcessor::saveUserPreset (const juce::String& name, const juce::String& note)
+bool EQAnatomyProcessor::saveUserPreset (const juce::File& folder, const juce::String& name, const juce::String& note)
 {
     const auto clean = juce::File::createLegalFileName (name.trim());
     if (clean.isEmpty()) return false;
@@ -756,9 +755,12 @@ bool EQAnatomyProcessor::saveUserPreset (const juce::String& name, const juce::S
             if (id == pid::bypass || id == pid::delta || id == pid::preSolo) continue;
             auto* e = x.createNewChildElement ("P"); e->setAttribute ("id", id); e->setAttribute ("v", (double) r->convertFrom0to1 (r->getValue()));
         }
-    userPresetDir().createDirectory();
-    if (! x.writeTo (userPresetDir().getChildFile (clean + ".xml"))) return false;
+    const auto dir = folder == juce::File() ? userPresetDir() : folder;
+    dir.createDirectory();
+    const auto file = dir.getChildFile (clean + ".xml");
+    if (! x.writeTo (file)) return false;
     uiState.setProperty ("preset", -1, nullptr); uiState.setProperty ("userPreset", name.trim(), nullptr);
+    uiState.setProperty ("userPresetFile", file.getFullPathName(), nullptr);
     return true;
 }
 bool EQAnatomyProcessor::loadUserPreset (const juce::File& f)
@@ -773,19 +775,26 @@ bool EQAnatomyProcessor::loadUserPreset (const juce::File& f)
     uiState.setProperty ("preset", -1, nullptr);
     uiState.setProperty ("userPreset", x->getStringAttribute ("name", f.getFileNameWithoutExtension()), nullptr);
     uiState.setProperty ("userPresetNote", x->getStringAttribute ("note"), nullptr);
+    uiState.setProperty ("userPresetFile", f.getFullPathName(), nullptr);
     return true;
 }
 
 void EQAnatomyProcessor::applyPreset (int index)
 {
     uiState.setProperty ("userPreset", juce::String(), nullptr); uiState.setProperty ("userPresetNote", juce::String(), nullptr);
+    uiState.setProperty ("userPresetFile", juce::String(), nullptr);
     undo.beginNewTransaction();
     const auto& P = presets();
     auto apply = [this] (const PresetSlot& s)
     {
         resetToFlat();
         for (auto& [id, v] : s.values)
+            if (juce::String (id) == "an_model") { setAllCurves (analogCurve ((int) v)); if (auto* p = apvts.getParameter (pid::satType)) p->setValueNotifyingHost (p->convertTo0to1 ((float) analogSat ((int) v))); }
+        for (auto& [id, v] : s.values)
+        {
             if (auto* p = apvts.getParameter (id)) p->setValueNotifyingHost (p->convertTo0to1 (v));
+            if (juce::String (id) == "qmode") setAllCurves ((int) v);
+        }
     };
     // clear stored slots
     for (int k = 0; k < 4; ++k) uiState.removeChild (uiState.getChildWithName (juce::String ("slot") + juce::String (k)), nullptr);
@@ -812,6 +821,54 @@ void EQAnatomyProcessor::applyPreset (int index)
     if (pr.focus >= 0) uiState.setProperty ("selected", pr.focus, nullptr);
     uiState.setProperty ("focusUntil", juce::Time::getMillisecondCounterHiRes() + 8000.0, nullptr);
     dirty = true;
+}
+
+// ---- 1.0: analog models bring their EQ curve and saturator type ----
+int EQAnatomyProcessor::analogCurve (int m)
+{
+    using Q = eqcore::QMode;
+    static const Q c[] = { Q::PassiveMaster, Q::Precision, Q::AirBand, Q::BritishCurve, Q::Program, Q::TubePassive, Q::BritishA, Q::ConsoleE, Q::US500 };
+    return (int) c[juce::jlimit (0, analog::kModels - 1, m)];
+}
+int EQAnatomyProcessor::analogSat (int m)
+{
+    const int s = analog::models()[(size_t) juce::jlimit (0, analog::kModels - 1, m)].satType;    // 1 tube, 3 transformer, else class A
+    return s == 1 ? (int) SatCore::Tube : s == 3 ? (int) SatCore::Transformer : (int) SatCore::ClassA;
+}
+void EQAnatomyProcessor::setAllCurves (int qm)
+{
+    for (int i = 0; i < eqcore::kBands; ++i)
+        if (auto* p = apvts.getParameter (pid::band (i, "cv")))
+        { p->beginChangeGesture(); p->setValueNotifyingHost (p->convertTo0to1 ((float) juce::jlimit (0, eqcore::kCurves - 1, qm))); p->endChangeGesture(); }
+    if (auto* p = apvts.getParameter (pid::qmode)) p->setValueNotifyingHost (p->convertTo0to1 ((float) juce::jlimit (0, eqcore::kCurves - 1, qm)));
+}
+void EQAnatomyProcessor::applyAnalogModel (int m)
+{
+    m = juce::jlimit (0, analog::kModels - 1, m);
+    const auto& M = analog::models()[(size_t) m];
+    auto set = [this] (const juce::String& id, float v)
+    { if (auto* p = apvts.getParameter (id)) { p->beginChangeGesture(); p->setValueNotifyingHost (p->convertTo0to1 (v)); p->endChangeGesture(); } };
+    set (pid::anModel, (float) m);
+    for (int i = 0; i < analog::kSlots; ++i) set (pid::anK (i), i < (int) M.slots.size() ? M.slots[(size_t) i].def : 0.5f);
+    set (pid::anDrive, M.defDrive);
+    set (pid::anOn, 1.0f);
+    setAllCurves (analogCurve (m));
+    set (pid::satType, (float) analogSat (m));
+    dirty = true;
+}
+void EQAnatomyProcessor::stepPreset (int dir)
+{
+    const auto& order = presetOrder();
+    const auto users = userPresets();
+    const int nf = (int) order.size(), n = nf + users.size();
+    if (n == 0) return;
+    int pos = -1;
+    const int pi = (int) uiState.getProperty ("preset", -1);
+    const auto uf = uiState.getProperty ("userPresetFile", "").toString();
+    if (pi >= 0) { for (int k = 0; k < nf; ++k) if (order[(size_t) k] == pi) pos = k; }
+    else if (uf.isNotEmpty()) { for (int k = 0; k < users.size(); ++k) if (users[k].getFullPathName() == uf) pos = nf + k; }
+    pos = pos < 0 ? (dir > 0 ? 0 : n - 1) : (pos + dir + n) % n;
+    if (pos < nf) applyPreset (order[(size_t) pos]); else loadUserPreset (users[pos - nf]);
 }
 
 void EQAnatomyProcessor::applyLesson (int index)
@@ -851,7 +908,7 @@ void EQAnatomyProcessor::applyLesson (int index)
     set (pid::tbSens, 0.0f); set (pid::tbWidth, 6.0f); set (pid::tbAtt, 2.0f); set (pid::tbMethod, 1.0f); set (pid::tbLc, 20.0f); set (pid::tbE1g, 0.0f); set (pid::tbE2g, 0.0f);
     set (pid::mode, (float) ls.mode);
     if (ls.res >= 0) set (pid::res, (float) ls.res);
-    set (pid::qmode, (float) ls.qmode);
+    set (pid::qmode, (float) ls.qmode); setAllCurves (ls.qmode);
     set (pid::bypass, 0); set (pid::delta, 0); set (pid::preSolo, 0);
     set (pid::satOn, ls.sat.on ? 1.0f : 0.0f); set (pid::satDelta, 0);
     if (ls.sat.on)

@@ -145,9 +145,10 @@ inline const std::vector<Builtin>& builtins()
 // ---- user curves: one JSON file each ----
 inline juce::File userDir() { return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile ("JPK").getChildFile ("EQ Anatomy Lab 2 v1").getChildFile ("Curves"); }
 inline juce::Array<juce::File> userFiles() { auto a = userDir().findChildFiles (juce::File::findFiles, false, "*.json"); a.sort(); return a; }
-inline bool save (const Curve& c)
+inline bool save (const Curve& c, juce::File d = {})      // 1.0: into a folder below userDir()
 {
-    auto d = userDir(); d.createDirectory();
+    if (d == juce::File()) d = userDir();
+    d.createDirectory();
     auto f = d.getChildFile (juce::File::createLegalFileName (c.name) + ".json");
     return f.replaceWithText (juce::JSON::toString (c.toJson()));
 }

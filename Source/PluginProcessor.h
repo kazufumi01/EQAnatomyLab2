@@ -21,7 +21,7 @@
 class IIRChain
 {
 public:
-    struct Target { bool on; eqcore::Type type; int slope; double f, g, q; int mask; };
+    struct Target { bool on; eqcore::Type type; int slope; double f, g, q; int mask; int qm = -1; };
 
     void configure (const std::array<Target, eqcore::kBands>& t, eqcore::QMode qm, double fs)
     {
@@ -29,7 +29,7 @@ public:
         for (int i = 0; i < eqcore::kBands; ++i)
         {
             auto& b = bands[(size_t) i]; const auto& x = t[(size_t) i];
-            b.on = x.on && x.mask != 0; b.type = x.type; b.slope = x.slope; b.mask = x.mask;
+            b.on = x.on && x.mask != 0; b.type = x.type; b.slope = x.slope; b.mask = x.mask; b.qm = x.qm;
             b.lf = b.tlf = std::log2 (x.f); b.g = b.tg = x.g; b.lq = b.tlq = std::log2 (x.q);
             b.z.clear();
         }
@@ -45,7 +45,7 @@ public:
             const bool on = x.on && x.mask != 0;
             if (b.on != on) return false;
             if (! on) continue;
-            if (b.type != x.type || b.mask != x.mask || (b.slope != x.slope && x.type != eqcore::Type::Bell && x.type != eqcore::Type::Notch && x.type != eqcore::Type::AllPass && x.type != eqcore::Type::Tilt && x.type != eqcore::Type::FlatTilt)) return false;
+            if (b.type != x.type || b.mask != x.mask || b.qm != x.qm || (b.slope != x.slope && x.type != eqcore::Type::Bell && x.type != eqcore::Type::Notch && x.type != eqcore::Type::AllPass && x.type != eqcore::Type::Tilt && x.type != eqcore::Type::FlatTilt)) return false;
         }
         return true;
     }
@@ -67,7 +67,7 @@ public:
             if (! b.on) { b.coefs.clear(); continue; }
             b.lf += (b.tlf - b.lf) * k; b.g += (b.tg - b.g) * k; b.lq += (b.tlq - b.lq) * k;
             // dynamic gain is added on top, unsmoothed: the detector envelope is already smooth
-            eqcore::Band eb; eb.on = true; eb.type = b.type; eb.slope = b.slope; eb.f = std::exp2 (b.lf);
+            eqcore::Band eb; eb.on = true; eb.type = b.type; eb.slope = b.slope; eb.qm = b.qm; eb.f = std::exp2 (b.lf);
             eb.g = juce::jlimit (-30.0, 30.0, b.g + dyn[i]); eb.q = std::exp2 (b.lq);
             scratch.clear(); eqcore::sectionsFor (eb, qmode, scratch);
             b.coefs.resize (scratch.size());
@@ -111,7 +111,7 @@ public:
     void reserve() { scratch.reserve (24); for (auto& b : bands) { b.coefs.reserve (24); b.z.reserve (24); } }
 
 private:
-    struct B { bool on = false; eqcore::Type type = eqcore::Type::Bell; int slope = 3; int mask = 3;
+    struct B { bool on = false; eqcore::Type type = eqcore::Type::Bell; int slope = 3; int mask = 3; int qm = -1;
                double lf = 10, g = 0, lq = 0, tlf = 10, tg = 0, tlq = 0;
                std::vector<eqcore::Biquad> coefs; std::vector<std::array<double, 4>> z; };
     std::array<B, eqcore::kBands> bands;
@@ -331,11 +331,18 @@ public:
     juce::ValueTree slotState (int slot) const;
     void morph (int from, int to, float t);     // writes interpolated parameters
     void applyLesson (int index);
+    // 1.0: the analog model, with the main EQ's curve (every band) and the saturator type that go with it
+    void applyAnalogModel (int model);
+    void setAllCurves (int qm);
+    static int analogCurve (int model);     // eqcore::QMode for each analog model
+    static int analogSat (int model);       // BandSaturator type for each analog model
+    // presets in the order of the menu (factory by use, then user files), for the < > buttons
+    void stepPreset (int dir);
     void applyPreset (int index);               // −1 = flat
     // user presets: one XML file per preset (every parameter except Bypass / Delta / Pre-ring solo), with an optional note
     static juce::File userPresetDir();
     juce::Array<juce::File> userPresets() const;
-    bool saveUserPreset (const juce::String& name, const juce::String& note);
+    bool saveUserPreset (const juce::File& folder, const juce::String& name, const juce::String& note);   // 1.0: into a folder (sub-folders allowed)
     bool loadUserPreset (const juce::File& f);
     void resetToFlat();
 

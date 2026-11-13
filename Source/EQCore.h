@@ -22,11 +22,19 @@ enum class Type { Bell = 0, LowShelf, HighShelf, LowCut, HighCut, Notch, AllPass
 enum class Mode { ZeroLatency = 0, Analog, Linear };
 // Curve styles. 0/1 are the original Const / Prop Q; the rest copy the *tendencies*
 // of well-known analog EQ families (generic names, not models of specific units).
-enum class QMode { Constant = 0, Proportional, BritishA, US500, ConsoleE, TubePassive, Precision };
+enum class QMode { Constant = 0, Proportional, BritishA, US500, ConsoleE, TubePassive, Precision,
+                   PassiveMaster, AirBand, BritishCurve, Program };   // 1.0: the curve sides of the analog models
+constexpr int kCurves = 11;
 inline const char* curveName (int i)
 {
-    static const char* n[] = { "Clean Const", "Clean Prop", "British A", "US 500", "Console E", "Tube Passive", "Precision" };
-    return n[std::clamp (i, 0, 6)];
+    static const char* n[] = { "Clean Const", "Clean Prop", "British A", "US 500", "Console E", "Tube Passive", "Precision",
+                               "Passive Master", "Air Band", "British Curve", "Program 7" };
+    return n[std::clamp (i, 0, kCurves - 1)];
+}
+inline const char* curveShort (int i)
+{
+    static const char* n[] = { "Clean", "Prop", "Brit A", "US 500", "Cons E", "Tube P", "Precis", "Pass M", "Air", "Brit C", "Prog 7" };
+    return n[std::clamp (i, 0, kCurves - 1)];
 }
 
 inline int slopeOrder (int slopeIndex)               // 6,12,18,24,36,48 dB/oct
@@ -42,14 +50,19 @@ inline int linearTaps (int resIndex)                 // low / mid / high
 constexpr int kMinPhaseLen = 16384;
 
 struct Band { bool on = false; Type type = Type::Bell; double f = 1000, g = 0, q = 1; int slope = 3;
-              bool lin = false; int ch = 0; };            // lin: linear-phase band; ch: 0 stereo, 1 mid, 2 side, 3 left, 4 right (0.1.1)
+              bool lin = false; int ch = 0; int qm = -1; };   // qm (1.0): this band's curve style; -1 = the one passed in            // lin: linear-phase band; ch: 0 stereo, 1 mid, 2 side, 3 left, 4 right (0.1.1)
 
-inline double effectiveQ (const Band& b, QMode qm)
+inline double effectiveQ (const Band& b, QMode qmIn)
 {
+    const QMode qm = b.qm >= 0 ? (QMode) std::clamp (b.qm, 0, kCurves - 1) : qmIn;
     const double g = std::abs (b.g);
     if (b.type == Type::Bell)
         switch (qm)
         {
+            case QMode::PassiveMaster: return b.q * std::clamp (0.6 + g / 25.0, 0.6, 1.4);         // broad at small gains, tighter as it goes
+            case QMode::AirBand:       return b.q * 0.45;                                          // very wide, overlapping bands
+            case QMode::BritishCurve:  return b.q * (b.g >= 0 ? 0.6 : 0.8);                       // broad boosts, firmer cuts
+            case QMode::Program:       return b.q * 0.4;                                           // seven-band program style: widest
             case QMode::Proportional: return b.q * std::clamp (0.35 + g / 9.25, 0.3, 2.2);
             case QMode::BritishA:     return b.q * 0.55;                                    // broad, gain-independent bells
             case QMode::US500:        return b.q * std::clamp (0.25 + g / 6.0, 0.25, 3.0);  // strongly proportional
@@ -64,13 +77,18 @@ inline double effectiveQ (const Band& b, QMode qm)
             case QMode::ConsoleE:    return std::max (b.q, 0.9);    // crisp knee
             case QMode::TubePassive: return b.g >= 0 ? 0.55 : 0.4;  // gentle passive shelves
             case QMode::Precision:   return std::min (b.q, 0.7071); // no overshoot
+            case QMode::PassiveMaster: return std::min (b.q, 0.6);  // gentle passive shelves
+            case QMode::AirBand:     return 0.5;                    // very gentle, starts early
+            case QMode::BritishCurve: return std::max (b.q, 1.0);   // shoulder bump
+            case QMode::Program:     return 0.6;
             default:                 return b.q;
         }
     return b.q;
 }
 // The passive low-cut shelf sits a little higher than the boost (so boost + cut interact)
-inline double effectiveF (const Band& b, QMode qm)
+inline double effectiveF (const Band& b, QMode qmIn)
 {
+    const QMode qm = b.qm >= 0 ? (QMode) std::clamp (b.qm, 0, kCurves - 1) : qmIn;
     if (qm == QMode::TubePassive && b.type == Type::LowShelf && b.g < 0) return b.f * 1.6;
     return b.f;
 }

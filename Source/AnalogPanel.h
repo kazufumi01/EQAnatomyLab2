@@ -119,10 +119,17 @@ public:
         out.id = pid::anOut; out.label = "OUT"; out.def = 0.5f; out.bipolar = true;
         out.fmt = [] (float v) { const float d = v * 24.0f - 12.0f; return (d > 0.05f ? "+" : "") + juce::String (d, 1) + " dB"; };
         addAndMakeVisible (drive); addAndMakeVisible (out);
+        // see-through faceplate: the graph shows behind it (0 = solid, 90 % = nearly clear)
+        seeThru.setSliderStyle (juce::Slider::LinearHorizontal); seeThru.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
+        seeThru.setRange (0.0, 90.0, 5.0); seeThru.setDoubleClickReturnValue (true, 30.0);
+        seeThru.setValue ((double) ph.proc.uiState.getProperty ("anAlpha", 30.0), juce::dontSendNotification);
+        seeThru.onValueChange = [this] { ph.proc.uiState.setProperty ("anAlpha", seeThru.getValue(), nullptr); repaint(); };
+        addAndMakeVisible (seeThru);
+        setHelp (seeThru, "SEE-THROUGH", "パネルの透過。上げるほど後ろのグラフ（カーブ・スペアナ・C）が透けて見える。ダブルクリックで 30 %", "How see-through the panel is: more = the graph behind (curves, analyzer, C) shows through. Double-click: 30 %");
         setHelp (onBtn, "ANALOG IN", "アナログEQモデルのオン／オフ。メインEQとレゾナンス・サプレッサーの後ろ、帯域サチュレーターの前に入る。オフの時は処理を通らない（レイテンシーなし）",
                  "Analog EQ model on / off. It sits after the main EQ and the resonance suppressor, before the band saturator. Off = not in the signal path (no latency)");
-        setHelp (modelBtn, "ANALOG MODEL", "モデルを選ぶ。選ぶとそのモデルのつまみが初期値に戻る（Cmd＋Z で戻せる）。\n| モデル | 系統 |\n| Passive Mastering | Massive Passive 系 |\n| Precision Parametric | Sontec 系 |\n| Air Band | Maag EQ4 系 |\n| British Curve | Curve Bender 系 |\n| Program 7-Band | Hitsville EQ のモデリング元の系統 |\n| Tube Program | Pultec EQP-1A 系 |\n| British Console A | Neve 1073 系 |\n| British Console E | SSL E / G 系 |\n| American Console | API 550 系 |\nどれも公開されている動作を参考にした学習用の汎用モデルで、実機の回路を測ったものではない",
-                 "Pick the model. Choosing one resets its controls (Cmd+Z undoes).\n| Model | Family |\n| Passive Mastering | Massive Passive style |\n| Precision Parametric | Sontec style |\n| Air Band | Maag EQ4 style |\n| British Curve | Curve Bender style |\n| Program 7-Band | the family modelled by Hitsville EQ |\n| Tube Program | Pultec EQP-1A style |\n| British Console A | Neve 1073 style |\n| British Console E | SSL E / G style |\n| American Console | API 550 style |\nAll are generic learning models after the published behaviour, not measured circuits");
+        setHelp (modelBtn, "ANALOG MODEL", "モデルを選ぶ。選ぶとそのモデルのつまみが初期値に戻り、メインEQの全バンドのカーブ（浮き窓の CURVE）と SAT のタイプも、そのモデルに合わせて変わる（Cmd＋Z で戻せる）。プリセット欄の「アナログEQタイプ別」からも選べる。\n| モデル | 系統 |\n| Passive Mastering | Massive Passive 系 |\n| Precision Parametric | Sontec 系 |\n| Air Band | Maag EQ4 系 |\n| British Curve | Curve Bender 系 |\n| Program 7-Band | Hitsville EQ のモデリング元の系統 |\n| Tube Program | Pultec EQP-1A 系 |\n| British Console A | Neve 1073 系 |\n| British Console E | SSL E / G 系 |\n| American Console | API 550 系 |\nどれも公開されている動作を参考にした学習用の汎用モデルで、実機の回路を測ったものではない",
+                 "Pick the model. Choosing one resets its controls and sets every main-EQ band's curve (CURVE in the floating panel) and the SAT type to match the model (Cmd+Z undoes). Also in the preset menu under 'By analog EQ type'.\n| Model | Family |\n| Passive Mastering | Massive Passive style |\n| Precision Parametric | Sontec style |\n| Air Band | Maag EQ4 style |\n| British Curve | Curve Bender style |\n| Program 7-Band | the family modelled by Hitsville EQ |\n| Tube Program | Pultec EQP-1A style |\n| British Console A | Neve 1073 style |\n| British Console E | SSL E / G style |\n| American Console | API 550 style |\nAll are generic learning models after the published behaviour, not measured circuits");
         setHelp (drive, "ANALOG DRIVE", "モデルの回路（真空管・トランス・Class A）にどれだけ強く入れるか。上げるほど倍音が増え、ピークが丸くなる。音量は自動で合わせる。\n| 値 | 聴こえ方 |\n| 0〜6 dB | ほぼ透明。太さがわずかに増える |\n| 6〜12 dB | 倍音がはっきり。中低域が濃くなる |\n| 12 dB〜 | 歪みとして聴こえる。効果音的 |",
                  "How hard the model's circuit (tube, transformer, class A) is driven. More = more harmonics and rounder peaks; the level is matched.\n| Value | Sounds like |\n| 0-6 dB | nearly transparent, a touch thicker |\n| 6-12 dB | clear harmonics, denser low-mids |\n| 12 dB up | audible distortion, an effect |");
         setHelp (out, "ANALOG OUT", "アナログ段の出力レベル（±12 dB）。オン／オフで音量をそろえて比べるために使う", "The analog stage's output level (±12 dB). Use it to match the level when comparing on / off");
@@ -132,6 +139,7 @@ public:
         const int m = juce::jlimit (0, analog::kModels - 1, (int) ph.value (pid::anModel));
         const bool on = ph.value (pid::anOn) > 0.5f;
         onBtn.setButtonText ("IN"); onBtn.setToggleState (on, juce::dontSendNotification);
+        seeThru.setValue ((double) ph.proc.uiState.getProperty ("anAlpha", 30.0), juce::dontSendNotification);
         if (m != shown) { shown = m; layoutModel(); }
         modelBtn.setButtonText (juce::String (models()[(size_t) m].name));
         for (auto* c : getChildren()) c->repaint();
@@ -142,7 +150,8 @@ public:
     {
         const auto st = style (shown < 0 ? 0 : shown);
         auto r = getLocalBounds().toFloat();
-        g.setColour (st.face); g.fillRoundedRectangle (r, 6.0f);
+        const float a = 1.0f - (float) juce::jlimit (0.0, 90.0, (double) ph.proc.uiState.getProperty ("anAlpha", 30.0)) / 100.0f;
+        g.setColour (st.face.withAlpha (a)); g.fillRoundedRectangle (r, 6.0f);
         g.setColour (st.face.brighter (0.25f)); g.drawHorizontalLine (1, r.getX() + 6, r.getRight() - 6);
         g.setColour (juce::Colours::black.withAlpha (0.4f)); g.drawRoundedRectangle (r.reduced (0.5f), 6.0f, 1.0f);
         // screws
@@ -154,6 +163,8 @@ public:
         g.drawText (juce::String::fromUTF8 (ph.ja() ? M.nameJa : M.name), 210, 5, 260, 18, juce::Justification::centredLeft);
         g.setColour (st.ink.withAlpha (0.6f)); g.setFont (theme::ui (10.0f));
         g.drawText (ph.tr ("参考：", "After: ") + juce::String::fromUTF8 (M.family) + ph.tr (" 系", " style"), 210, 21, 300, 14, juce::Justification::centredLeft);
+        g.setColour (st.ink.withAlpha (0.7f)); g.setFont (theme::ui (9.5f, true));
+        g.drawText (ph.tr ("透過 ", "SEE-THRU ") + juce::String ((int) seeThru.getValue()) + "%", seeThru.getX() - 78, seeThru.getY(), 74, seeThru.getHeight(), juce::Justification::centredRight);
         // column titles and dividers
         g.setFont (theme::ui (10.0f, true));
         for (size_t c = 0; c < colX.size(); ++c)
@@ -191,6 +202,9 @@ private:
         const int ctrlW = 64;
         drive.setBounds (W - 2 * ctrlW - 14, 4, ctrlW, std::min (H - 8, 78)); out.setBounds (W - ctrlW - 10, 4, ctrlW, std::min (H - 8, 78));
         for (auto* k : { &drive, &out }) { k->face = st.knob; k->ink = st.ink; k->accent = st.accent; }
+        seeThru.setBounds (W - 2 * ctrlW - 14 - 96, 10, 90, 16);
+        seeThru.setColour (juce::Slider::thumbColourId, st.accent); seeThru.setColour (juce::Slider::trackColourId, st.ink.withAlpha (0.35f));
+        seeThru.setColour (juce::Slider::backgroundColourId, st.ink.withAlpha (0.15f));
         const int nCol = (int) M.groups.size();
         const int left = 12, right = W - 2 * ctrlW - 24;
         colW = (float) (right - left) / (float) std::max (1, nCol);
@@ -264,18 +278,15 @@ private:
         menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&modelBtn), [this] (int r)
         {
             if (r <= 0) return;
-            const int m = r - 1; const auto& M = models()[(size_t) m];
             ph.proc.undo.beginNewTransaction();
-            ph.setGesture (pid::anModel, (float) m);
-            for (int i = 0; i < analog::kSlots; ++i) ph.setGesture (pid::anK (i), i < (int) M.slots.size() ? M.slots[(size_t) i].def : 0.5f);
-            ph.setGesture (pid::anDrive, M.defDrive);
-            if (ph.value (pid::anOn) < 0.5f) ph.setGesture (pid::anOn, 1.0f);
+            ph.proc.applyAnalogModel (r - 1);      // its controls at defaults, every band's curve and the saturator type follow
             refresh();
         });
     }
     ParamHelp& ph;
     juce::TextButton modelBtn, onBtn;
     AnaKnob drive, out;
+    juce::Slider seeThru;
     juce::OwnedArray<AnaKnob> knobs; juce::OwnedArray<AnaSwitch> switches;
     std::vector<float> colX; float colW = 60; int shown = -1;
 };

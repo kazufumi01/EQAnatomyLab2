@@ -1,4 +1,5 @@
 #pragma once
+#include "FolderTree.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_dsp/juce_dsp.h>
 #include "PluginProcessor.h"
@@ -276,6 +277,19 @@ public:
             if (ParamHelp::altDown()) ph.resetDefault (pid::band (band, bell ? "bslope" : "slope")); else slopeMenu();
         }; markReset (slopeBtn);
         chBtn.onClick    = [this] { if (ParamHelp::altDown()) ph.resetDefault (pid::band (band, "ch")); else chMenu(); }; markReset (chBtn);
+        curveBtn.onClick = [this] { if (ParamHelp::altDown()) ph.resetDefault (pid::band (band, "cv")); else curveMenu(); }; markReset (curveBtn);
+        curveBtn.getProperties().set ("fontPx", full ? 10.0 : 10.5);
+        if (! full) addAndMakeVisible (curveBtn);
+        setHelp (curveBtn, "CURVE", "このバンドのカーブの性格（バンドごとに選べる）。同じ数値でも、ゲインに対する幅の変わり方やシェルフの肩の形が変わる。\n"
+                 "| カーブ | 傾向 |\n| Clean Const／Prop | 一定 Q／比例 Q |\n| British A | 広いベル、シェルフの肩（Neve 1073 系） |\n| US 500 | 強い比例 Q（API 550 系） |\n| Console E | 比例寄りのベル、くっきりしたシェルフ（SSL 系） |\n"
+                 "| Tube Passive | ブーストが広く、低域のブーストとカットが干渉（Pultec 系） |\n| Precision | 色付けのない一定 Q（Sontec 系） |\n| Passive Master | 小さい量は広く、大きいほど締まる（Massive Passive 系） |\n"
+                 "| Air Band | とても広いベルとなだらかなシェルフ（Maag 系） |\n| British Curve | 広いブーストと締まったカット、肩のあるシェルフ（Curve Bender 系） |\n| Program 7 | いちばん広く重なるベル（Hitsville 系） |\n"
+                 "アナログEQのモデルやプリセットを選ぶと、全バンドがそのモデルのカーブになる。Option＋クリックで Clean Const。カーブの形の傾向だけで、機材の音そのものではない",
+                 "This band's curve character (each band has its own). The same numbers change how the width follows the gain and how a shelf's shoulder looks.\n"
+                 "| Curve | Tendency |\n| Clean Const / Prop | constant Q / proportional Q |\n| British A | broad bells, shelf shoulder (Neve 1073 style) |\n| US 500 | strongly proportional Q (API 550 style) |\n| Console E | mildly proportional bells, crisp shelves (SSL style) |\n"
+                 "| Tube Passive | broad boosts, low boost and cut interact (Pultec style) |\n| Precision | uncoloured constant Q (Sontec style) |\n| Passive Master | wide at small gains, tighter as it goes (Massive Passive style) |\n"
+                 "| Air Band | very wide bells, gentle shelves (Maag style) |\n| British Curve | broad boosts, firmer cuts, shouldered shelves (Curve Bender style) |\n| Program 7 | the widest, overlapping bells (Hitsville style) |\n"
+                 "Choosing an analog EQ model or preset sets every band to that model's curve. Option+click: Clean Const. Shape tendencies only, not the sound of the hardware");
         scopeBtn.setButtonText ("T/B Scope"); scopeBtn.setClickingTogglesState (false);
         scopeBtn.onClick = [this] { ph.proc.uiState.setProperty ("scope", ! (bool) ph.proc.uiState.getProperty ("scope", false), nullptr); };
         for (auto* b : { &slopeBtn, &chBtn, &scopeBtn, &dynBtn, &soloBtn }) b->getProperties().set ("fontPx", full ? 10.0 : 10.5);
@@ -379,9 +393,10 @@ public:
         static const char* bellSlope[] = { "12", "24", "48" };
         const juce::String sv = cut ? (full ? juce::String (shortSlope[juce::jlimit (0, 5, s)]) : slopeNames()[juce::jlimit (0, 5, s)])
                               : shelf ? juce::String (s == 0 ? (full ? "6 dB" : "6 dB/oct") : (full ? "12 dB" : "12 dB/oct"))
-                              : bell ? juce::String (bellSlope[juce::jlimit (0, 2, (int) ph.value (pid::band (b, "bslope")))]) + (full ? "" : " (bell)")
+                              : bell ? juce::String (bellSlope[juce::jlimit (0, 2, (int) ph.value (pid::band (b, "bslope")))]) + (full ? "" : " dB/oct")
                               : juce::String::fromUTF8 ("\xe2\x80\x94");
-        slopeBtn.setButtonText ((full ? juce::String() : juce::String ("SLOPE  ")) + sv + (cut || shelf || bell ? juce::String::fromUTF8 (" \xe2\x96\xb8") : juce::String()));
+        slopeBtn.setButtonText (sv + (cut || shelf || bell ? juce::String::fromUTF8 (" \xe2\x96\xb8") : juce::String()));
+        curveBtn.setButtonText (juce::String (eqcore::curveShort ((int) ph.value (pid::band (b, "cv")))) + juce::String::fromUTF8 (" \xe2\x96\xb8"));
         slopeBtn.setEnabled (cut || shelf || bell);
         static const char* chLong[] = { "Stereo", "Mid", "Side", "Left", "Right" };
         static const char* chShort[] = { "St", "M", "S", "L", "R" };
@@ -393,7 +408,7 @@ public:
         gn.valueColour = theme::bandColour (b);
         expBtn.getProperties().set ("chevron", (bool) ph.proc.uiState.getProperty ("popExpand", false) ? 2 : 1); expBtn.repaint();
         const bool bandOn = ph.value (pid::band (b, "on")) > 0.5f;
-        for (auto* c : { (juce::Component*) &fq, (juce::Component*) &type, (juce::Component*) &slopeBtn, (juce::Component*) &chBtn })
+        for (auto* c : { (juce::Component*) &fq, (juce::Component*) &type, (juce::Component*) &slopeBtn, (juce::Component*) &chBtn, (juce::Component*) &curveBtn })
             c->setAlpha (bandOn ? 1.0f : 0.45f);
         if (! bandOn) { gn.setAlpha (0.45f); qv.setAlpha (0.45f); }
         if (! (cut || shelf || bell)) slopeBtn.setAlpha (0.35f);
@@ -643,13 +658,15 @@ public:
             soloBtn.setBounds (getWidth() - 60, 3, 52, 20);
             const int w = (getWidth() - 24) / 3, y = 31, h = 38;
             fq.setBounds (8, y, w, h); gn.setBounds (12 + w, y, w, h); qv.setBounds (16 + 2 * w, y, w, h);
-            const int bw = (getWidth() - 20) / 2;
-            slopeBtn.setBounds (8, 74, bw, 20); chBtn.setBounds (12 + bw, 74, bw - 26, 20); expBtn.setBounds (12 + 2 * bw - 22, 74, 22, 20);
+            // CURVE ▸  SLOPE ▸  CH ▸  ▾
+            const int cw = 74, sw = 78, chw = getWidth() - 8 - cw - 4 - sw - 4 - 4 - 22 - 8;
+            curveBtn.setBounds (8, 74, cw, 20); slopeBtn.setBounds (12 + cw, 74, sw, 20);
+            chBtn.setBounds (16 + cw + sw, 74, chw, 20); expBtn.setBounds (getWidth() - 8 - 22, 74, 22, 20);
             return;
         }
         // Lab 2: the extension under the compact panel (same width): phase, the DYN set, transient / body, T/B Scope
         for (auto* c : { (juce::Component*) &soloBtn, (juce::Component*) &type, (juce::Component*) &slopeBtn, (juce::Component*) &chBtn,
-                         (juce::Component*) &expBtn, (juce::Component*) &fq, (juce::Component*) &gn, (juce::Component*) &qv })
+                         (juce::Component*) &expBtn, (juce::Component*) &fq, (juce::Component*) &gn, (juce::Component*) &qv, (juce::Component*) &curveBtn })
             c->setVisible (false);
         const int w = (getWidth() - 20) / 3;
         rowSep = -10; rowPhase = 8;
@@ -698,6 +715,28 @@ private:
             else ph.setGesture (pid::band (b, "slope"), (float) (r - 1));
         });
     }
+    void curveMenu()
+    {
+        const int cv = (int) ph.value (pid::band (band, "cv"));
+        juce::PopupMenu m;
+        m.addSectionHeader (ph.tr ("このバンドのカーブ", "This band's curve"));
+        static const char* fam[] = { "", "", "Neve 1073", "API 550", "SSL E / G", "Pultec EQP-1A", "Sontec", "Massive Passive", "Maag EQ4", "Curve Bender", "Hitsville" };
+        for (int i = 0; i < eqcore::kCurves; ++i)
+        {
+            juce::String t (eqcore::curveName (i)); if (fam[i][0] != 0) t << "   (" << ph.tr ("参考：", "after ") << fam[i] << ")";
+            m.addItem (i + 1, t, true, i == cv);
+            if (i == 1 || i == 6) m.addSeparator();
+        }
+        m.addSeparator();
+        m.addItem (100, ph.tr ("全バンドをこのカーブにする", "Use this band's curve on every band"));
+        m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&curveBtn), [this, b = band] (int r)
+        {
+            if (r <= 0) return;
+            ph.proc.undo.beginNewTransaction();
+            if (r == 100) ph.proc.setAllCurves ((int) ph.value (pid::band (b, "cv")));
+            else ph.setGesture (pid::band (b, "cv"), (float) (r - 1));
+        });
+    }
     void chMenu()
     {
         const int ch = (int) ph.value (pid::band (band, "ch"));
@@ -715,7 +754,7 @@ private:
     ParamHelp& ph; const bool full; int band = 0;
     ResetCombo type; DragValue fq, gn, qv, th, rg, bl, at, rl, kn;
     Seg phaseSeg, srcSeg;
-    juce::TextButton dynBtn, soloBtn, slopeBtn, chBtn, scopeBtn; juce::TextButton expBtn; juce::Slider tb;
+    juce::TextButton dynBtn, soloBtn, slopeBtn, chBtn, scopeBtn, curveBtn; juce::TextButton expBtn; juce::Slider tb;
     bool tbDrag = false, dynType = true, dotOver = false, thrOver = false, thrDrag = false, refreshing = false, moving = false, toggledPopup = false;
     juce::Rectangle<int> meterArea; int rowPhase = 89, rowTB = 192, rowSep = 85;
     float thrStartDb = 0; int thrStartX = 0;
@@ -880,8 +919,8 @@ public:
                  "Shows the analog EQ model's panel in the lower view: an EQ plus circuit colour after classic hardware, added after the main EQ.\n| Model | Family |\n| Passive Mastering | Massive Passive style |\n| Precision Parametric | Sontec style |\n| Air Band | Maag EQ4 style |\n| British Curve | Curve Bender style |\n| Program 7-Band | the family modelled by Hitsville EQ |\n| Tube Program | Pultec EQP-1A style |\n| British Console A | Neve 1073 style |\n| British Console E | SSL E / G style |\n| American Console | API 550 style |\nWhile on, its curve is drawn on the graph (dotted)");
         addAndMakeVisible (refBtn); refBtn.getProperties().set ("chevron", 1);
         refBtn.onClick = [this] { refMenu(); };
-        setHelp (refBtn, "REFERENCE C", "参照カーブ C。音声ファイルの平均的な周波数の特徴（または内蔵の参考カーブ）を、スペアナと同じ目盛りで重ねる。\n| 操作 | 結果 |\n| ファイルをグラフにドロップ | 解析して C に表示 |\n| メニュー → 読み込み | 同じ（WAV / AIFF / FLAC / MP3 / OGG） |\n| メニュー → 保存 | 今の C をプリセットとして登録 |\n無音と、平均より 20 dB 以上小さい部分は解析に含めない。C は「偏りを確かめる目安」で、完全に合わせる正解線ではない",
-                 "Reference curve C: the average frequency balance of an audio file (or a built-in reference), drawn on the analyzer's scale.\n| Action | Result |\n| Drop a file on the graph | analyse it into C |\n| Menu > Load | the same (WAV / AIFF / FLAC / MP3 / OGG) |\n| Menu > Save | store the current C as a preset |\nSilence and parts more than 20 dB below the average are left out. C is a guide to spot a lean, not a line to match exactly");
+        setHelp (refBtn, "REFERENCE C", "参照カーブ C。音声ファイルの平均的な周波数の特徴（または内蔵の参考カーブ）を、EQ の dB 目盛りで重ねる（GAIN SCALE を変えると C の縦の大きさも変わる。200 Hz〜5 kHz の平均を 0 dB の線にそろえる）。\n| 操作 | 結果 |\n| ファイルをグラフにドロップ | 解析して C に表示 |\n| メニュー → 読み込み | 同じ（WAV / AIFF / FLAC / MP3 / OGG） |\n| メニュー → 保存 | 今の C をプリセットとして登録 |\n無音と、平均より 20 dB 以上小さい部分は解析に含めない。C は「偏りを確かめる目安」で、完全に合わせる正解線ではない",
+                 "Reference curve C: the average frequency balance of an audio file (or a built-in reference), drawn on the EQ's dB scale (it follows GAIN SCALE; its 200 Hz - 5 kHz average sits on the 0 dB line).\n| Action | Result |\n| Drop a file on the graph | analyse it into C |\n| Menu > Load | the same (WAV / AIFF / FLAC / MP3 / OGG) |\n| Menu > Save | store the current C as a preset |\nSilence and parts more than 20 dB below the average are left out. C is a guide to spot a lean, not a line to match exactly");
         popup.onMoved = popupFull.onMoved = [this] { placePopup(); };
         // T/B scope: the input's attack (Transient) and body share, scrolling, with the detector and its Sens / Width band
         scopeBtn.setClickingTogglesState (false); scopeBtn.setButtonText ("T/B scope"); addAndMakeVisible (scopeBtn);
@@ -1059,7 +1098,7 @@ public:
         if (split != lastSplit) { lastSplit = split; resized(); }
         juce::String sig; sig << (int) ph.proc.currentMode() << (int) ph.proc.currentQMode();
         const auto bands = ph.proc.currentBands();
-        for (auto& b : bands) sig << (int) b.on << (int) b.type << b.slope << "_" << b.f << "_" << b.g << "_" << b.q << (int) b.lin << b.ch;
+        for (auto& b : bands) sig << (int) b.on << (int) b.type << b.slope << "_" << b.f << "_" << b.g << "_" << b.q << (int) b.lin << b.ch << "c" << b.qm;
         sig << ph.selected();
         for (int i = 0; i < eqcore::kBands; ++i) sig << "d" << (int) (ph.value (pid::band (i, "dyn")) > 0.5f) << ph.value (pid::band (i, "range")) << "_" << ph.value (pid::band (i, "below"));
         if (sig != lastSig)
@@ -1620,7 +1659,7 @@ public:
             const double d = side * std::log2 (fOf (e.position.x) / f);
             const double oct = juce::jlimit (0.04, 6.0, 2.0 * std::max (0.02, d));
             const double qt = 1.0 / (2.0 * std::sinh (std::log (2.0) / 2.0 * oct));
-            eqcore::Band eb; eb.type = (eqcore::Type) t; eb.g = ph.value (pid::band (b, "gain")); eb.q = ph.value (pid::band (b, "q"));
+            eqcore::Band eb; eb.type = (eqcore::Type) t; eb.g = ph.value (pid::band (b, "gain")); eb.q = ph.value (pid::band (b, "q")); eb.qm = (int) ph.value (pid::band (b, "cv"));
             const double k = eqcore::effectiveQ (eb, ph.proc.currentQMode()) / eb.q;
             ph.set (pid::band (b, "q"), (float) juce::jlimit (0.1, 18.0, qt / k));
         }
@@ -2677,23 +2716,19 @@ private:
         }
         flush();
         juce::ignoreUnused (ja);
-        const auto uf = refc::userFiles();
-        if (! uf.isEmpty())
-        {
-            juce::PopupMenu um; int k = 1000;
-            for (auto& f : uf) um.addItem (k++, f.getFileNameWithoutExtension(), true, refC.name == f.getFileNameWithoutExtension());
-            m.addSubMenu (ph.tr ("登録したカーブ", "My curves"), um);
-        }
+        // 1.0: saved curves mirror the folders on disk (made or moved in the Finder too)
+        const auto root = refc::userDir(); root.createDirectory();
+        const auto empty = ph.tr ("（空）", "(empty)");
+        juce::Array<juce::File> uf, df;
+        juce::PopupMenu um; ftree::addToMenu (um, root, "*.json", uf, 1000, [this] (const juce::File& f) { return refC.name == f.getFileNameWithoutExtension(); }, empty);
+        if (um.getNumItems() > 0) m.addSubMenu (ph.tr ("登録したカーブ", "My curves"), um);
         m.addSeparator();
         m.addItem (3, ph.tr ("今の C をプリセットとして登録…", "Save the current C as a preset..."), refC.valid());
-        if (! uf.isEmpty())
-        {
-            juce::PopupMenu dm; int k = 2000;
-            for (auto& f : uf) dm.addItem (k++, f.getFileNameWithoutExtension());
-            m.addSubMenu (ph.tr ("登録したカーブを削除（ゴミ箱へ）", "Delete a saved curve (to the Trash)"), dm);
-        }
-        m.addItem (4, ph.tr ("カーブのフォルダを開く", "Show the curves folder"));
-        m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&refBtn), [this, uf] (int r)
+        juce::PopupMenu dm; ftree::addToMenu (dm, root, "*.json", df, 20000, nullptr, empty);
+        if (! df.isEmpty()) m.addSubMenu (ph.tr ("登録したカーブを削除（ゴミ箱へ）", "Delete a saved curve (to the Trash)"), dm);
+        m.addItem (5, ph.tr ("新しいフォルダを作る…", "New folder..."));
+        m.addItem (4, ph.tr ("カーブのフォルダを開く（Finder での整理もメニューに反映）", "Show the curves folder (changes made there show up here)"));
+        m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&refBtn), [this, uf, df, root] (int r)
         {
             if (r == 1)
             {
@@ -2703,8 +2738,15 @@ private:
             }
             else if (r == 2) setRef ({});
             else if (r == 3) saveRefDialog();
-            else if (r == 4) { refc::userDir().createDirectory(); refc::userDir().revealToUser(); }
-            else if (r >= 2000 && r - 2000 < uf.size()) { uf[r - 2000].moveToTrash(); }
+            else if (r == 4) { root.revealToUser(); }
+            else if (r == 5)
+            {
+                auto* w = new juce::AlertWindow (ph.tr ("新しいフォルダ", "New folder"), ph.tr ("場所と名前。A/B と書くと階層で作る", "Where, and a name. A/B makes levels"), juce::MessageBoxIconType::NoIcon);
+                ftree::addFolderFields (*w, root, {}, ph.ja());
+                w->addButton ("OK", 1, juce::KeyPress (juce::KeyPress::returnKey)); w->addButton (ph.tr ("キャンセル", "Cancel"), 0, juce::KeyPress (juce::KeyPress::escapeKey));
+                w->enterModalState (true, juce::ModalCallbackFunction::create ([w, root] (int b) { if (b == 1) ftree::chosenFolder (*w, root); }), true);
+            }
+            else if (r >= 20000 && r - 20000 < df.size()) { df[r - 20000].moveToTrash(); }
             else if (r >= 1000 && r - 1000 < uf.size()) setRef (refc::load (uf[r - 1000]));
             else if (r >= 100 && r - 100 < (int) refc::builtins().size()) setRef (refc::builtins()[(size_t) (r - 100)].c);
         });
@@ -2713,13 +2755,14 @@ private:
     {
         auto* aw = new juce::AlertWindow (ph.tr ("C をプリセットとして登録", "Save C as a preset"), ph.tr ("名前（同じ名前は上書き）", "Name (the same name overwrites)"), juce::MessageBoxIconType::NoIcon);
         aw->addTextEditor ("name", refC.name); aw->addTextEditor ("note", refC.note, ph.tr ("メモ", "Note"));
+        ftree::addFolderFields (*aw, refc::userDir(), {}, ph.ja());
         aw->addButton ("OK", 1, juce::KeyPress (juce::KeyPress::returnKey)); aw->addButton (ph.tr ("キャンセル", "Cancel"), 0, juce::KeyPress (juce::KeyPress::escapeKey));
         aw->enterModalState (true, juce::ModalCallbackFunction::create ([this, aw] (int res)
         {
             if (res == 1)
             {
                 auto c = refC; c.name = aw->getTextEditorContents ("name").trim(); c.note = aw->getTextEditorContents ("note");
-                if (c.name.isNotEmpty() && refc::save (c)) setRef (c);
+                if (c.name.isNotEmpty() && refc::save (c, ftree::chosenFolder (*aw, refc::userDir()))) setRef (c);
             }
         }), true);
     }
@@ -2740,7 +2783,12 @@ private:
         if (refC.valid() && ! fr.empty() && ! ph.proc.earActive())
         {
             const juce::Colour cc (0xffb58cff);
-            auto y = [&] (double db) { return juce::jmap ((float) juce::jlimit (-95.0, 0.0, db + refOff), -90.0f, -10.0f, ar.getBottom(), ar.getY()); };
+            // 1.0: C is drawn on the EQ's dB scale (it follows GAIN SCALE), centred on its own 200 Hz - 5 kHz average
+            double cs = 0; int cn = 0;
+            for (double f = 200.0; f <= 5000.0; f *= 1.1) { cs += refC.at (f); ++cn; }
+            const double centre = cn > 0 ? cs / cn : 0.0;
+            juce::ignoreUnused (ar);
+            auto y = [&] (double db) { return yOf (juce::jlimit (-(double) dbRange, (double) dbRange, db - centre)); };
             juce::Path line, band; bool first = true;
             const double lo = std::max (frange::lo, refC.pts.front().first), hi = std::min (frange::hi, refC.pts.back().first);
             std::vector<std::pair<float, float>> upper, lower;

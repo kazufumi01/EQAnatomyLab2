@@ -40,7 +40,8 @@ private:
     LongPressButton learnBtn;
     juce::TextButton helpBtn, resBtn, langBtn, resetBtn, undoBtn, redoBtn, earBtn, morphTo;
     juce::TextButton slotBtn[4];
-    ResetCombo curveBox;
+    ResetCombo curveBox;           // 1.0: hidden; each band picks its curve in the floating panel
+    juce::TextButton prevBtn, nextBtn;
     juce::Slider morph;
     void setEar (bool on);
     bool lowerOpen() const; void setLower (bool on);

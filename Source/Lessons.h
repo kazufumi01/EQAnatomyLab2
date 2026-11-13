@@ -137,8 +137,8 @@ inline const std::vector<Lesson>& lessons()
           0, -1, 0, { { true, T::Bell, 4000, 6, 1.2, 3, false, -24, -6, false, 0, 0, -80.0f } }, 0 },
 
         { "カーブの性格：同じ数値でも形が違う", "Curve character: same numbers, different shapes",
-          { "1 kHz +6 dB・Q 1 のベルと、100 Hz +6 dB のローシェルフを Clean Const で見る", "ヘッダーの CURVE を British A → US 500 → Console E と切り替える", "Tube Passive で、ローシェルフのブーストとカットを重ねた形を見る（バンド 3 をオン）", "質感まで比べるなら、SAT の Transformer・Tube・Class A を足す" },
-          { "Look at a +6 dB bell at 1 kHz (Q 1) and a +6 dB low shelf at 100 Hz in Clean Const", "Switch CURVE in the header: British A, US 500, Console E", "In Tube Passive, switch on band 3 to stack a low boost and cut", "For texture as well, add SAT Transformer, Tube or Class A" },
+          { "1 kHz +6 dB・Q 1 のベルと、100 Hz +6 dB のローシェルフを Clean Const で見る", "浮き窓の CURVE（SLOPE の左）を British A → US 500 → Console E と切り替える（メニュー下の「全バンドをこのカーブにする」で両方のバンドがそろう）", "Tube Passive で、ローシェルフのブーストとカットを重ねた形を見る（バンド 3 をオン）", "質感まで比べるなら、SAT の Transformer・Tube・Class A を足す" },
+          { "Look at a +6 dB bell at 1 kHz (Q 1) and a +6 dB low shelf at 100 Hz in Clean Const", "Switch CURVE in the floating panel (left of SLOPE): British A, US 500, Console E ('Use this band's curve on every band' at the bottom of its menu sets both bands)", "In Tube Passive, switch on band 3 to stack a low boost and cut", "For texture as well, add SAT Transformer, Tube or Class A" },
           "アナログ EQ の個性は、Q の決まり方とシェルフの肩の形に表れる。カーブの傾向だけで、機材の音そのものではない", "Analog EQ character shows in how Q behaves and in the shelf shoulders. These are shape tendencies, not the sound of the hardware",
           0, -1, 0, { { true, T::Bell, 1000, 6, 1, 3 }, { true, T::LowShelf, 100, 6, 0.7, 3 }, { false, T::LowShelf, 100, -4, 0.7, 3 } }, 0 },
 

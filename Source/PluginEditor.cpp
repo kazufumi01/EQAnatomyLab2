@@ -1,6 +1,7 @@
 #include "PluginEditor.h"
 #include "Lessons.h"
 #include "Presets.h"
+#include "FolderTree.h"
 
 EQAnatomyView::EQAnatomyView (EQAnatomyProcessor& p) : proc (p)
 {
@@ -101,6 +102,7 @@ EQAnatomyView::EQAnatomyView (EQAnatomyProcessor& p) : proc (p)
         m.addSeparator();
         const auto& P = presets();
         const int cur = (int) proc.uiState.getProperty ("preset", -1);
+        m.addSectionHeader (ja ? juce::String::fromUTF8 ("用途別") : juce::String ("By use"));
         for (int c = 0; c < 6; ++c)
         {
             juce::PopupMenu sub;
@@ -109,13 +111,28 @@ EQAnatomyView::EQAnatomyView (EQAnatomyProcessor& p) : proc (p)
                     sub.addItem (100 + i, juce::String::fromUTF8 (ja ? P[(size_t) i].nameJa : P[(size_t) i].nameEn), true, i == cur);
             if (sub.getNumItems() > 0) m.addSubMenu (juce::String::fromUTF8 (presetCategoryName (c, ja)), sub);
         }
-        // user presets
-        const auto users = proc.userPresets();
+        // 1.0: the analog EQ models. "Model only" switches the model (with its curve and saturator type) and keeps the rest
+        m.addSectionHeader (ja ? juce::String::fromUTF8 ("アナログEQタイプ別") : juce::String ("By analog EQ type"));
+        const bool anOn = ph.value (pid::anOn) > 0.5f; const int anM = (int) ph.value (pid::anModel);
+        for (int k = 0; k < analog::kModels; ++k)
+        {
+            const auto& M = analog::models()[(size_t) k];
+            juce::PopupMenu sub;
+            sub.addItem (500 + k, ja ? juce::String::fromUTF8 ("モデルだけ切り替える（つまみは初期値、他はそのまま）") : juce::String ("Switch the model only (controls at defaults, the rest kept)"), true, anOn && anM == k);
+            sub.addSeparator();
+            for (int i = 0; i < (int) P.size(); ++i)
+                if (P[(size_t) i].model == k)
+                    sub.addItem (100 + i, juce::String::fromUTF8 (ja ? P[(size_t) i].nameJa : P[(size_t) i].nameEn), true, i == cur);
+            m.addSubMenu (juce::String (M.name) + "  (" + juce::String::fromUTF8 (M.family) + ")", sub, true, nullptr, anOn && anM == k);
+        }
+        // user presets, mirroring the folders on disk
+        const auto curFile = proc.uiState.getProperty ("userPresetFile", "").toString();
         const auto curUser = proc.uiState.getProperty ("userPreset", "").toString();
         m.addSeparator();
         m.addSectionHeader (ja ? juce::String::fromUTF8 ("ユーザープリセット") : juce::String ("User presets"));
-        for (int i = 0; i < users.size(); ++i)
-            m.addItem (1000 + i, users[i].getFileNameWithoutExtension(), true, users[i].getFileNameWithoutExtension() == juce::File::createLegalFileName (curUser));
+        juce::Array<juce::File> users;
+        ftree::addToMenu (m, EQAnatomyProcessor::userPresetDir(), "*.xml", users, 10000,
+                          [curFile] (const juce::File& f) { return f.getFullPathName() == curFile; }, ja ? juce::String::fromUTF8 ("（空）") : juce::String ("(empty)"));
         if (users.isEmpty()) m.addItem (-1, ja ? juce::String::fromUTF8 ("（まだありません）") : juce::String ("(none yet)"), false);
         juce::PopupMenu manage;
         manage.addItem (2, ja ? juce::String::fromUTF8 ("今の設定を新しく保存…") : juce::String ("Save current settings as…"));
@@ -123,12 +140,14 @@ EQAnatomyView::EQAnatomyView (EQAnatomyProcessor& p) : proc (p)
         manage.addItem (4, (ja ? juce::String::fromUTF8 ("名前とメモを変更：") : juce::String ("Rename / edit note: ")) + (curUser.isEmpty() ? juce::String::fromUTF8 ("\xe2\x80\x94") : curUser), curUser.isNotEmpty());
         manage.addItem (5, (ja ? juce::String::fromUTF8 ("削除：") : juce::String ("Delete: ")) + (curUser.isEmpty() ? juce::String::fromUTF8 ("\xe2\x80\x94") : curUser), curUser.isNotEmpty());
         manage.addSeparator();
-        manage.addItem (6, ja ? juce::String::fromUTF8 ("保存フォルダを開く") : juce::String ("Show the preset folder"));
+        manage.addItem (7, ja ? juce::String::fromUTF8 ("新しいフォルダを作る…") : juce::String ("New folder..."));
+        manage.addItem (6, ja ? juce::String::fromUTF8 ("保存フォルダを開く（Finder でフォルダを作る・移動するとメニューにも反映）") : juce::String ("Show the preset folder (folders made or moved there show up here)"));
         m.addSubMenu (ja ? juce::String::fromUTF8 ("保存・編集") : juce::String ("Save / edit"), manage);
         m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&resetBtn), [this, users] (int r)
         {
-            if (r >= 1000 && r - 1000 < users.size()) { proc.loadUserPreset (users[r - 1000]); morph.setValue (0.0, juce::dontSendNotification); return; }
-            if (r >= 2 && r <= 6) { userPresetAction (r); return; }
+            if (r >= 10000 && r - 10000 < users.size()) { proc.loadUserPreset (users[r - 10000]); morph.setValue (0.0, juce::dontSendNotification); return; }
+            if (r >= 500 && r < 500 + analog::kModels) { proc.undo.beginNewTransaction(); proc.applyAnalogModel (r - 500); return; }
+            if (r >= 2 && r <= 7) { userPresetAction (r); return; }
             if (r == 1) proc.applyPreset (-1);
             else if (r >= 100) proc.applyPreset (r - 100);
             morph.setValue (0.0, juce::dontSendNotification);
@@ -136,7 +155,14 @@ EQAnatomyView::EQAnatomyView (EQAnatomyProcessor& p) : proc (p)
     };
     for (juce::TextButton* b : { &resBtn, (juce::TextButton*) &learnBtn, &langBtn, &resetBtn, &undoBtn, &redoBtn, &earBtn, &morphTo })
         addAndMakeVisible (*b);
-    addAndMakeVisible (curveBox); addAndMakeVisible (morph);
+    addChildComponent (curveBox); addAndMakeVisible (morph);
+    // 1.0: step through the presets (factory by use, then the user files)
+    prevBtn.setButtonText (juce::String::fromUTF8 ("\xe2\x97\x80")); nextBtn.setButtonText (juce::String::fromUTF8 ("\xe2\x96\xb6"));
+    prevBtn.onClick = [this] { proc.stepPreset (-1); morph.setValue (0.0, juce::dontSendNotification); };
+    nextBtn.onClick = [this] { proc.stepPreset (1); morph.setValue (0.0, juce::dontSendNotification); };
+    for (auto* b : { &prevBtn, &nextBtn }) { b->getProperties().set ("fontPx", 9.0); addAndMakeVisible (*b); }
+    setHelp (prevBtn, "PRESET", "前のプリセットへ。用途別の順、続けてユーザープリセット（フォルダ順）", "Previous preset: by use, then the user presets (folder order)");
+    setHelp (nextBtn, "PRESET", "次のプリセットへ。用途別の順、続けてユーザープリセット（フォルダ順）", "Next preset: by use, then the user presets (folder order)");
     paramToggle (deltaBtn, pid::delta);
     paramToggle (bypassBtn, pid::bypass);
 
@@ -152,8 +178,8 @@ EQAnatomyView::EQAnatomyView (EQAnatomyProcessor& p) : proc (p)
     setHelp (resBtn, "RESOLUTION", "リニア位相の FIR の長さ（Low / Mid / High）。長いほど低域が正確だが、レイテンシーとプリリンギングも伸びる", "Linear-phase FIR length. Longer is more accurate in the lows, with more latency and pre-ringing");
     setHelp (curveBox, "CURVE", "全バンドのカーブの性格。Clean Const／Clean Prop：従来の一定 Q と比例 Q／British A：広いベルと肩の盛り上がり／US 500：強い比例 Q／Console E：比例寄りのベルとくっきりしたシェルフ／Tube Passive：ブーストとカットが干渉する低域／Precision：色付けのない一定 Q。注意：カーブの形の傾向だけで機材の音そのものではない。質感まで比べるなら SAT の Transformer・Tube・Class A と組み合わせる。名称は一般名",
              "Curve character for all bands. Clean Const/Prop: the original constant and proportional Q / British A: broad bells, shelf shoulders / US 500: strongly proportional / Console E: mildly proportional bells, crisp shelves / Tube Passive: interacting low boost and cut / Precision: uncoloured constant Q. Careful: shape tendencies only, not the sound of the hardware; pair with SAT Transformer / Tube / Class A for texture. Generic names");
-    setHelp (resetBtn, "PRESET", "作業テンプレート。読み込むと、目的・まず動かす所・注意点がこの欄に出て、動かすバンドが光る。比較用のプリセットは A〜D スロットにも設定が入る。Flat で初期化（Undo で戻せる）。注意：数値は出発点。必ず耳で合わせる",
-          "Task templates: loading one shows its purpose, the first control to move and a caution here, and highlights the band. Comparison presets also fill slots A–D. Flat resets (undoable). Careful: values are starting points; always adjust by ear");
+    setHelp (resetBtn, "PRESET", "作業テンプレート。読み込むと、目的・まず動かす所・注意点がこの欄に出て、動かすバンドが光る。比較用のプリセットは A〜D スロットにも設定が入る。Flat で初期化（Undo で戻せる）。\n| メニュー | 中身 |\n| 用途別 | 掃除・音色づくり・バスとマスタリングなど |\n| アナログEQタイプ別 | 9 モデルごとのプリセットと「モデルだけ切り替える」。全バンドのカーブと SAT のタイプがモデルに合わせて変わる |\n| ユーザープリセット | 保存フォルダの階層がそのままメニューになる（Finder でフォルダを作る・移動しても反映） |\n◀ ▶ で順に送る。注意：数値は出発点。必ず耳で合わせる",
+          "Task templates: loading one shows its purpose, the first control to move and a caution here, and highlights the band. Comparison presets also fill slots A–D. Flat resets (undoable).\n| Menu | Holds |\n| By use | cleanup, tone, bus and mastering and so on |\n| By analog EQ type | presets for each of the 9 models, and 'switch the model only'; every band's curve and the SAT type follow the model |\n| User presets | the folders in the preset folder become the menu (folders made or moved in the Finder show up) |\n< > step through them. Careful: values are starting points; always adjust by ear");
     setHelp (undoBtn, "UNDO", "ひとつ前の操作に戻す（Cmd＋Z）", "Undo the last change (Cmd + Z)");
     setHelp (redoBtn, "REDO", "戻した操作をやり直す（Shift＋Cmd＋Z）", "Redo (Shift + Cmd + Z)");
     setHelp (morphTo, "MORPH TARGET", "モーフの行き先のスロット。クリックで切り替え", "The slot the morph slider heads for. Click to change");
@@ -241,8 +267,21 @@ void EQAnatomyView::userPresetAction (int r)
     const bool ja = ph.ja();
     const auto cur = proc.uiState.getProperty ("userPreset", "").toString();
     const auto note = proc.uiState.getProperty ("userPresetNote", "").toString();
-    if (r == 6) { auto d = EQAnatomyProcessor::userPresetDir(); d.createDirectory(); d.revealToUser(); return; }
-    if (r == 3) { proc.saveUserPreset (cur, note); return; }
+    const auto root = EQAnatomyProcessor::userPresetDir(); root.createDirectory();
+    juce::File curFile (proc.uiState.getProperty ("userPresetFile", "").toString());
+    if (! curFile.existsAsFile() && cur.isNotEmpty()) curFile = root.getChildFile (juce::File::createLegalFileName (cur) + ".xml");
+    if (r == 6) { root.revealToUser(); return; }
+    if (r == 3) { proc.saveUserPreset (curFile.getParentDirectory(), cur, note); return; }
+    if (r == 7)
+    {
+        auto* w = new juce::AlertWindow (ja ? juce::String::fromUTF8 ("新しいフォルダ") : juce::String ("New folder"),
+                                         ja ? juce::String::fromUTF8 ("場所と名前。A/B と書くと階層で作る") : juce::String ("Where, and a name. A/B makes levels"), juce::MessageBoxIconType::NoIcon, this);
+        ftree::addFolderFields (*w, root, ftree::relFolder (root, curFile), ja);
+        w->addButton ("OK", 1, juce::KeyPress (juce::KeyPress::returnKey));
+        w->addButton (ja ? juce::String::fromUTF8 ("キャンセル") : juce::String ("Cancel"), 0, juce::KeyPress (juce::KeyPress::escapeKey));
+        w->enterModalState (true, juce::ModalCallbackFunction::create ([w, root] (int b) { if (b == 1) ftree::chosenFolder (*w, root); }), true);
+        return;
+    }
     if (r == 5)
     {
         auto opts = juce::MessageBoxOptions().withIconType (juce::MessageBoxIconType::WarningIcon)
@@ -250,10 +289,11 @@ void EQAnatomyView::userPresetAction (int r)
                         .withMessage ((ja ? juce::String::fromUTF8 ("ゴミ箱に移します：") : juce::String ("Move to the Trash: ")) + cur)
                         .withButton (ja ? juce::String::fromUTF8 ("削除") : juce::String ("Delete")).withButton (ja ? juce::String::fromUTF8 ("キャンセル") : juce::String ("Cancel"))
                         .withAssociatedComponent (this);
-        juce::AlertWindow::showAsync (opts, [this, cur] (int b)
+        juce::AlertWindow::showAsync (opts, [this, curFile] (int b)
         {
             if (b != 1) return;
-            EQAnatomyProcessor::userPresetDir().getChildFile (juce::File::createLegalFileName (cur) + ".xml").moveToTrash();
+            curFile.moveToTrash();
+            proc.uiState.setProperty ("userPresetFile", juce::String(), nullptr);
             proc.uiState.setProperty ("userPreset", juce::String(), nullptr); proc.uiState.setProperty ("userPresetNote", juce::String(), nullptr);
         });
         return;
@@ -265,16 +305,18 @@ void EQAnatomyView::userPresetAction (int r)
                                      juce::MessageBoxIconType::NoIcon, this);
     w->addTextEditor ("name", r == 2 ? juce::String() : cur, ja ? juce::String::fromUTF8 ("名前") : juce::String ("Name"));
     w->addTextEditor ("note", r == 2 ? juce::String() : note, ja ? juce::String::fromUTF8 ("メモ") : juce::String ("Note"));
+    ftree::addFolderFields (*w, root, ftree::relFolder (root, curFile), ja);
     w->addButton ("OK", 1, juce::KeyPress (juce::KeyPress::returnKey));
     w->addButton (ja ? juce::String::fromUTF8 ("キャンセル") : juce::String ("Cancel"), 0, juce::KeyPress (juce::KeyPress::escapeKey));
-    w->enterModalState (true, juce::ModalCallbackFunction::create ([this, w, r, cur] (int b)
+    w->enterModalState (true, juce::ModalCallbackFunction::create ([this, w, r, curFile, root] (int b)
     {
         if (b != 1) return;
         const auto name = w->getTextEditorContents ("name").trim(), nt = w->getTextEditorContents ("note");
         if (name.isEmpty()) return;
-        auto dst = EQAnatomyProcessor::userPresetDir().getChildFile (juce::File::createLegalFileName (name) + ".xml");
-        if (r == 4 && name != cur) EQAnatomyProcessor::userPresetDir().getChildFile (juce::File::createLegalFileName (cur) + ".xml").moveFileTo (dst);
-        proc.saveUserPreset (name, nt);
+        const auto dir = ftree::chosenFolder (*w, root);
+        auto dst = dir.getChildFile (juce::File::createLegalFileName (name) + ".xml");
+        if (r == 4 && curFile.existsAsFile() && curFile != dst) curFile.moveFileTo (dst);      // rename and / or move to another folder
+        proc.saveUserPreset (dir, name, nt);
         proc.uiState.setProperty ("userPresetNote", nt, nullptr);
     }), true);
 }
@@ -325,7 +367,7 @@ void EQAnatomyView::refreshTexts()
     {
         const int pi = (int) proc.uiState.getProperty ("preset", -1);
         const auto up = proc.uiState.getProperty ("userPreset", "").toString();
-        resetBtn.setButtonText (pi >= 0 && pi < (int) presets().size() ? juce::String (presets()[(size_t) pi].nameEn)
+        resetBtn.setButtonText (pi >= 0 && pi < (int) presets().size() ? juce::String::fromUTF8 (ph.ja() ? presets()[(size_t) pi].nameJa : presets()[(size_t) pi].nameEn)
                                 : up.isNotEmpty() ? juce::String::fromUTF8 ("★ ") + up : juce::String::fromUTF8 ("\xe2\x80\x94"));
         resetBtn.getProperties().set ("chevron", 1);
     }
@@ -372,9 +414,8 @@ void EQAnatomyView::paint (juce::Graphics& g)
     g.drawText ("MORPH", morph.getX(), 3, 60, 9, juce::Justification::centredLeft);
     // captions for the two menus whose text is a name (curve character, preset)
     g.setColour (theme::muted); g.setFont (theme::ui (8.5f, true));
-    g.drawText ("CURVE", curveBox.getX() - 38, 10, 35, 24, juce::Justification::centredRight);
     g.setColour (theme::text); g.setFont (theme::ui (9.5f, true));
-    g.drawText ("PRESET", resetBtn.getX() - 46, 10, 43, 24, juce::Justification::centredRight);
+    g.drawText ("PRESET", prevBtn.getX() - 46, 10, 43, 24, juce::Justification::centredRight);
     g.setColour (theme::accent); g.drawRoundedRectangle (resetBtn.getBounds().toFloat().expanded (1.5f), 5.0f, 1.5f);
 }
 
@@ -385,15 +426,17 @@ void EQAnatomyView::resized()
     int x = 210;
     modeBox.setBounds (x, 10, 112, 24); x += 116;
     resBtn.setBounds (x, 10, 60, 24); x += 64;
-    x += 38; curveBox.setBounds (x, 10, 108, 24); x += 112;      // "CURVE" caption on the left
+    curveBox.setBounds (0, 0, 0, 0);       // 1.0: per band, in the floating panel
     // the preset group, right-aligned in its own frame: PRESET caption, preset menu, slots A–D, morph target, MORPH
     {
         const int right = 958;
         morph.setBounds (right - 50, 12, 48, 24);
         morphTo.setBounds (right - 84, 12, 30, 20);
         for (int i = 0; i < 4; ++i) slotBtn[i].setBounds (right - 194 + i * 26, 10, 24, 24);
-        resetBtn.setBounds (right - 194 - 8 - 150, 10, 150, 24);
-        presetGroup = { resetBtn.getX() - 50, 4, right + 4 - (resetBtn.getX() - 50), 38 };
+        nextBtn.setBounds (right - 194 - 8 - 22, 11, 22, 22);
+        resetBtn.setBounds (nextBtn.getX() - 2 - 170, 10, 170, 24);
+        prevBtn.setBounds (resetBtn.getX() - 24, 11, 22, 22);
+        presetGroup = { prevBtn.getX() - 50, 4, right + 4 - (prevBtn.getX() - 50), 38 };
     }
     helpBtn.setBounds (970, 10, 42, 24);
     earBtn.setBounds (1016, 10, 40, 24);
