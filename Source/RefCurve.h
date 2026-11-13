@@ -93,7 +93,7 @@ inline Curve withOffsets (const juce::String& name, const juce::String& note, st
     c.normalise1k();
     return c;
 }
-// "What's Going On" (1971) measured by the user: 1/3-octave levels of the master and four Demucs stems (loop-back recording)
+// A 1971 soul album measured by the user: 1/3-octave levels of the master and four Demucs stems (loop-back recording). Shown as "Motor WGO 1971"
 inline Curve fromColumn (const juce::String& name, const juce::String& note, int col)
 {
     static const double t[][6] = {
@@ -131,12 +131,12 @@ inline const std::vector<Builtin>& builtins()
         v.push_back ({ "Era", withOffsets ("1990", go, { { 20, 80, -1.5 }, { 2000, 5000, 1 } }) });
         v.push_back ({ "Era", withOffsets ("2000", go, { { 8000, 16000, 1 } }) });
         v.push_back ({ "Era", withOffsets ("2020", go, { { 20, 120, 1.5 }, { 150, 400, 0.5 }, { 8000, 16000, -1 } }) });
-        const juce::String wn = juce::String::fromUTF8 ("実測：What's Going On（Marvin Gaye, 1971）。ループバック録音、Welch 法、1/3 オクターブ。ステムは Demucs による AI 分離（漏れあり、目安）");
-        v.push_back ({ "What's Going On (1971)", fromColumn ("WGO 1971 master", wn, 1) });
-        v.push_back ({ "What's Going On (1971)", fromColumn ("WGO 1971 drums", wn, 2) });
-        v.push_back ({ "What's Going On (1971)", fromColumn ("WGO 1971 bass", wn, 3) });
-        v.push_back ({ "What's Going On (1971)", fromColumn ("WGO 1971 vocals", wn, 4) });
-        v.push_back ({ "What's Going On (1971)", fromColumn ("WGO 1971 other", wn, 5) });
+        const juce::String wn = juce::String::fromUTF8 ("実測：1971年のソウルの名盤（デトロイト録音）。ループバック録音、Welch 法、1/3 オクターブ。ステムは Demucs による AI 分離（漏れあり、目安）");
+        v.push_back ({ "Motor WGO 1971", fromColumn ("Motor WGO 1971 master", wn, 1) });
+        v.push_back ({ "Motor WGO 1971", fromColumn ("Motor WGO 1971 drums", wn, 2) });
+        v.push_back ({ "Motor WGO 1971", fromColumn ("Motor WGO 1971 bass", wn, 3) });
+        v.push_back ({ "Motor WGO 1971", fromColumn ("Motor WGO 1971 vocals", wn, 4) });
+        v.push_back ({ "Motor WGO 1971", fromColumn ("Motor WGO 1971 other", wn, 5) });
         return v;
     }();
     return b;

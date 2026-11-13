@@ -926,8 +926,8 @@ public:
                  "Shows the analog EQ model's panel in the lower view: an EQ plus circuit colour after classic hardware, added after the main EQ.\n| Model | Kind / use |\n| Passive Tube Master | passive 4-band mastering EQ with a tube make-up stage |\n| Precision Master 3-Band | clean, exact solid-state mastering parametric |\n| Fixed-Band Air Lift | six wide fixed bands plus an ultra-high AIR shelf |\n| British Stepped Bus | stepped British console curves for the mix bus and drums |\n| 60s Studio 7-Band | a 1960s studio's home-built console EQ, 2 dB steps |\n| Vintage Tube Boost/Atten | a 1950s-60s tube program EQ: boost and attenuate the same lows |\n| 70s British Inductor | the class-A inductor channel EQ of 1970s British desks |\n| 80s British Large Console | the four-band channel EQ of large 1980s consoles |\n| American Discrete Punch | a discrete American console EQ: stepped, proportional Q |\nWhile on, its curve is drawn on the graph (dotted)");
         addAndMakeVisible (refBtn); refBtn.getProperties().set ("chevron", 1);
         refBtn.onClick = [this] { refMenu(); };
-        setHelp (refBtn, "REFERENCE C", "参照カーブ C。音声ファイルの平均的な周波数の特徴（または内蔵の参考カーブ）を、EQ の dB 目盛りで重ねる（GAIN SCALE を変えると C の縦の大きさも変わる。200 Hz〜5 kHz の平均を 0 dB の線にそろえる）。\n| 操作 | 結果 |\n| ファイルをグラフにドロップ | 解析して C に表示 |\n| メニュー → 読み込み | 同じ（WAV / AIFF / FLAC / MP3 / OGG） |\n| メニュー → 保存 | 今の C をプリセットとして登録 |\n無音と、平均より 20 dB 以上小さい部分は解析に含めない。C は「偏りを確かめる目安」で、完全に合わせる正解線ではない",
-                 "Reference curve C: the average frequency balance of an audio file (or a built-in reference), drawn on the EQ's dB scale (it follows GAIN SCALE; its 200 Hz - 5 kHz average sits on the 0 dB line).\n| Action | Result |\n| Drop a file on the graph | analyse it into C |\n| Menu > Load | the same (WAV / AIFF / FLAC / MP3 / OGG) |\n| Menu > Save | store the current C as a preset |\nSilence and parts more than 20 dB below the average are left out. C is a guide to spot a lean, not a line to match exactly");
+        setHelp (refBtn, "REFERENCE C", "参照カーブ C。音声ファイルの平均的な周波数の特徴（または内蔵の参考カーブ）を、EQ の dB 目盛りで重ねる（GAIN SCALE を変えると C の縦の大きさも変わる。200 Hz〜5 kHz の平均を 0 dB の線にそろえる）。\n| 操作 | 結果 |\n| ファイルをグラフにドロップ | 解析して C に表示 |\n| メニュー → 読み込み | 同じ（WAV / AIFF / FLAC / MP3 / OGG） |\n| メニュー → 保存 | 今の C をプリセットとして登録 |\n| C の線を上下ドラッグ | 高さを動かす（Shift で細かく） |\n| C の線をダブルクリック | 高さを戻す（中域の平均＝0 dB） |\n| メニュー → スペアナに合わせる | 今の入力の中域と同じ高さにそろえる |\n無音と、平均より 20 dB 以上小さい部分は解析に含めない。C は「偏りを確かめる目安」で、完全に合わせる正解線ではない",
+                 "Reference curve C: the average frequency balance of an audio file (or a built-in reference), drawn on the EQ's dB scale (it follows GAIN SCALE; its 200 Hz - 5 kHz average sits on the 0 dB line).\n| Action | Result |\n| Drop a file on the graph | analyse it into C |\n| Menu > Load | the same (WAV / AIFF / FLAC / MP3 / OGG) |\n| Menu > Save | store the current C as a preset |\n| Drag the C line up/down | move its height (Shift: fine) |\n| Double-click the C line | back to the default height (mid-band average on 0 dB) |\n| Menu > Line up with the analyzer | match the current input's mid-band height |\nSilence and parts more than 20 dB below the average are left out. C is a guide to spot a lean, not a line to match exactly");
         popup.onMoved = popupFull.onMoved = [this] { placePopup(); };
         // T/B scope: the input's attack (Transient) and body share, scrolling, with the detector and its Sens / Width band
         scopeBtn.setClickingTogglesState (false); scopeBtn.setButtonText ("T/B scope"); addAndMakeVisible (scopeBtn);
@@ -1574,6 +1574,11 @@ public:
             if (e.mods.isAltDown()) { ph.proc.undo.beginNewTransaction(); ph.resetDefault (id); return; }
             dynDrag = m; ph.proc.undo.beginNewTransaction(); ph.begin (id); repaint(); return;
         }
+        if (refHit (e.position) && pick (e.position).band < 0)
+        {
+            if (e.mods.isAltDown()) { ph.proc.uiState.setProperty ("refShift", 0.0, nullptr); repaint(); return; }
+            refDrag = true; refStartShift = refShift(); refStartY = e.position.y; return;
+        }
         drag = pick (e.position);
         if (drag.what >= 3) { ph.begin (edgeId (drag.what)); return; }
         if (drag.band < 0) { clickCand = ! e.mods.isAnyModifierKeyDown(); downPos = e.position; return; }   // an empty spot: a single click toggles the panel
@@ -1589,6 +1594,12 @@ public:
     void mouseDrag (const juce::MouseEvent& e) override
     {
         if (e.mods.isPopupMenu()) return;
+        if (refDrag)
+        {
+            const float perPx = 2.0f * dbRange / std::max (1.0f, plot().getHeight()) * (e.mods.isShiftDown() ? 0.2f : 1.0f);
+            ph.proc.uiState.setProperty ("refShift", juce::jlimit (-60.0f, 60.0f, refStartShift - (e.position.y - refStartY) * perPx), nullptr);
+            repaint(); return;
+        }
         if (rsDrag >= 0)
         {
             rsG = rsDragG;
@@ -1673,6 +1684,7 @@ public:
     }
     void mouseUp (const juce::MouseEvent&) override
     {
+        if (refDrag) { refDrag = false; repaint(); return; }
         if (scaleHold) { scaleHold = false; repaint(); }
         if (panelDrag) { panelDrag = false; repaint(); return; }
         if (rsDrag >= 0)
@@ -1717,6 +1729,7 @@ public:
         if (rsView() && rsPlot().contains (e.position)) return;
         const auto p = pick (e.position);
         if (p.what >= 3) return;
+        if (p.band < 0 && refHit (e.position)) { ph.proc.uiState.setProperty ("refShift", 0.0, nullptr); repaint(); return; }   // C back to its default height
         if (p.band >= 0 && p.what == 0) { const int b = p.band; ph.setGesture (pid::band (b, "on"), ph.value (pid::band (b, "on")) > 0.5f ? 0.0f : 1.0f); return; }
         for (int i = 0; i < eqcore::kBands; ++i)
             if (ph.value (pid::band (i, "on")) < 0.5f && ! ph.proc.isLinkedBand (i))
@@ -2014,6 +2027,7 @@ public:
             return;
         }
         const auto p = pick (e.position);
+        if (p.band < 0 && refHit (e.position)) { setMouseCursor (juce::MouseCursor::UpDownResizeCursor); return; }
         setMouseCursor (p.what >= 1 ? juce::MouseCursor::LeftRightResizeCursor
                         : p.band < 0 ? juce::MouseCursor::CrosshairCursor
                         : e.mods.isCommandDown() ? juce::MouseCursor::UpDownLeftRightResizeCursor : juce::MouseCursor::DraggingHandCursor);
@@ -2682,9 +2696,33 @@ private:
             refOff = refAligned ? refOff + (target - refOff) * 0.08f : target; refAligned = true;
         }
     }
+    // ---- C's height: 0 dB = its own 200 Hz - 5 kHz average, plus refShift (dB, dragged) ----
+    double refCentre() const { double s = 0; int n = 0; for (double f = 200.0; f <= 5000.0; f *= 1.1) { s += refC.at (f); ++n; } return n > 0 ? s / n : 0.0; }
+    float refShift() const { return (float) (double) ph.proc.uiState.getProperty ("refShift", 0.0); }
+    float refYdb (double db) const { return yOf (juce::jlimit (-(double) dbRange, (double) dbRange, db - refCentre() + refShift())); }
+    bool refHit (juce::Point<float> p) const
+    {
+        if (! refC.valid() || ph.proc.earActive() || ! plot().contains (p)) return false;
+        const double f = fOf (p.x);
+        if (f < refC.pts.front().first || f > refC.pts.back().first) return false;
+        return std::abs (p.y - refYdb (refC.at (f))) < 5.0f;
+    }
+    juce::Rectangle<float> anaArea() const { return panelShown() ? fullPlot().withBottom (panelArea().getY() - 6) : fullPlot(); }
+    void refToAnalyzer()       // put C's mid-band average at the height of the analyzer's (A) mid-band average right now
+    {
+        if (! refC.valid() || spectrum.size() != fr.size()) return;
+        double sa = 0; int n = 0; for (size_t i = 0; i < fr.size(); ++i) if (fr[i] >= 200 && fr[i] <= 5000) { sa += spectrum[i]; ++n; }
+        if (n == 0 || sa / n < -85.0) return;
+        const auto ar = anaArea(), pr = plot();
+        const float ya = juce::jmap ((float) juce::jlimit (-90.0, -10.0, sa / n), -90.0f, -10.0f, ar.getBottom(), ar.getY());
+        ph.proc.uiState.setProperty ("refShift", juce::jmap (ya, pr.getBottom(), pr.getY(), -dbRange, dbRange), nullptr);
+        repaint();
+    }
+    bool refDrag = false; float refStartShift = 0, refStartY = 0;
     void setRef (const refc::Curve& c)
     {
         auto& ui = ph.proc.uiState;
+        ui.setProperty ("refShift", 0.0, nullptr);
         ui.setProperty ("refName", c.valid() ? c.name : juce::String(), nullptr);
         ui.setProperty ("refNote", c.note, nullptr);
         ui.setProperty ("refTol", c.tolerance, nullptr);
@@ -2733,6 +2771,10 @@ private:
         m.addItem (3, ph.tr ("今の C をプリセットとして登録…", "Save the current C as a preset..."), refC.valid());
         juce::PopupMenu dm; ftree::addToMenu (dm, root, "*.json", df, 20000, nullptr, empty);
         if (! df.isEmpty()) m.addSubMenu (ph.tr ("登録したカーブを削除（ゴミ箱へ）", "Delete a saved curve (to the Trash)"), dm);
+        m.addSeparator();
+        m.addItem (6, ph.tr ("C の高さを戻す（中域 200 Hz〜5 kHz の平均＝0 dB）", "C back to its default height (200 Hz - 5 kHz average on 0 dB)"), refC.valid() && std::abs (refShift()) > 0.01f);
+        m.addItem (7, ph.tr ("C の高さを今のスペアナ A の中域に合わせる", "Line C up with the analyzer (A) mid-band right now"), refC.valid() && spectrum.size() == fr.size());
+        m.addSeparator();
         m.addItem (5, ph.tr ("新しいフォルダを作る…", "New folder..."));
         m.addItem (4, ph.tr ("カーブのフォルダを開く（Finder での整理もメニューに反映）", "Show the curves folder (changes made there show up here)"));
         m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&refBtn), [this, uf, df, root] (int r)
@@ -2746,6 +2788,8 @@ private:
             else if (r == 2) setRef ({});
             else if (r == 3) saveRefDialog();
             else if (r == 4) { root.revealToUser(); }
+            else if (r == 6) { ph.proc.uiState.setProperty ("refShift", 0.0, nullptr); repaint(); }
+            else if (r == 7) refToAnalyzer();
             else if (r == 5)
             {
                 auto* w = new juce::AlertWindow (ph.tr ("新しいフォルダ", "New folder"), ph.tr ("場所と名前。A/B と書くと階層で作る", "Where, and a name. A/B makes levels"), juce::MessageBoxIconType::NoIcon);
@@ -2790,12 +2834,9 @@ private:
         if (refC.valid() && ! fr.empty() && ! ph.proc.earActive())
         {
             const juce::Colour cc (0xffb58cff);
-            // 1.0: C is drawn on the EQ's dB scale (it follows GAIN SCALE), centred on its own 200 Hz - 5 kHz average
-            double cs = 0; int cn = 0;
-            for (double f = 200.0; f <= 5000.0; f *= 1.1) { cs += refC.at (f); ++cn; }
-            const double centre = cn > 0 ? cs / cn : 0.0;
+            // 1.0: C is drawn on the EQ's dB scale (it follows GAIN SCALE): its 200 Hz - 5 kHz average on 0 dB, then the user's shift (drag)
             juce::ignoreUnused (ar);
-            auto y = [&] (double db) { return yOf (juce::jlimit (-(double) dbRange, (double) dbRange, db - centre)); };
+            auto y = [&] (double db) { return refYdb (db); };
             juce::Path line, band; bool first = true;
             const double lo = std::max (frange::lo, refC.pts.front().first), hi = std::min (frange::hi, refC.pts.back().first);
             std::vector<std::pair<float, float>> upper, lower;
