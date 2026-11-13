@@ -1,28 +1,40 @@
-# EQ Anatomy Lab 2（JUCE プラグイン）
+# EQ Anatomy Lab 2
 
-by Johan Plus Kei — EQ の中身を「見て・聴いて・触って」学べる VST・AU 対応プラグイン（VST3 / AU / Standalone）。[EQ Anatomy Lab](https://github.com/kazufumi01/EQAnatomyLab) の後継（別製品）。
+**by Johan Plus Kei** · VST3 / AU / Standalone · 無料 / Free
+
+🇯🇵 EQ の中身を「見て・聴いて・触って」学べるプラグイン。アナログEQ 9 機種を普通のEQバンドに分解して、その正体を確かめられます。
+🇬🇧 A plug-in for learning what an EQ really does — by seeing, hearing and touching it. Nine analog EQ models can be laid out as ordinary EQ bands, so you can see what they are made of.
+
+**[日本語](#日本語) · [English](#english) · [ダウンロード / Download](#ダウンロード--download) · [開発者向け / For developers](#開発者向け--for-developers)**
 
 ![EQ Anatomy Lab 2](docs/screenshot-main.png)
 
-## ⬇️ ダウンロード / Download
+## ダウンロード / Download
 
-**[最新版をダウンロード / Download latest](https://github.com/kazufumi01/EQAnatomyLab2/releases/latest)** — 無料配布中 / Free
+**[最新版をダウンロード / Download latest (1.0.0)](https://github.com/kazufumi01/EQAnatomyLab2/releases/latest)**
 
-| | 手動インストール（おすすめ） | インストーラー |
+| | 手動インストール（おすすめ）<br>Manual (recommended) | インストーラー<br>Installer |
 |---|---|---|
-| **Mac**（macOS 11+, Apple Silicon / Intel） | `EQAnatomyLab2v1-1.0.0-mac.zip` | `EQAnatomyLab2v1-1.0.0-mac.pkg` |
-| **Windows**（10 / 11, 64bit）⚠️未検証 | `EQAnatomyLab2v1-1.0.0-win64.zip` | `EQAnatomyLab2v1-1.0.0-win64.exe` |
+| **Mac**<br>macOS 11+, Apple Silicon / Intel | `EQAnatomyLab2v1-1.0.0-mac.zip` | `EQAnatomyLab2v1-1.0.0-mac.pkg` |
+| **Windows** ⚠️ 未検証 / untested<br>10 / 11, 64-bit | `EQAnatomyLab2v1-1.0.0-win64.zip` | `EQAnatomyLab2v1-1.0.0-win64.exe` |
 
-- 紹介記事（日本語）：**[このEQを触ると、自分に必要なEQが分かる](https://jpk.seesaa.net/article/521995892.html)**
-- インストール方法：**[INSTALL.md](INSTALL.md)**（日本語 / English）
-- DAW 上の名前は **EQ Anatomy Lab 2 v1**。β 版（EQ Anatomy Lab 2）や EQ Anatomy Lab とは別製品なので、すべて同時にインストールできます。β 版は [過去のリリース](https://github.com/kazufumi01/EQAnatomyLab2/releases) から入手できます。
-- ⚠️ **Windows 版は実機での動作確認ができていません**（自動ビルドで作成。VST3 と Standalone）。 / The Windows build is untested on real hardware.
-- Apple の公証・Windows のコード署名をしていないため、初回のみ警告が出ます。
-- 不具合・要望は [Issues](https://github.com/kazufumi01/EQAnatomyLab2/issues) へ。
+| | 日本語 | English |
+|---|---|---|
+| インストール方法 / How to install | [INSTALL.md（日本語）](INSTALL.md#日本語) | [INSTALL.md (English)](INSTALL.md#english) |
+| 紹介記事 / Article | [このEQを触ると、自分に必要なEQが分かる](https://jpk.seesaa.net/article/521995892.html) | — |
+| DAW 上の名前 / Name in your DAW | **EQ Anatomy Lab 2 v1** | **EQ Anatomy Lab 2 v1** |
+| 不具合・要望 / Bugs & requests | [Issues](https://github.com/kazufumi01/EQAnatomyLab2/issues) | [Issues](https://github.com/kazufumi01/EQAnatomyLab2/issues) |
+
+> **ご注意 / Notes**
+> - β 版（EQ Anatomy Lab 2）や [EQ Anatomy Lab](https://github.com/kazufumi01/EQAnatomyLab) とは別製品なので、すべて同時にインストールできます。β 版は [過去のリリース](https://github.com/kazufumi01/EQAnatomyLab2/releases) から。<br>It installs side by side with the beta and with EQ Anatomy Lab. Older betas are on the [Releases](https://github.com/kazufumi01/EQAnatomyLab2/releases) page.
+> - ⚠️ Windows 版は自動ビルドのみで、実機での動作確認はできていません（VST3 / Standalone）。<br>The Windows build (VST3 / Standalone) is built automatically and has not been tested on real hardware.
+> - Apple の公証・Windows のコード署名をしていないため、初回のみ警告が出ます（回避手順は INSTALL.md）。<br>The builds are not notarized or code-signed, so you will see a one-time warning (see INSTALL.md).
 
 ---
 
-## 1.0 の新機能
+## 日本語
+
+### 1.0 の新機能
 
 - **アナログEQモデル 9 種**：真空管パッシブ・マスター、精密マスタリング、固定バンドのエアリフト、英国ステップ式バスEQ、60年代スタジオ7バンド、ヴィンテージ真空管ブースト／アッテン、70年代英国インダクター、80年代英国大型卓、米国ディスクリート。実機のパネルを参考にした操作パネルと、モデルごとの回路の歪み付き（どれも学習用の汎用モデルで、特定の製品の再現ではありません）
 - **EQに展開**：アナログモデルを、普通のベル・シェルフ・カットのバンドに分解してメインEQに並べる。展開後もパネルのつまみでバンドを動かせるので、「アナログEQは普通のEQのどんな組み合わせか」がグラフの点で見える
@@ -35,7 +47,7 @@ by Johan Plus Kei — EQ の中身を「見て・聴いて・触って」学べ�
 
 ![アナログEQモデルをEQに展開](docs/screenshot-analog.png)
 
-## 主な機能
+### 主な機能
 
 - **EQ**：Bell / Shelf / Cut など。動作モードは Zero latency／Analog／Linear（リニアフェイズ）。位相はバンドごとに Min / Lin を選択
 - **ベルの傾き**：12 / 24 / 48 dB。24・48 はバンドシェルフ（中心が設定ゲインになるよう補正）
@@ -56,19 +68,55 @@ by Johan Plus Kei — EQ の中身を「見て・聴いて・触って」学べ�
 
 ---
 
-## ビルド
+## English
+
+### What's new in 1.0
+
+- **Nine analog EQ models**: tube passive mastering EQ, precision mastering EQ, fixed-band "air lift", British stepped bus EQ, '60s studio 7-band, vintage tube boost/atten, '70s British inductor EQ, '80s British large-format console and American discrete. Each has a panel inspired by the hardware and its own circuit distortion (generic educational models, not reproductions of specific products).
+- **Expand to EQ**: break an analog model down into ordinary bell / shelf / cut bands in the main EQ. The panel knobs still drive those bands afterwards, so you can see on the graph which combination of plain EQ bands an analog EQ really is.
+- **Up to 24 bands** (B9–B24 appear only when used).
+- **Analog Tube / Trans / Class A in the saturator**, using the same circuits and DRIVE scale as the analog models.
+- **Per-band curve character** (CURVE in the floating window, 11 types).
+- **Reference curve C**: drop an audio file on the graph to see its average spectral balance (silent and very quiet parts are ignored). Built-in curves include research-based averages, genres and decades.
+- **Presets**: menus by use and by analog type, ◀ ▶ stepping, and user presets / curves organized in folders (changes made in Finder are picked up).
+- **Studio Lift** skin (Studio with everything but the EQ slightly brighter), 15 skins in total.
+
+![Analog EQ model expanded into EQ bands](docs/screenshot-analog.png)
+
+### Features
+
+- **EQ**: bell, shelf, cut and more. Processing modes: Zero latency / Analog / Linear phase, with Min / Lin phase per band.
+- **Bell slopes** of 12 / 24 / 48 dB; 24 and 48 are band-shelves, corrected so the centre sits at the set gain.
+- **Dynamic EQ**, **Mid/Side** (St / M / S with SOLO) and **Transient / Body** split.
+- **Resonance suppressor (RES)**: tames only harsh resonances. Stereo / Mid / Side / M/S, sidechain detection, and a 5-node threshold curve edited right on the EQ graph.
+- **Magnitude, phase and group delay** overlaid or split, plus an impulse response to see pre-ringing.
+- **Stereo field** view (level and correlation per band, from 10 Hz), a 10 Hz–22 kHz frequency axis and A/B spectrum analyzer.
+- **Help for every part of the screen**: hover over graph points, handles, panels, axes, the analyzer or the PK / RMS / CREST / CORR meters to get an explanation with tables.
+- **Keyboard**: ↑↓ changes the last value you touched (Shift for fine steps). On graph and RES points, ↑↓ = dB and ←→ = frequency.
+- **Saturator** (band-limited, oversampled), Auto gain and Delta listening.
+- **A / B / C / D slots** with morphing, and **user presets** with a name and notes.
+- **Ear Training** and **Learn** (lessons), with Drums / Voice practice material.
+- Japanese / English UI.
+
+![Resonance suppressor](docs/screenshot-resonance.png)
+
+![Stereo field](docs/screenshot-field.png)
+
+---
+
+## 開発者向け / For developers
 
 ```bash
-./build.sh            # 手元の JUCE を使う（build.sh 内の JUCE_PATH を編集）
+./build.sh   # 手元の JUCE を使う（build.sh 内の JUCE_PATH を編集） / uses your local JUCE (edit JUCE_PATH in build.sh)
 ```
 
-- Windows は GitHub Actions（`.github/workflows/build-win.yml`、手動実行）で VST3 / Standalone をビルドし、Inno Setup でインストーラーを作成
-- Mac のインストーラー作成：`packaging/mac/build_pkg.sh [version]` ／ `packaging/mac/build_zip.sh [version]`（出力は `dist/`）
+- Windows：GitHub Actions（`.github/workflows/build-win.yml`、手動実行）で VST3 / Standalone をビルドし、Inno Setup でインストーラーを作成。<br>Windows: built by GitHub Actions (`.github/workflows/build-win.yml`, run manually); the installer is made with Inno Setup.
+- Mac：`packaging/mac/build_pkg.sh [version]` ／ `packaging/mac/build_zip.sh [version]`（出力は `dist/` / output in `dist/`）
 
-## ライセンス
+### ライセンス / License
 
-JUCE は **Starter ライセンス** で使用。配布物はフリーウェア使用許諾（`packaging/mac/resources/license.txt`）に従います。
-ソースは学習目的で公開していますが、無断での再配布・販売はできません。
+- JUCE は **Starter ライセンス** で使用。配布物はフリーウェア使用許諾（`packaging/mac/resources/license.txt`）に従います。ソースは学習目的で公開していますが、無断での再配布・販売はできません。
+- JUCE is used under the **Starter licence**. The binaries are freeware under `packaging/mac/resources/license.txt`. The source is public for learning; redistribution or sale without permission is not allowed.
 
 ---
 
