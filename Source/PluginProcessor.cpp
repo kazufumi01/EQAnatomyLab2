@@ -427,7 +427,7 @@ void EQAnatomyProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
         if (run)
         {
             float k[analog::kSlots]; for (int i = 0; i < analog::kSlots; ++i) k[i] = anKP[(size_t) i] != nullptr ? anKP[(size_t) i]->load() : 0.5f;
-            analogEq.set ((int) P (pid::anModel), k, P (pid::anDrive), P (pid::anOut));
+            analogEq.set ((int) P (pid::anModel), k, P (pid::anDrive), P (pid::anOut), P (pid::anLink) > 0.5f);
             if (! anWasOn) analogEq.reset();
             analogEq.process (oL, oR, n);
         }
@@ -568,6 +568,7 @@ void EQAnatomyProcessor::computeLatency()
 
 void EQAnatomyProcessor::timerCallback()
 {
+    if (anDirty.exchange (false)) syncAnalogLink();
     if (! dirty.exchange (false)) return;
     const auto mode = currentMode();
     const auto cm = eqcore::channelModel (currentBands(), currentQMode(), getSampleRateOrDefault(), mode, 1);
@@ -748,6 +749,7 @@ bool EQAnatomyProcessor::saveUserPreset (const juce::File& folder, const juce::S
     if (clean.isEmpty()) return false;
     juce::XmlElement x ("EQAnatomyLab2Preset");
     x.setAttribute ("name", name.trim()); x.setAttribute ("note", note);
+    x.setAttribute ("anLinkBands", uiState.getProperty ("anLinkBands", "").toString());
     for (auto* p : getParameters())
         if (auto* r = dynamic_cast<juce::RangedAudioParameter*> (p))
         {
@@ -769,6 +771,7 @@ bool EQAnatomyProcessor::loadUserPreset (const juce::File& f)
     if (x == nullptr || ! x->hasTagName ("EQAnatomyLab2Preset")) return false;
     undo.beginNewTransaction();
     resetToFlat();                    // parameters a preset does not mention go back to their defaults
+    uiState.setProperty ("anLinkBands", x->getStringAttribute ("anLinkBands"), nullptr); lastLinkModel = -1; lastLinkDrive = -1000.0f;
     for (auto* e : x->getChildWithTagNameIterator ("P"))
         if (auto* p = apvts.getParameter (e->getStringAttribute ("id")))
         { p->beginChangeGesture(); p->setValueNotifyingHost (p->convertTo0to1 ((float) e->getDoubleAttribute ("v"))); p->endChangeGesture(); }
@@ -783,6 +786,7 @@ void EQAnatomyProcessor::applyPreset (int index)
 {
     uiState.setProperty ("userPreset", juce::String(), nullptr); uiState.setProperty ("userPresetNote", juce::String(), nullptr);
     uiState.setProperty ("userPresetFile", juce::String(), nullptr);
+    uiState.setProperty ("anLinkBands", juce::String(), nullptr); lastLinkModel = -1;
     undo.beginNewTransaction();
     const auto& P = presets();
     auto apply = [this] (const PresetSlot& s)
@@ -833,7 +837,7 @@ int EQAnatomyProcessor::analogCurve (int m)
 int EQAnatomyProcessor::analogSat (int m)
 {
     const int s = analog::models()[(size_t) juce::jlimit (0, analog::kModels - 1, m)].satType;    // 1 tube, 3 transformer, else class A
-    return s == 1 ? (int) SatCore::Tube : s == 3 ? (int) SatCore::Transformer : (int) SatCore::ClassA;
+    return s == 1 ? (int) SatCore::AnTube : s == 3 ? (int) SatCore::AnTrans : (int) SatCore::AnClassA;    // the same circuit as the model
 }
 void EQAnatomyProcessor::setAllCurves (int qm)
 {
@@ -856,6 +860,112 @@ void EQAnatomyProcessor::applyAnalogModel (int m)
     set (pid::satType, (float) analogSat (m));
     dirty = true;
 }
+// ---- 1.0: the analog model expanded into main-EQ bands ----
+bool EQAnatomyProcessor::analogLinked() const { return apvts.getRawParameterValue (pid::anLink)->load() > 0.5f; }
+juce::Array<int> EQAnatomyProcessor::linkedBands() const
+{
+    juce::Array<int> a;
+    for (auto& t : juce::StringArray::fromTokens (uiState.getProperty ("anLinkBands", "").toString(), ",", ""))
+        if (t.trim().isNotEmpty()) a.add (juce::jlimit (0, eqcore::kBands - 1, t.getIntValue()));
+    return a;
+}
+bool EQAnatomyProcessor::isLinkedBand (int b) const { return analogLinked() && linkedBands().contains (b); }
+static const int* freeOrder()
+{
+    static int o[eqcore::kBands];
+    static const bool done = [] { int k = 0; for (int i = 8; i < eqcore::kBands; ++i) o[k++] = i; o[k++] = 6; o[k++] = 7; for (int i = 0; i < 6; ++i) o[k++] = i; return true; }();
+    juce::ignoreUnused (done);
+    return o;
+}
+int EQAnatomyProcessor::freeBandCount() const
+{
+    int n = 0; const auto mine = linkedBands();
+    for (int i = 0; i < eqcore::kBands; ++i) if (apvts.getRawParameterValue (pid::band (i, "on"))->load() < 0.5f || (analogLinked() && mine.contains (i))) ++n;
+    return n;
+}
+bool EQAnatomyProcessor::allocateLinkBands (int count)
+{
+    juce::Array<int> got;
+    for (int k = 0; k < eqcore::kBands && got.size() < count; ++k)
+    {
+        const int b = freeOrder()[k];
+        if (apvts.getRawParameterValue (pid::band (b, "on"))->load() < 0.5f) got.add (b);
+    }
+    if (got.size() < count) return false;
+    juce::StringArray s; for (int b : got) s.add (juce::String (b));
+    uiState.setProperty ("anLinkBands", s.joinIntoString (","), nullptr);
+    return true;
+}
+static void setIfDifferent (juce::AudioProcessorValueTreeState& apvts, const juce::String& id, float v)
+{
+    if (auto* p = apvts.getParameter (id))
+    {
+        const float nv = p->convertTo0to1 (v);
+        if (std::abs (nv - p->getValue()) > 1.0e-5f) { p->beginChangeGesture(); p->setValueNotifyingHost (nv); p->endChangeGesture(); }
+    }
+}
+bool EQAnatomyProcessor::expandAnalog()
+{
+    if (analogLinked()) return true;
+    const int m = juce::jlimit (0, analog::kModels - 1, (int) apvts.getRawParameterValue (pid::anModel)->load());
+    if (! allocateLinkBands (analog::maxSections (m))) return false;
+    setIfDifferent (apvts, pid::anLink, 1.0f);
+    setIfDifferent (apvts, pid::anOn, 1.0f);           // the stage stays in for OUT only
+    // the saturator takes the model's circuit, full band, same drive, no auto level: the same as the analog stage
+    const float drv = apvts.getRawParameterValue (pid::anDrive)->load();
+    setIfDifferent (apvts, pid::satOn, 1.0f); setIfDifferent (apvts, pid::satType, (float) analogSat (m));
+    setIfDifferent (apvts, pid::satLo, 20.0f); setIfDifferent (apvts, pid::satHi, 20000.0f);
+    setIfDifferent (apvts, pid::satDrive, drv); setIfDifferent (apvts, pid::satMix, 100.0f); setIfDifferent (apvts, pid::satAuto, 0.0f);
+    lastLinkModel = m; lastLinkDrive = drv;
+    syncAnalogLink();
+    return true;
+}
+void EQAnatomyProcessor::collapseAnalog (bool keepBands)
+{
+    const auto list = linkedBands();
+    if (! keepBands) for (int b : list) setIfDifferent (apvts, pid::band (b, "on"), 0.0f);
+    uiState.setProperty ("anLinkBands", juce::String(), nullptr);
+    setIfDifferent (apvts, pid::anLink, 0.0f);
+    if (keepBands) setIfDifferent (apvts, pid::anOn, 0.0f);          // the bands carry it on as ordinary bands
+    else if ((int) apvts.getRawParameterValue (pid::satType)->load() >= (int) SatCore::AnTube) setIfDifferent (apvts, pid::satOn, 0.0f);   // back to the analog stage's own circuit
+    lastLinkModel = -1;
+}
+void EQAnatomyProcessor::syncAnalogLink()
+{
+    if (! analogLinked()) return;
+    const int m = juce::jlimit (0, analog::kModels - 1, (int) apvts.getRawParameterValue (pid::anModel)->load());
+    float k[analog::kSlots]; for (int i = 0; i < analog::kSlots; ++i) k[i] = apvts.getRawParameterValue (pid::anK (i))->load();
+    const auto secs = analog::sections (m, k, getSampleRateOrDefault());
+    auto list = linkedBands();
+    if (list.size() != (int) secs.size())
+    {
+        // another model: give the old bands back, take new ones
+        for (int b : list) setIfDifferent (apvts, pid::band (b, "on"), 0.0f);
+        if (! allocateLinkBands ((int) secs.size())) { uiState.setProperty ("anLinkBands", juce::String(), nullptr); setIfDifferent (apvts, pid::anLink, 0.0f); return; }
+        list = linkedBands();
+    }
+    for (int i = 0; i < list.size(); ++i)
+    {
+        const auto& s = secs[(size_t) i]; const int b = list[i];
+        setIfDifferent (apvts, pid::band (b, "on"), s.on ? 1.0f : 0.0f);
+        if (! s.on) continue;
+        const bool cut = s.kind == analog::SHighPass || s.kind == analog::SLowPass;
+        const auto ty = s.kind == analog::SPeak ? eqcore::Type::Bell : s.kind == analog::SLowShelf ? eqcore::Type::LowShelf
+                      : s.kind == analog::SHighShelf ? eqcore::Type::HighShelf : s.kind == analog::SHighPass ? eqcore::Type::LowCut : eqcore::Type::HighCut;
+        setIfDifferent (apvts, pid::band (b, "type"), (float) (int) ty);
+        setIfDifferent (apvts, pid::band (b, "freq"), (float) juce::jlimit (frange::lo, frange::hi, s.f));
+        setIfDifferent (apvts, pid::band (b, "gain"), cut ? 0.0f : (float) juce::jlimit (-30.0, 30.0, s.g));
+        setIfDifferent (apvts, pid::band (b, "q"), (float) juce::jlimit (0.1, 18.0, s.q));
+        setIfDifferent (apvts, pid::band (b, "slope"), cut ? (s.order >= 4 ? 3.0f : 1.0f) : 1.0f);   // cuts 12 / 24 dB/oct, shelves 12 dB/oct
+        setIfDifferent (apvts, pid::band (b, "bslope"), 0.0f);
+        setIfDifferent (apvts, pid::band (b, "cv"), 0.0f);           // Clean Const: the section is already the analog shape
+        for (auto* w : { "dyn", "ch", "phase", "tb" }) setIfDifferent (apvts, pid::band (b, w), 0.0f);
+    }
+    if (m != lastLinkModel) { setIfDifferent (apvts, pid::satType, (float) analogSat (m)); lastLinkModel = m; }
+    const float drv = apvts.getRawParameterValue (pid::anDrive)->load();
+    if (std::abs (drv - lastLinkDrive) > 1.0e-3f) { setIfDifferent (apvts, pid::satDrive, drv); lastLinkDrive = drv; }
+}
+
 void EQAnatomyProcessor::stepPreset (int dir)
 {
     const auto& order = presetOrder();
@@ -909,6 +1019,7 @@ void EQAnatomyProcessor::applyLesson (int index)
     set (pid::mode, (float) ls.mode);
     if (ls.res >= 0) set (pid::res, (float) ls.res);
     set (pid::qmode, (float) ls.qmode); setAllCurves (ls.qmode);
+    if (analogLinked()) collapseAnalog (false);
     set (pid::bypass, 0); set (pid::delta, 0); set (pid::preSolo, 0);
     set (pid::satOn, ls.sat.on ? 1.0f : 0.0f); set (pid::satDelta, 0);
     if (ls.sat.on)

@@ -11,6 +11,7 @@
 //    3 Bridge        Meter A. Bridge: warm charcoal, cream VU-face graph
 //    4 Blueprint     Meter B. Lab: blue-grey paper, bronze accent
 //    5 Lesson Warm   B改 / A改: warm dark with the lesson card's amber
+//   14 Studio Lift   (1.0) Studio, everything but the EQ graph a step lighter
 //  The colours are variables so the whole editor can switch at run time.
 // =============================================================================
 namespace theme
@@ -21,18 +22,18 @@ inline bool lightPanels = false;
 inline int current = 0;
 inline std::array<juce::uint32, 8> bands { 0xff8f86e6, 0xff55b7c5, 0xff7cc66f, 0xffe48f5c, 0xffef7a6e, 0xffde8fbd, 0xffc9b458, 0xff8aa0d8 };
 
-inline int numSkins() { return 14; }
+inline int numSkins() { return 15; }
 inline const char* skinName (int i)
 {
     static const char* n[] = { "Studio", "Lab Light", "Studio Night", "Bridge", "Blueprint", "Lesson Warm",
                                "Frame Graphite", "Frame Navy", "Bright Edge", "Frame Silver",
-                               "Soft Grey", "Soft Sand", "Soft Sage", "Soft Dusk" };
-    return n[juce::jlimit (0, 13, i)];
+                               "Soft Grey", "Soft Sand", "Soft Sage", "Soft Dusk", "Studio Lift" };
+    return n[juce::jlimit (0, numSkins() - 1, i)];
 }
 
 inline void setSkin (int i)
 {
-    current = juce::jlimit (0, 13, i);
+    current = juce::jlimit (0, numSkins() - 1, i);
     struct P { juce::uint32 bg, header, panel, well, line, grid, zero, text, muted, faint, accent, onAccent, pre, phase,
                lessonBg, lessonLn, sat, ok, side, analyzer, popup, live, splitWell; bool light; std::array<juce::uint32, 8> b; };
     static const std::array<juce::uint32, 8> darkBands { 0xff8f86e6, 0xff55b7c5, 0xff7cc66f, 0xffe48f5c, 0xffef7a6e, 0xffde8fbd, 0xffc9b458, 0xff8aa0d8 };
@@ -75,6 +76,9 @@ inline void setSkin (int i)
         // 13 Soft Dusk: blue-grey paper, slate-blue accent
         { 0xffbcc5d0, 0xffc7cfd8, 0xffd1d8e0, 0xffd9dfe6, 0xff98a5b4, 0xffc5cdd7, 0xff8d9aaa, 0xff18212d, 0xff47546a, 0xff657187, 0xff355e9c, 0xffffffff, 0xffa5382f, 0xff8a6d12,
           0xffe3ded4, 0xffbfae8e, 0xffad640d, 0xff357a33, 0xff1f6f8a, 0xffb8c2ce, 0xffdde3e9, 0xff18212d, 0xffcdd4dc, true, inkBands },
+        // 14 Studio Lift (1.0): Studio with the window, header, panels, lines and text a step lighter; the EQ graph (well, grid, analyzer) unchanged
+        { 0xff22262b, 0xff2a2f36, 0xff2a2f36, 0xff0d0f12, 0xff3c424b, 0xff1d2126, 0xff353a42, 0xffefece6, 0xffa3a8b0, 0xff858b94, 0xfff0b34a, 0xff1a1306, 0xffef7a6e, 0xffe9cf6a,
+          0xff2a2822, 0xff6a5428, 0xffe8a33a, 0xff8fc779, 0xff6fc3d6, 0xff2a2e35, 0xff2a2f36, 0xfffff1d6, 0xff0b0d10, false, darkBands },
     };
     const auto& s = p[current];
     auto C = [] (juce::uint32 v) { return juce::Colour (v); };
@@ -188,7 +192,12 @@ inline juce::Colour onWell() { return well.getPerceivedBrightness() > 0.6f ? juc
 inline juce::Colour shade (float a)  { return lightPanels ? juce::Colours::black.withAlpha (a * 0.25f) : juce::Colours::black.withAlpha (a); }
 inline juce::Colour hilite (float a) { return lightPanels ? juce::Colours::black.withAlpha (a * 0.6f) : juce::Colours::white.withAlpha (a); }
 
-inline juce::Colour bandColour (int i) { return juce::Colour (bands[(size_t) juce::jlimit (0, 7, i)]); }
+inline juce::Colour bandColour (int i)       // 1.0: 24 bands; 9-16 and 17-24 reuse the eight colours, a little lighter each round
+{
+    i = juce::jmax (0, i);
+    const auto c = juce::Colour (bands[(size_t) (i % 8)]);
+    return i < 8 ? c : c.interpolatedWith (text, 0.16f * (float) (i / 8));
+}
 
 inline juce::Font ui (float size, bool bold = false)
 {

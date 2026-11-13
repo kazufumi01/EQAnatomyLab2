@@ -281,14 +281,14 @@ public:
         curveBtn.getProperties().set ("fontPx", full ? 10.0 : 10.5);
         if (! full) addAndMakeVisible (curveBtn);
         setHelp (curveBtn, "CURVE", "このバンドのカーブの性格（バンドごとに選べる）。同じ数値でも、ゲインに対する幅の変わり方やシェルフの肩の形が変わる。\n"
-                 "| カーブ | 傾向 |\n| Clean Const／Prop | 一定 Q／比例 Q |\n| British A | 広いベル、シェルフの肩（Neve 1073 系） |\n| US 500 | 強い比例 Q（API 550 系） |\n| Console E | 比例寄りのベル、くっきりしたシェルフ（SSL 系） |\n"
-                 "| Tube Passive | ブーストが広く、低域のブーストとカットが干渉（Pultec 系） |\n| Precision | 色付けのない一定 Q（Sontec 系） |\n| Passive Master | 小さい量は広く、大きいほど締まる（Massive Passive 系） |\n"
-                 "| Air Band | とても広いベルとなだらかなシェルフ（Maag 系） |\n| British Curve | 広いブーストと締まったカット、肩のあるシェルフ（Curve Bender 系） |\n| Program 7 | いちばん広く重なるベル（Hitsville 系） |\n"
+                 "| カーブ | 傾向 |\n| Clean Const／Prop | 一定 Q／比例 Q |\n| 70s British Inductor | 広いベル、シェルフの肩（70年代英国卓のインダクターEQ） |\n| American Discrete | 強い比例 Q で押し出す（米国ディスクリート卓） |\n| 80s British Console | 比例寄りのベル、くっきりしたシェルフ（80年代英国大型卓） |\n"
+                 "| Vintage Tube | ブーストが広く、低域のブーストとカットが干渉（50〜60年代の真空管プログラムEQ） |\n| Precision Master | 色付けのない一定 Q（精密マスタリングEQ） |\n| Passive Tube Master | 小さい量は広く、大きいほど締まる（真空管パッシブ・マスタリング） |\n"
+                 "| Air Lift | とても広いベルとなだらかなシェルフ（超高域のエアEQ） |\n| British Stepped Bus | 広いブーストと締まったカット、肩のあるシェルフ（バス向け英国ステップEQ） |\n| 60s Studio | いちばん広く重なるベル（60年代スタジオの自作卓） |\n"
                  "アナログEQのモデルやプリセットを選ぶと、全バンドがそのモデルのカーブになる。Option＋クリックで Clean Const。カーブの形の傾向だけで、機材の音そのものではない",
                  "This band's curve character (each band has its own). The same numbers change how the width follows the gain and how a shelf's shoulder looks.\n"
-                 "| Curve | Tendency |\n| Clean Const / Prop | constant Q / proportional Q |\n| British A | broad bells, shelf shoulder (Neve 1073 style) |\n| US 500 | strongly proportional Q (API 550 style) |\n| Console E | mildly proportional bells, crisp shelves (SSL style) |\n"
-                 "| Tube Passive | broad boosts, low boost and cut interact (Pultec style) |\n| Precision | uncoloured constant Q (Sontec style) |\n| Passive Master | wide at small gains, tighter as it goes (Massive Passive style) |\n"
-                 "| Air Band | very wide bells, gentle shelves (Maag style) |\n| British Curve | broad boosts, firmer cuts, shouldered shelves (Curve Bender style) |\n| Program 7 | the widest, overlapping bells (Hitsville style) |\n"
+                 "| Curve | Tendency |\n| Clean Const / Prop | constant Q / proportional Q |\n| 70s British Inductor | broad bells, shelf shoulder (1970s British inductor desks) |\n| American Discrete | strongly proportional Q, punch (American discrete desks) |\n| 80s British Console | mildly proportional bells, crisp shelves (1980s large British consoles) |\n"
+                 "| Vintage Tube | broad boosts, low boost and cut interact (1950s-60s tube program EQs) |\n| Precision Master | uncoloured constant Q (precision mastering EQs) |\n| Passive Tube Master | wide at small gains, tighter as it goes (passive tube mastering) |\n"
+                 "| Air Lift | very wide bells, gentle shelves (ultra-high air EQs) |\n| British Stepped Bus | broad boosts, firmer cuts, shouldered shelves (stepped British bus EQs) |\n| 60s Studio | the widest, overlapping bells (1960s home-built studio desks) |\n"
                  "Choosing an analog EQ model or preset sets every band to that model's curve. Option+click: Clean Const. Shape tendencies only, not the sound of the hardware");
         scopeBtn.setButtonText ("T/B Scope"); scopeBtn.setClickingTogglesState (false);
         scopeBtn.onClick = [this] { ph.proc.uiState.setProperty ("scope", ! (bool) ph.proc.uiState.getProperty ("scope", false), nullptr); };
@@ -580,7 +580,8 @@ public:
             g.setColour (theme::bandColour (band));
             if (bandOn) g.fillEllipse (d); else g.drawEllipse (d.reduced (0.75f), 1.5f);
             g.setColour (bandOn ? theme::text : theme::muted); g.setFont (theme::ui (12.0f, true));
-            g.drawText ("B" + juce::String (band + 1), 38, 3, 24, 20, juce::Justification::centredLeft);
+            if (ph.proc.isLinkedBand (band)) g.setColour (juce::Colour (0xff6fd3a4));     // green = a band expanded from the analog panel
+            g.drawText ("B" + juce::String (band + 1), 38, 3, 28, 20, juce::Justification::centredLeft);
             return;
         }
         // ---- extension panel (looks like the floating panel above it)
@@ -654,7 +655,7 @@ public:
     {
         if (! full)
         {
-            type.setBounds (64, 3, 132, 20);
+            type.setBounds (68, 3, 128, 20);
             soloBtn.setBounds (getWidth() - 60, 3, 52, 20);
             const int w = (getWidth() - 24) / 3, y = 31, h = 38;
             fq.setBounds (8, y, w, h); gn.setBounds (12 + w, y, w, h); qv.setBounds (16 + 2 * w, y, w, h);
@@ -720,10 +721,13 @@ private:
         const int cv = (int) ph.value (pid::band (band, "cv"));
         juce::PopupMenu m;
         m.addSectionHeader (ph.tr ("このバンドのカーブ", "This band's curve"));
-        static const char* fam[] = { "", "", "Neve 1073", "API 550", "SSL E / G", "Pultec EQP-1A", "Sontec", "Massive Passive", "Maag EQ4", "Curve Bender", "Hitsville" };
+        static const char* hj[] = { "一定 Q", "比例 Q", "広いベル、肩のあるシェルフ", "強い比例 Q、押し出し", "比例寄りのベル、くっきりしたシェルフ", "広いブースト、低域のブーストとカットが干渉",
+                                    "色付けのない一定 Q", "小さい量は広く、大きいほど締まる", "とても広いベル、なだらかなシェルフ", "広いブーストと締まったカット", "いちばん広く重なるベル" };
+        static const char* he[] = { "constant Q", "proportional Q", "broad bells, shouldered shelves", "strongly proportional Q, punch", "mildly proportional bells, crisp shelves", "broad boosts, low boost and cut interact",
+                                    "uncoloured constant Q", "wide at small gains, tighter as it goes", "very wide bells, gentle shelves", "broad boosts, firmer cuts", "the widest, overlapping bells" };
         for (int i = 0; i < eqcore::kCurves; ++i)
         {
-            juce::String t (eqcore::curveName (i)); if (fam[i][0] != 0) t << "   (" << ph.tr ("参考：", "after ") << fam[i] << ")";
+            juce::String t (eqcore::curveName (i)); t << juce::String::fromUTF8 ("   \xe2\x80\x94 ") << ph.tr (hj[i], he[i]);
             m.addItem (i + 1, t, true, i == cv);
             if (i == 1 || i == 6) m.addSeparator();
         }
@@ -773,7 +777,7 @@ public:
         onBtn.onClick = [this] { ph.toggleGesture (pid::satOn); }; markReset (onBtn);
         deltaBtn.onClick = [this] { ph.toggleGesture (pid::satDelta); }; markReset (deltaBtn);
         autoBtn.onClick = [this] { ph.toggleGesture (pid::satAuto); }; markReset (autoBtn);
-        type.addItemList ({ "Tape", "Tube", "Clip", "Transformer", "Class A", "Exciter" }, 1);
+        type.addItemList ({ "Tape", "Tube", "Clip", "Transformer", "Class A", "Exciter", "Analog Tube", "Analog Trans", "Analog Class A" }, 1);
         markReset (type); type.onAlt = [this] { ph.resetDefault (pid::satType); };
         type.onChange = [this] { ph.setGesture (pid::satType, (float) (type.getSelectedId() - 1)); };
         lo.setParam (pid::satLo); hi.setParam (pid::satHi); drive.setParam (pid::satDrive); mix.setParam (pid::satMix); os.setParam (pid::satOS);
@@ -783,8 +787,8 @@ public:
         mix.format = [] (float v) { return juce::String ((int) std::round (v)) + " %"; };
         for (auto* d : { &lo, &hi, &drive, &mix }) { d->compact = true; d->valueRole = 1; addAndMakeVisible (*d); }
         setHelp (onBtn, "SAT", "帯域サチュレーターのオン・オフ。EQ の後ろで、選んだ帯域だけを歪ませる", "Band saturator on/off. After the EQ, drives only the chosen band");
-        setHelp (type, "SAT TYPE", "Tape：対称でなめらか／Tube：非対称、強く入れるほど太く／Clip：硬い／Transformer：低域ほど飽和しやすい／Class A：軽く入れても少し色が付く／Exciter：LOW より上に倍音だけを足す。注意：特定の機材の再現ではなく、回路の傾向を示すモデル",
-                 "Tape: smooth / Tube: asymmetric, fatter when pushed / Clip: hard / Transformer: lows saturate first / Class A: a little colour even when light / Exciter: adds harmonics above LOW only. Careful: tendencies, not models of specific units");
+        setHelp (type, "SAT TYPE", "Tape：対称でなめらか／Tube：非対称、強く入れるほど太く／Clip：硬い／Transformer：低域ほど飽和しやすい／Class A：軽く入れても少し色が付く／Exciter：LOW より上に倍音だけを足す。\n| Analog 系 | アナログEQパネルと同じ回路 |\n| Analog Tube | 真空管系のモデル（Passive Tube Master・60s Studio・Vintage Tube）と同じかかり方 |\n| Analog Trans | トランス系（British Stepped Bus・70s British Inductor・American Discrete）と同じ |\n| Analog Class A | Class A 系（Precision Master・Air Lift・80s British Large Console）と同じ |\nAnalog 系の DRIVE はアナログパネルの DRIVE と同じ目盛り。LOW 20 Hz・HIGH 20 kHz・MIX 100 %・Auto lvl オフで、アナログ段とまったく同じかかり方になる。注意：特定の機材の再現ではなく、回路の傾向を示すモデル",
+                 "Tape: smooth / Tube: asymmetric, fatter when pushed / Clip: hard / Transformer: lows saturate first / Class A: a little colour even when light / Exciter: adds harmonics above LOW only.\n| Analog types | the analog panel's circuits |\n| Analog Tube | as the tube models (Passive Tube Master, 60s Studio, Vintage Tube) |\n| Analog Trans | as the transformer models (British Stepped Bus, 70s British Inductor, American Discrete) |\n| Analog Class A | as the class-A models (Precision Master, Air Lift, 80s British Large Console) |\nTheir DRIVE reads like the analog panel's DRIVE. With LOW 20 Hz, HIGH 20 kHz, MIX 100 % and Auto lvl off they drive exactly like the analog stage. Careful: tendencies, not models of specific units");
         setHelp (lo, "LOW", "歪ませる帯域の下端。グラフ上部の SAT タブでも動かせる。Exciter ではここより上だけに倍音を足す", "Low edge of the driven band (also the SAT tab). Exciter adds harmonics only above it");
         setHelp (hi, "HIGH", "歪ませる帯域の上端。グラフ上部の SAT タブでも動かせる", "High edge of the driven band. Also the SAT tab at the top of the graph");
         setHelp (drive, "DRIVE", "歪みの量。小さい音の音量は変えずに、どれだけ潰すかだけを変える", "Amount of distortion; quiet material keeps its level");
@@ -874,7 +878,8 @@ public:
         g.setColour (theme::well); g.fillRoundedRectangle (c, 3.0f);
         g.setColour (theme::grid); g.drawLine (c.getX(), c.getCentreY(), c.getRight(), c.getCentreY()); g.drawLine (c.getCentreX(), c.getY(), c.getCentreX(), c.getBottom());
         g.setColour (theme::faint); g.drawLine (c.getX(), c.getBottom(), c.getRight(), c.getY(), 0.8f);
-        const float gd = juce::Decibels::decibelsToGain (ph.value (pid::satDrive)); const int t = (int) ph.value (pid::satType);
+        const int t = (int) ph.value (pid::satType);
+        const float gd = juce::Decibels::decibelsToGain (ph.value (pid::satDrive) - (t >= (int) SatCore::AnTube ? 12.0f : 0.0f));
         juce::Path p;
         for (int i = 0; i <= 40; ++i)
         {
@@ -884,13 +889,15 @@ public:
         }
         g.setColour (theme::sat); g.strokePath (p, juce::PathStrokeType (1.5f));
         static const char* ja[] = { "対称でなめらか。奇数倍音が中心", "非対称。偶数倍音が出て、強く入れるほど太くなる", "硬く角のある歪み",
-                                    "低域ほど飽和しやすい。低音の太さと密度感", "軽く入れても少し色が付く。中低域の厚み", "倍音だけを LOW より上に足す。こもらずに抜けが増える" };
+                                    "低域ほど飽和しやすい。低音の太さと密度感", "軽く入れても少し色が付く。中低域の厚み", "倍音だけを LOW より上に足す。こもらずに抜けが増える",
+                                    "アナログEQの真空管系と同じ回路。偶数倍音、DRIVE はパネルと同じ目盛り", "アナログEQのトランス系と同じ回路。奇数倍音で太く", "アナログEQの Class A 系と同じ回路。薄く色を足す" };
         static const char* en[] = { "Symmetric and smooth; mostly odd harmonics", "Asymmetric; even harmonics, fatter when pushed", "Hard, edgy clipping",
-                                    "Lows saturate first: weight and density", "A little colour even when light: low-mid body", "Adds harmonics above LOW only: more air without mud" };
+                                    "Lows saturate first: weight and density", "A little colour even when light: low-mid body", "Adds harmonics above LOW only: more air without mud",
+                                    "The analog EQ's tube circuit: even harmonics, DRIVE on the panel's scale", "The analog EQ's transformer circuit: odd harmonics, weight", "The analog EQ's class-A circuit: a light tint" };
         if (! textArea.isEmpty())
         {
             g.setColour (theme::muted); g.setFont (theme::ui (10.0f));
-            g.drawFittedText (juce::String::fromUTF8 (ph.ja() ? ja[juce::jlimit (0, 5, t)] : en[juce::jlimit (0, 5, t)]), textArea, juce::Justification::centredLeft, 3, 0.9f);
+            g.drawFittedText (juce::String::fromUTF8 (ph.ja() ? ja[juce::jlimit (0, 8, t)] : en[juce::jlimit (0, 8, t)]), textArea, juce::Justification::centredLeft, 3, 0.9f);
         }
     }
 private:
@@ -915,8 +922,8 @@ public:
         addChildComponent (anPanel);
         anViewBtn.setClickingTogglesState (false); anViewBtn.setButtonText ("Analog"); addAndMakeVisible (anViewBtn);
         anViewBtn.onClick = [this] { lowerToggle (3); };
-        setHelp (anViewBtn, "ANALOG", "下の枠にアナログEQモデルのパネルを出す。メインEQの後ろに、実機の考え方を参考にしたEQ＋回路の色付けを足す。\n| モデル | 系統 |\n| Passive Mastering | Massive Passive 系 |\n| Precision Parametric | Sontec 系 |\n| Air Band | Maag EQ4 系 |\n| British Curve | Curve Bender 系 |\n| Program 7-Band | Hitsville EQ のモデリング元の系統 |\n| Tube Program | Pultec EQP-1A 系 |\n| British Console A | Neve 1073 系 |\n| British Console E | SSL E / G 系 |\n| American Console | API 550 系 |\nオンの間、グラフにそのカーブ（点線）が出る",
-                 "Shows the analog EQ model's panel in the lower view: an EQ plus circuit colour after classic hardware, added after the main EQ.\n| Model | Family |\n| Passive Mastering | Massive Passive style |\n| Precision Parametric | Sontec style |\n| Air Band | Maag EQ4 style |\n| British Curve | Curve Bender style |\n| Program 7-Band | the family modelled by Hitsville EQ |\n| Tube Program | Pultec EQP-1A style |\n| British Console A | Neve 1073 style |\n| British Console E | SSL E / G style |\n| American Console | API 550 style |\nWhile on, its curve is drawn on the graph (dotted)");
+        setHelp (anViewBtn, "ANALOG", "下の枠にアナログEQモデルのパネルを出す。メインEQの後ろに、実機の考え方を参考にしたEQ＋回路の色付けを足す。\n| モデル | タイプ・用途 |\n| Passive Tube Master | 真空管で持ち上げる、4バンドのパッシブ・マスタリングEQ |\n| Precision Master 3-Band | 色付けの少ない、精密なマスタリング用パラメトリック |\n| Fixed-Band Air Lift | 幅の広い固定6バンドと、超高域から持ち上げる AIR |\n| British Stepped Bus | ミックスバスやドラム向けの、ステップ式の英国コンソール系カーブ |\n| 60s Studio 7-Band | 60年代スタジオの自作コンソールEQ（2 dB ステップ） |\n| Vintage Tube Boost/Atten | 50〜60年代の真空管プログラムEQ（同じ低域をブーストとアッテン） |\n| 70s British Inductor | 70年代英国卓の、インダクターと Class A のチャンネルEQ |\n| 80s British Large Console | 80年代の大型コンソールの、4バンド・チャンネルEQ |\n| American Discrete Punch | ステップ式と比例 Q の、米国ディスクリート卓EQ |\nオンの間、グラフにそのカーブ（点線）が出る",
+                 "Shows the analog EQ model's panel in the lower view: an EQ plus circuit colour after classic hardware, added after the main EQ.\n| Model | Kind / use |\n| Passive Tube Master | passive 4-band mastering EQ with a tube make-up stage |\n| Precision Master 3-Band | clean, exact solid-state mastering parametric |\n| Fixed-Band Air Lift | six wide fixed bands plus an ultra-high AIR shelf |\n| British Stepped Bus | stepped British console curves for the mix bus and drums |\n| 60s Studio 7-Band | a 1960s studio's home-built console EQ, 2 dB steps |\n| Vintage Tube Boost/Atten | a 1950s-60s tube program EQ: boost and attenuate the same lows |\n| 70s British Inductor | the class-A inductor channel EQ of 1970s British desks |\n| 80s British Large Console | the four-band channel EQ of large 1980s consoles |\n| American Discrete Punch | a discrete American console EQ: stepped, proportional Q |\nWhile on, its curve is drawn on the graph (dotted)");
         addAndMakeVisible (refBtn); refBtn.getProperties().set ("chevron", 1);
         refBtn.onClick = [this] { refMenu(); };
         setHelp (refBtn, "REFERENCE C", "参照カーブ C。音声ファイルの平均的な周波数の特徴（または内蔵の参考カーブ）を、EQ の dB 目盛りで重ねる（GAIN SCALE を変えると C の縦の大きさも変わる。200 Hz〜5 kHz の平均を 0 dB の線にそろえる）。\n| 操作 | 結果 |\n| ファイルをグラフにドロップ | 解析して C に表示 |\n| メニュー → 読み込み | 同じ（WAV / AIFF / FLAC / MP3 / OGG） |\n| メニュー → 保存 | 今の C をプリセットとして登録 |\n無音と、平均より 20 dB 以上小さい部分は解析に含めない。C は「偏りを確かめる目安」で、完全に合わせる正解線ではない",
@@ -1213,8 +1220,8 @@ public:
         const bool split = lastSplit;
         const bool ear = ph.proc.earActive();
 
-        // analyzer (full height, under the panel)
-        const auto ar = fullPlot();
+        // analyzer: full height, or (1.0) fitted above the lower panel when one is shown, so the whole spectrum stays in the main view
+        const auto ar = panelShown() ? fullPlot().withBottom (panelArea().getY() - 6) : fullPlot();
         if (! ear)
         {
             juce::Path p; p.startNewSubPath (ar.getX(), ar.getBottom());
@@ -1712,7 +1719,7 @@ public:
         if (p.what >= 3) return;
         if (p.band >= 0 && p.what == 0) { const int b = p.band; ph.setGesture (pid::band (b, "on"), ph.value (pid::band (b, "on")) > 0.5f ? 0.0f : 1.0f); return; }
         for (int i = 0; i < eqcore::kBands; ++i)
-            if (ph.value (pid::band (i, "on")) < 0.5f)
+            if (ph.value (pid::band (i, "on")) < 0.5f && ! ph.proc.isLinkedBand (i))
             {
                 const auto pr = plot();
                 // the shape follows the frequency clicked: < 45 Hz low cut, < 180 Hz low shelf, < 6 kHz bell, < 14 kHz high shelf, above that high cut
@@ -2648,7 +2655,7 @@ private:
     void updateAnalogAndRef()
     {
         // the analog stage's filter curve (drawn dotted on the graph while the stage is on)
-        anShown = ph.value (pid::anOn) > 0.5f;
+        anShown = ph.value (pid::anOn) > 0.5f && ph.value (pid::anLink) < 0.5f;   // expanded: the bands themselves show it
         if (anShown && ! fr.empty())
         {
             float k[analog::kSlots]; for (int i = 0; i < analog::kSlots; ++i) k[i] = ph.value (pid::anK (i));

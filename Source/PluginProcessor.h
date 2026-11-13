@@ -338,6 +338,15 @@ public:
     static int analogSat (int model);       // BandSaturator type for each analog model
     // presets in the order of the menu (factory by use, then user files), for the < > buttons
     void stepPreset (int dir);
+    // 1.0: expand the analog model into main-EQ bands. The panel then drives those bands live (and the saturator, with
+    // the model's circuit). Free bands are taken from 9 up, then 7-8, then 1-6.
+    bool expandAnalog();                         // false: not enough free bands
+    void collapseAnalog (bool keepBands);        // keepBands: leave them as ordinary bands; else remove them and go back to the analog stage
+    void syncAnalogLink();                       // message thread
+    bool analogLinked() const;
+    juce::Array<int> linkedBands() const;
+    bool isLinkedBand (int b) const;
+    int freeBandCount() const;
     void applyPreset (int index);               // −1 = flat
     // user presets: one XML file per preset (every parameter except Bypass / Delta / Pre-ring solo), with an optional note
     static juce::File userPresetDir();
@@ -347,7 +356,10 @@ public:
     void resetToFlat();
 
 private:
-    void parameterChanged (const juce::String&, float) override { dirty = true; }
+    void parameterChanged (const juce::String& id, float) override { dirty = true; if (id.startsWith ("an_")) anDirty = true; }
+    std::atomic<bool> anDirty { false };
+    int lastLinkModel = -1; float lastLinkDrive = -1000.0f;
+    bool allocateLinkBands (int count);
     void timerCallback() override;
     void run() override;                 // builds FIR kernels off the audio thread
     std::array<IIRChain::Target, eqcore::kBands> targets() const;

@@ -24,13 +24,15 @@ struct PresetDef
     int model = -1;                // 1.0: the analog EQ model it uses (−1 none): listed under that type too
 };
 
-// an analog model's values: every slot (the model's default unless given, as a real value), on, drive
-inline PV analogPV (int model, std::vector<std::pair<int, float>> v, float drive)
+// an analog model's values: every slot (the model's default unless given, as a real value), on, drive, and the band saturator's range
+struct SatRange { float lo, hi, drive, mix; };   // the band saturator: its range (Hz), drive (dB) and mix (%)
+inline PV analogPV (int model, std::vector<std::pair<int, float>> v, float drive, SatRange sat)
 {
     static const char* K[] = { "an_k1", "an_k2", "an_k3", "an_k4", "an_k5", "an_k6", "an_k7", "an_k8",
                                "an_k9", "an_k10", "an_k11", "an_k12", "an_k13", "an_k14", "an_k15", "an_k16" };
     const auto& M = analog::models()[(size_t) model];
-    PV p { { "an_on", 1.0f }, { "an_model", (float) model }, { "an_drive", drive } };
+    PV p { { "an_on", 1.0f }, { "an_model", (float) model }, { "an_drive", drive },
+           { "sat_on", 1.0f }, { "sat_lo", sat.lo }, { "sat_hi", sat.hi }, { "sat_drive", sat.drive }, { "sat_mix", sat.mix } };   // the type follows the model
     for (int i = 0; i < (int) M.slots.size() && i < 16; ++i)
     {
         float n = M.slots[(size_t) i].def;
@@ -110,7 +112,7 @@ inline const std::vector<PresetDef>& presetDefs()
         { 1, "ベースのラインを見えるように", "Bass: making the line audible",
           "量感を足しながらもたつきを減らし、小さい音量でもラインが聞こえるようにする", "Adds weight without flab and keeps the line audible at low volume",
           "バンド 4 を 700 Hz〜1.2 kHz で動かし、小さい音量でもラインが聞こえる所を探す", "Move band 4 between 700 Hz and 1.2 kHz until the line reads at low volume",
-          "Tube Passive カーブのため、バンド 1 と 2 のブーストとカットが干渉して 45 Hz 付近の山と 100 Hz 付近のへこみができる", "In Tube Passive, bands 1 and 2 interact: a bump near 45 Hz and a dip near 100 Hz",
+          "Vintage Tube カーブのため、バンド 1 と 2 のブーストとカットが干渉して 45 Hz 付近の山と 100 Hz 付近のへこみができる", "In Vintage Tube, bands 1 and 2 interact: a bump near 45 Hz and a dip near 100 Hz",
           3, { { "qmode", 5 }, { "b1_on", 1 }, { "b1_type", 1 }, { "b1_freq", 60 }, { "b1_gain", 4 }, { "b1_q", 0.7f },
                { "b2_on", 1 }, { "b2_type", 1 }, { "b2_freq", 60 }, { "b2_gain", -3 }, { "b2_q", 0.7f },
                { "b4_on", 1 }, { "b4_type", 0 }, { "b4_freq", 800 }, { "b4_gain", 2.5f }, { "b4_q", 1.2f } }, {} },
@@ -156,7 +158,7 @@ inline const std::vector<PresetDef>& presetDefs()
           { { { "mode", 0 } }, { { "mode", 1 } }, { { "mode", 2 } } } },
 
         { 5, "カーブの性格比較（A〜D とモーフ）", "Curve character (A–D and morph)",
-          "同じ数値を A＝Clean、B＝British A、C＝US 500、D＝Tube Passive で比べる", "The same numbers as A = Clean, B = British A, C = US 500, D = Tube Passive",
+          "同じ数値を A＝Clean、B＝70s British Inductor、C＝American Discrete、D＝Vintage Tube で比べる", "The same numbers as A = Clean, B = 70s British Inductor, C = American Discrete, D = Vintage Tube",
           "スロットを切り替えるか、MORPH で A から B へ連続して変える", "Switch slots, or use MORPH to slide from A to B",
           "カーブの形の傾向だけで、機材の音そのものではない", "Shape tendencies only, not the sound of the hardware",
           2, { { "b2_on", 1 }, { "b2_type", 1 }, { "b2_freq", 100 }, { "b2_gain", 6 }, { "b2_q", 0.7f },
@@ -190,113 +192,113 @@ inline const std::vector<PresetDef>& presetDefs()
           -1, { { "rs_on", 1 }, { "rs_mode", 0 }, { "rs_sc", 1 }, { "rs_depth", 5 }, { "rs_thr", 2 }, { "rs_lo", 250 }, { "rs_hi", 6000 }, { "rs_sel", 20 }, { "rs_att", 5 }, { "rs_rel", 150 } }, {} },
 
         // ---------------------------------------------------------------- 1.0: analog EQ models (by type and by use)
-        { 3, "マスターの艶と重心（パッシブ）", "Master sheen and weight (passive)",
+        { 3, "マスターの艶と重心（真空管パッシブ）", "Master sheen and weight (passive tube)",
           "ミックス全体の低域に重心を、最上部に艶を、パッシブ回路のなだらかなカーブで足す", "Adds weight to the lows and sheen to the very top of a whole mix, with the gentle curves of a passive circuit",
           "4 列目（シェルフ）の GAIN を 0〜+3 dB で動かし、艶の量を決める", "Move column 4's GAIN (a shelf) between 0 and +3 dB to set the sheen",
           "マスターでは各 2 dB 前後まで。DRIVE を上げたら OUT で音量をそろえて比べる", "On a master keep each move around 2 dB. If you raise DRIVE, match the level with OUT before comparing",
-          -1, analogPV (0, { { 0, 1.5f }, { 1, 39.0f }, { 3, 1.0f }, { 4, -1.0f }, { 5, 330.0f }, { 6, 0.7f }, { 7, 0.0f }, { 12, 2.0f }, { 13, 16000.0f }, { 15, 1.0f } }, 4.0f), {}, 0 },
+          -1, analogPV (0, { { 0, 1.5f }, { 1, 39.0f }, { 3, 1.0f }, { 4, -1.0f }, { 5, 330.0f }, { 6, 0.7f }, { 7, 0.0f }, { 12, 2.0f }, { 13, 16000.0f }, { 15, 1.0f } }, 4.0f, { 40.0f, 12000.0f, 3.0f, 40.0f }), {}, 0 },
 
-        { 1, "ボーカルの太さと抜け（パッシブ）", "Vocal body and clarity (passive)",
+        { 1, "ボーカルの太さと抜け（真空管パッシブ）", "Vocal body and clarity (passive tube)",
           "胸の太さと、言葉の抜けを、広いベルでなめらかに足す", "Adds chest and intelligibility with broad, smooth bells",
           "3 列目の FREQ を 2〜5 kHz で動かし、言葉がはっきりする所で止める", "Sweep column 3's FREQ between 2 and 5 kHz and stop where the words come clear",
           "BW を狭めると色が強くなる。歯擦音が増えたら 4 列目を下げる", "Narrow BW and the colour gets stronger; if sibilance grows, lower column 4",
-          -1, analogPV (0, { { 4, 2.0f }, { 5, 220.0f }, { 6, 1.0f }, { 8, 2.5f }, { 9, 3300.0f }, { 10, 0.7f }, { 12, 2.0f }, { 13, 12000.0f }, { 15, 1.0f } }, 4.0f), {}, 0 },
+          -1, analogPV (0, { { 4, 2.0f }, { 5, 220.0f }, { 6, 1.0f }, { 8, 2.5f }, { 9, 3300.0f }, { 10, 0.7f }, { 12, 2.0f }, { 13, 12000.0f }, { 15, 1.0f } }, 4.0f, { 150.0f, 6000.0f, 6.0f, 50.0f }), {}, 0 },
 
-        { 3, "マスターの精密な補正（プレシジョン）", "Precise master correction (precision)",
+        { 3, "マスターの精密な補正（精密マスタリング）", "Precise master correction (precision master)",
           "色付けをほとんど足さずに、マスターの低域・中低域・高域を少しずつ整える", "Evens out the master's lows, low-mids and highs a little, with almost no added colour",
           "MID の FREQ を 200〜400 Hz で動かし、こもりが減る所で止める", "Sweep MID's FREQ between 200 and 400 Hz and stop where the mud clears",
           "1 か所 1.5 dB まで。迷ったら Bypass と聴き比べる", "Up to 1.5 dB per move; when in doubt, compare with Bypass",
-          -1, analogPV (1, { { 0, 1.0f }, { 1, 40.0f }, { 3, 1.0f }, { 4, -1.5f }, { 5, 250.0f }, { 6, 1.2f }, { 7, 1.5f }, { 8, 12000.0f }, { 10, 1.0f } }, 0.0f), {}, 1 },
+          -1, analogPV (1, { { 0, 1.0f }, { 1, 40.0f }, { 3, 1.0f }, { 4, -1.5f }, { 5, 250.0f }, { 6, 1.2f }, { 7, 1.5f }, { 8, 12000.0f }, { 10, 1.0f } }, 0.0f, { 40.0f, 16000.0f, 2.0f, 30.0f }), {}, 1 },
 
-        { 1, "アコギの明瞭さ（プレシジョン）", "Acoustic guitar clarity (precision)",
+        { 1, "アコギの明瞭さ（精密マスタリング）", "Acoustic guitar clarity (precision master)",
           "箱鳴りのこもりを抑え、弦のきらめきを足す", "Holds back the boxy boom and adds string sparkle",
           "HIGH の FREQ を 4〜8 kHz で動かし、ピッキングが前に出る所で止める", "Sweep HIGH's FREQ between 4 and 8 kHz and stop where the picking comes forward",
           "低域を削りすぎると細くなる。ソロとミックスの両方で確かめる", "Cut too much low and it gets thin; check both solo and in the mix",
-          -1, analogPV (1, { { 0, -3.0f }, { 1, 120.0f }, { 3, 1.0f }, { 4, -2.0f }, { 5, 400.0f }, { 6, 1.5f }, { 7, 3.0f }, { 8, 6000.0f }, { 9, 0.8f }, { 10, 0.0f } }, 0.0f), {}, 1 },
+          -1, analogPV (1, { { 0, -3.0f }, { 1, 120.0f }, { 3, 1.0f }, { 4, -2.0f }, { 5, 400.0f }, { 6, 1.5f }, { 7, 3.0f }, { 8, 6000.0f }, { 9, 0.8f }, { 10, 0.0f } }, 0.0f, { 200.0f, 8000.0f, 3.0f, 30.0f }), {}, 1 },
 
-        { 3, "ミックスの空気感（エア・バンド）", "Air on the mix (air band)",
+        { 3, "ミックスの空気感（エアリフト）", "Air on the mix (air lift)",
           "ミックス全体を、耳障りにならずに明るく開く", "Opens up the whole mix without harshness",
           "AIR の GAIN を 2〜6 dB で動かす。AIR FREQ は 20k から試す", "Move AIR's GAIN between 2 and 6 dB; start AIR FREQ at 20k",
           "AIR FREQ を下げるほど効きが強い。シンバルが痛くなったら 40k にする", "The lower AIR FREQ, the stronger; if cymbals turn harsh, go to 40k",
-          -1, analogPV (2, { { 4, 1.0f }, { 5, 4.0f }, { 6, 20000.0f } }, 0.0f), {}, 2 },
+          -1, analogPV (2, { { 4, 1.0f }, { 5, 4.0f }, { 6, 20000.0f } }, 0.0f, { 3000.0f, 20000.0f, 3.0f, 30.0f }), {}, 2 },
 
-        { 1, "ボーカルの息と空気（エア・バンド）", "Breath and air on a vocal (air band)",
+        { 1, "ボーカルの息と空気（エアリフト）", "Breath and air on a vocal (air lift)",
           "息の成分と空気感を足し、少しだけ中低域を軽くする", "Adds breath and air, and lightens the low-mids a little",
           "AIR の GAIN を 3〜8 dB で動かし、息が自然に聞こえる量にする", "Move AIR's GAIN between 3 and 8 dB until the breath sounds natural",
           "サ行が目立ったら AIR FREQ を上げるか、ディエッサーを併用する", "If 's' sounds stick out, raise AIR FREQ or add a de-esser",
-          -1, analogPV (2, { { 1, -1.0f }, { 2, -1.5f }, { 3, -1.0f }, { 5, 6.0f }, { 6, 40000.0f } }, 0.0f), {}, 2 },
+          -1, analogPV (2, { { 1, -1.0f }, { 2, -1.5f }, { 3, -1.0f }, { 5, 6.0f }, { 6, 40000.0f } }, 0.0f, { 2000.0f, 16000.0f, 4.0f, 40.0f }), {}, 2 },
 
-        { 3, "ドラムバスの太さ（ブリティッシュ・カーブ）", "Drum bus thickness (British curve)",
+        { 3, "ドラムバスの太さ（英国ステップ・バス）", "Drum bus thickness (British stepped bus)",
           "キックの重さとスネアの抜けを、トランスの太さと一緒に足す", "Adds kick weight and snare crack together with transformer thickness",
           "BASS の GAIN を 0〜+4 dB で動かし、キックの重さを決める", "Move BASS GAIN between 0 and +4 dB to set the kick's weight",
           "DRIVE 10 dB を超えると歪みが聞こえる。HPF はベースと相談", "Above 10 dB DRIVE the distortion is audible; set the HPF with the bass in mind",
-          -1, analogPV (3, { { 0, 60.0f }, { 1, 3.0f }, { 2, 400.0f }, { 3, -2.0f }, { 4, 0.7f }, { 5, 4000.0f }, { 6, 2.0f }, { 7, 0.7f }, { 8, 10000.0f }, { 9, 2.0f }, { 10, 20.0f } }, 8.0f), {}, 3 },
+          -1, analogPV (3, { { 0, 60.0f }, { 1, 3.0f }, { 2, 400.0f }, { 3, -2.0f }, { 4, 0.7f }, { 5, 4000.0f }, { 6, 2.0f }, { 7, 0.7f }, { 8, 10000.0f }, { 9, 2.0f }, { 10, 20.0f } }, 8.0f, { 40.0f, 8000.0f, 8.0f, 50.0f }), {}, 3 },
 
-        { 1, "エレキギターの押し出し（ブリティッシュ・カーブ）", "Electric guitar push (British curve)",
+        { 1, "エレキギターの押し出し（英国ステップ・バス）", "Electric guitar push (British stepped bus)",
           "低域を整理し、中高域で前に押し出す", "Cleans up the lows and pushes the upper mids forward",
           "HIGH MID の FREQ を 1.8〜4 kHz で切り替え、前に出る所を選ぶ", "Step HIGH MID's FREQ between 1.8 and 4 kHz and pick the one that comes forward",
           "押し出しすぎるとボーカルとぶつかる。ボーカルと一緒に聴いて決める", "Too much push clashes with the vocal; decide while hearing both",
-          -1, analogPV (3, { { 2, 270.0f }, { 3, -2.0f }, { 4, 2.0f }, { 5, 2700.0f }, { 6, 3.0f }, { 7, 0.7f }, { 8, 10000.0f }, { 9, 1.5f }, { 10, 80.0f }, { 11, 10000.0f } }, 6.0f), {}, 3 },
+          -1, analogPV (3, { { 2, 270.0f }, { 3, -2.0f }, { 4, 2.0f }, { 5, 2700.0f }, { 6, 3.0f }, { 7, 0.7f }, { 8, 10000.0f }, { 9, 1.5f }, { 10, 80.0f }, { 11, 10000.0f } }, 6.0f, { 120.0f, 6000.0f, 8.0f, 60.0f }), {}, 3 },
 
-        { 1, "ボーカルのトーン（プログラム7バンド）", "Vocal tone (program 7-band)",
+        { 1, "ボーカルのトーン（60年代スタジオ）", "Vocal tone (60s studio)",
           "60年代スタジオのように、広いバンドを段で動かしてボーカルの音色を大きく決める", "Sets the vocal's tone broadly with stepped, wide bands, the 1960s studio way",
           "2K と 5K を 0〜+4 dB で切り替え、前に出る量を決める", "Step 2K and 5K between 0 and +4 dB to set how far forward it sits",
           "段で動くので細かい調整はメインEQで行う", "It moves in steps: do the fine work in the main EQ",
-          -1, analogPV (4, { { 1, -2.0f }, { 2, -2.0f }, { 4, 2.0f }, { 5, 2.0f }, { 6, 4.0f } }, 3.0f), {}, 4 },
+          -1, analogPV (4, { { 1, -2.0f }, { 2, -2.0f }, { 4, 2.0f }, { 5, 2.0f }, { 6, 4.0f } }, 3.0f, { 120.0f, 8000.0f, 6.0f, 50.0f }), {}, 4 },
 
-        { 1, "ベースの芯（プログラム7バンド）", "Bass core (program 7-band)",
+        { 1, "ベースの芯（60年代スタジオ）", "Bass core (60s studio)",
           "低域の芯と、小さなスピーカーでも聞こえる倍音を足す", "Adds a solid low end and the overtones that read on small speakers",
           "800 と 2K を 0〜+4 dB で切り替え、小さい音量でもベースが聞こえる所にする", "Step 800 and 2K between 0 and +4 dB until the bass reads at low volume",
           "50 を上げすぎるとキックとぶつかる。キックと一緒に聴く", "Too much at 50 clashes with the kick; listen with the kick",
-          -1, analogPV (4, { { 0, 4.0f }, { 1, 2.0f }, { 2, -4.0f }, { 3, 2.0f }, { 4, 2.0f } }, 4.0f), {}, 4 },
+          -1, analogPV (4, { { 0, 4.0f }, { 1, 2.0f }, { 2, -4.0f }, { 3, 2.0f }, { 4, 2.0f } }, 4.0f, { 40.0f, 2500.0f, 9.0f, 60.0f }), {}, 4 },
 
-        { 1, "キックの低域トリック（チューブ・プログラム）", "Kick low-end trick (tube program)",
+        { 1, "キックの低域トリック（ヴィンテージ真空管）", "Kick low-end trick (vintage tube)",
           "同じ周波数で BOOST と ATTEN を両方上げ、太いのに濁らない低域を作る", "Raise BOOST and ATTEN at the same frequency: big lows that stay clear",
           "ATTEN を 0〜6 で動かし、低域の上の濁りが消える所で止める", "Move ATTEN between 0 and 6 and stop where the mud above the lows clears",
           "BOOST を上げすぎるとベースの場所を取る。サブウーファーかヘッドホンでも確認", "Too much BOOST takes the bass's place; check on a sub or headphones",
-          -1, analogPV (5, { { 0, 60.0f }, { 1, 5.0f }, { 2, 4.0f }, { 3, 5000.0f }, { 4, 2.0f }, { 5, 1.5f } }, 5.0f), {}, 5 },
+          -1, analogPV (5, { { 0, 60.0f }, { 1, 5.0f }, { 2, 4.0f }, { 3, 5000.0f }, { 4, 2.0f }, { 5, 1.5f } }, 5.0f, { 30.0f, 300.0f, 8.0f, 60.0f }), {}, 5 },
 
-        { 3, "ミックスの柔らかい高域（チューブ・プログラム）", "Soft top on the mix (tube program)",
+        { 3, "ミックスの柔らかい高域（ヴィンテージ真空管）", "Soft top on the mix (vintage tube)",
           "真空管の倍音と一緒に、柔らかく広い高域と軽い低域の厚みを足す", "Adds a soft, wide top and a little low-end weight with tube harmonics",
           "HIGH BOOST を 0〜4 で動かす。BANDWIDTH は Broad 寄りから", "Move HIGH BOOST between 0 and 4; start BANDWIDTH towards broad",
           "DRIVE を上げると倍音が増える。マスターでは 6 dB まで", "More DRIVE = more harmonics; on a master stay under 6 dB",
-          -1, analogPV (5, { { 0, 30.0f }, { 1, 2.0f }, { 2, 1.0f }, { 3, 12000.0f }, { 4, 3.0f }, { 5, 2.5f }, { 6, 20000.0f }, { 7, 1.0f } }, 4.0f), {}, 5 },
+          -1, analogPV (5, { { 0, 30.0f }, { 1, 2.0f }, { 2, 1.0f }, { 3, 12000.0f }, { 4, 3.0f }, { 5, 2.5f }, { 6, 20000.0f }, { 7, 1.0f } }, 4.0f, { 2000.0f, 16000.0f, 4.0f, 40.0f }), {}, 5 },
 
-        { 1, "ボーカルの存在感（ブリティッシュ・コンソールA）", "Vocal presence (British console A)",
+        { 1, "ボーカルの存在感（70年代英国インダクター）", "Vocal presence (70s British inductor)",
           "トランスの厚みと一緒に、ボーカルを前に出す", "Brings the vocal forward together with transformer weight",
           "MID の FREQ を 1.6k〜4.8k で切り替え、言葉が前に出る所を選ぶ", "Step MID's FREQ between 1.6k and 4.8k and pick where the words come forward",
           "MID は幅が広いので +4 dB で十分。上げすぎると硬くなる", "MID is wide, so +4 dB is plenty; more turns hard",
-          -1, analogPV (6, { { 0, 80.0f }, { 1, 110.0f }, { 2, -2.0f }, { 3, 3200.0f }, { 4, 3.0f }, { 5, 3.0f } }, 8.0f), {}, 6 },
+          -1, analogPV (6, { { 0, 80.0f }, { 1, 110.0f }, { 2, -2.0f }, { 3, 3200.0f }, { 4, 3.0f }, { 5, 3.0f } }, 8.0f, { 100.0f, 6000.0f, 8.0f, 50.0f }), {}, 6 },
 
-        { 1, "スネアの胴と抜け（ブリティッシュ・コンソールA）", "Snare body and crack (British console A)",
+        { 1, "スネアの胴と抜け（70年代英国インダクター）", "Snare body and crack (70s British inductor)",
           "スネアの胴鳴りと、アタックの抜けを同時に足す", "Adds the snare's body and the crack of its attack together",
           "LOW の GAIN を 0〜+4 dB で動かし、胴の太さを決める", "Move LOW GAIN between 0 and +4 dB to set the body",
           "DRIVE を上げるとアタックが丸くなる。好みで 6〜12 dB", "More DRIVE rounds the attack; 6-12 dB to taste",
-          -1, analogPV (6, { { 0, 80.0f }, { 1, 220.0f }, { 2, 3.0f }, { 3, 4800.0f }, { 4, 3.0f }, { 5, 2.0f } }, 10.0f), {}, 6 },
+          -1, analogPV (6, { { 0, 80.0f }, { 1, 220.0f }, { 2, 3.0f }, { 3, 4800.0f }, { 4, 3.0f }, { 5, 2.0f } }, 10.0f, { 150.0f, 8000.0f, 9.0f, 60.0f }), {}, 6 },
 
-        { 1, "キックの整形（ブリティッシュ・コンソールE）", "Kick shaping (British console E)",
+        { 1, "キックの整形（80年代英国大型卓）", "Kick shaping (80s British console)",
           "低域のふくらみ、中低域の箱鳴り、ビーターのアタックを素早く整える", "Quickly shapes the low thump, the boxy low-mids and the beater's click",
           "LMF の FREQ を 250〜500 Hz で動かし、箱鳴りが消える所で止める", "Sweep LMF's FREQ between 250 and 500 Hz and stop where the box sound goes",
-          "G タイプはゲインで Q が変わる。大きく削ると鋭くなる", "The G type changes Q with gain: big cuts get sharp",
-          -1, analogPV (7, { { 9, 4.0f }, { 10, 60.0f }, { 11, 1.0f }, { 6, -4.0f }, { 7, 350.0f }, { 8, 1.5f }, { 3, 3.0f }, { 4, 3500.0f }, { 5, 1.5f }, { 12, 30.0f }, { 14, 1.0f } }, 2.0f), {}, 7 },
+          "Q TYPE が Prop だとゲインで Q が変わる。大きく削ると鋭くなる", "With Q TYPE on Prop, Q follows the gain: big cuts get sharp",
+          -1, analogPV (7, { { 9, 4.0f }, { 10, 60.0f }, { 11, 1.0f }, { 6, -4.0f }, { 7, 350.0f }, { 8, 1.5f }, { 3, 3.0f }, { 4, 3500.0f }, { 5, 1.5f }, { 12, 30.0f }, { 14, 1.0f } }, 2.0f, { 40.0f, 5000.0f, 5.0f, 40.0f }), {}, 7 },
 
-        { 1, "ボーカルの外科的カット（ブリティッシュ・コンソールE）", "Surgical vocal cuts (British console E)",
+        { 1, "ボーカルの外科的カット（80年代英国大型卓）", "Surgical vocal cuts (80s British console)",
           "こもりと耳障りな帯域を狭く削り、高域を明るくする", "Cuts the mud and harsh spots narrowly and brightens the top",
           "HMF の FREQ を 2〜4 kHz で動かし、耳に痛い所で止める", "Sweep HMF's FREQ between 2 and 4 kHz and stop at the harsh spot",
-          "E タイプは Q が一定。Q を上げすぎると不自然な穴になる", "The E type keeps Q constant; too high a Q leaves an unnatural hole",
-          -1, analogPV (7, { { 12, 90.0f }, { 6, -3.0f }, { 7, 300.0f }, { 8, 2.0f }, { 3, -2.0f }, { 4, 2800.0f }, { 5, 3.0f }, { 0, 3.0f }, { 1, 10000.0f }, { 2, 0.0f }, { 14, 0.0f } }, 2.0f), {}, 7 },
+          "Q TYPE が Const だと Q は一定。Q を上げすぎると不自然な穴になる", "With Q TYPE on Const, Q stays put; too high a Q leaves an unnatural hole",
+          -1, analogPV (7, { { 12, 90.0f }, { 6, -3.0f }, { 7, 300.0f }, { 8, 2.0f }, { 3, -2.0f }, { 4, 2800.0f }, { 5, 3.0f }, { 0, 3.0f }, { 1, 10000.0f }, { 2, 0.0f }, { 14, 0.0f } }, 2.0f, { 150.0f, 9000.0f, 3.0f, 30.0f }), {}, 7 },
 
-        { 1, "スネアのアタック（アメリカン・コンソール）", "Snare attack (American console)",
+        { 1, "スネアのアタック（米国ディスクリート）", "Snare attack (American discrete)",
           "比例 Q の押し出しで、スネアの胴とアタックを前に出す", "Pushes the snare's body and attack forward with proportional Q",
           "MID のゲインを 0〜+6 dB で切り替え、アタックの量を決める", "Step MID's gain between 0 and +6 dB to set the attack",
           "比例 Q なので大きく上げても濁りにくいが、+9 dB 以上は硬い", "Proportional Q keeps big boosts clean, but +9 dB and up turns hard",
-          -1, analogPV (8, { { 0, 200.0f }, { 1, 4.0f }, { 2, 0.0f }, { 3, 5000.0f }, { 4, 4.0f }, { 5, 10000.0f }, { 6, 2.0f }, { 7, 1.0f } }, 8.0f), {}, 8 },
+          -1, analogPV (8, { { 0, 200.0f }, { 1, 4.0f }, { 2, 0.0f }, { 3, 5000.0f }, { 4, 4.0f }, { 5, 10000.0f }, { 6, 2.0f }, { 7, 1.0f } }, 8.0f, { 120.0f, 8000.0f, 9.0f, 60.0f }), {}, 8 },
 
-        { 3, "ミックスバスのパンチ（アメリカン・コンソール）", "Mix bus punch (American console)",
+        { 3, "ミックスバスのパンチ（米国ディスクリート）", "Mix bus punch (American discrete)",
           "ディスクリート回路の押し出しで、ミックス全体に前に出る力を足す", "Adds forward punch to the whole mix with discrete-circuit push",
           "LOW と HIGH を +2 dB で、シェルフとピークを切り替えて比べる", "Set LOW and HIGH to +2 dB and compare shelf and peak",
           "バスでは各 2〜4 dB まで。DRIVE を上げたら OUT で音量をそろえる", "On a bus keep each at 2-4 dB; match the level with OUT after raising DRIVE",
-          -1, analogPV (8, { { 0, 50.0f }, { 1, 2.0f }, { 2, 1.0f }, { 3, 3000.0f }, { 4, 2.0f }, { 5, 12500.0f }, { 6, 2.0f }, { 7, 1.0f } }, 6.0f), {}, 8 },
+          -1, analogPV (8, { { 0, 50.0f }, { 1, 2.0f }, { 2, 1.0f }, { 3, 3000.0f }, { 4, 2.0f }, { 5, 12500.0f }, { 6, 2.0f }, { 7, 1.0f } }, 6.0f, { 40.0f, 12000.0f, 4.0f, 40.0f }), {}, 8 },
     };
     return P;
 }

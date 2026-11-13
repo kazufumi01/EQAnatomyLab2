@@ -20,6 +20,7 @@ static const char* bypass = "bypass";
 static const char* preSolo = "presolo";
 static const char* satOn = "sat_on";
 static const char* satType = "sat_type";
+static const char* anLink = "an_link";        // 1.0: the analog panel drives main-EQ bands
 static const char* satLo = "sat_lo";
 static const char* satHi = "sat_hi";
 static const char* satDrive = "sat_drive";
@@ -149,7 +150,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     auto bandRange = NormalisableRange<float> (20.0f, 20000.0f, 0.0f, 1.0f);
     bandRange.setSkewForCentre (632.0f);
     l.add (std::make_unique<AudioParameterBool> (ParameterID { pid::satOn, 1 }, "Sat on", false));
-    l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::satType, 1 }, "Sat type", StringArray { "Tape", "Tube", "Clip", "Transformer", "Class A", "Exciter" }, 0));
+    l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::satType, 1 }, "Sat type", StringArray { "Tape", "Tube", "Clip", "Transformer", "Class A", "Exciter", "Analog Tube", "Analog Trans", "Analog Class A" }, 0));
     l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::satLo, 1 }, "Sat low edge", bandRange, 200.0f, AudioParameterFloatAttributes().withLabel ("Hz")));
     l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::satHi, 1 }, "Sat high edge", bandRange, 5000.0f, AudioParameterFloatAttributes().withLabel ("Hz")));
     l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::satDrive, 1 }, "Sat drive", NormalisableRange<float> (0.0f, 36.0f, 0.1f), 9.0f, AudioParameterFloatAttributes().withLabel ("dB")));
@@ -173,7 +174,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
         l.add (std::make_unique<AudioParameterFloat> (ParameterID { k == 1 ? pid::tbE1q : pid::tbE2q, 2 }, "Detector EQ " + n + " Q", NormalisableRange<float> (0.3f, 8.0f, 0.01f, 0.5f), 1.0f));
     }
     // ---- 0.1.1: bands 7 and 8, appended (off by default) ----
-    for (int i = 6; i < eqcore::kBands; ++i) { addBandMain (l, i, 3); addBandDyn (l, i, 3); }
+    for (int i = 6; i < 8; ++i) { addBandMain (l, i, 3); addBandDyn (l, i, 3); }
     // ---- Lab 2: resonance suppressor, appended (off by default) ----
     {
         auto rsRange = NormalisableRange<float> (20.0f, 20000.0f, 0.0f, 1.0f); rsRange.setSkewForCentre (632.0f);
@@ -196,19 +197,22 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     }
     // ---- Lab 2: the bell's slope (12 = the usual bell, 24 / 48 = band shelf with a flat top). Apart from "slope" so bells stay 12 ----
     for (int i = 0; i < eqcore::kBands; ++i)
-        l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::band (i, "bslope"), 6 }, "Band " + String (i + 1) + " Bell slope", StringArray { "12", "24", "48" }, 0));
+        l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::band (i, "bslope"), i < 8 ? 6 : 9 }, "Band " + String (i + 1) + " Bell slope", StringArray { "12", "24", "48" }, 0));
     // ---- Lab 2: the suppressor's channels and its sidechain detection ----
     l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::rsMode, 6 }, "Res channels", StringArray { "Stereo", "Mid", "Side", "M/S" }, 0));
     l.add (std::make_unique<AudioParameterBool> (ParameterID { pid::rsSc, 6 }, "Res sidechain detect", false));
     // ---- 1.0: analog EQ models. The 16 slots mean different controls for each model (see AnalogEQ.h) ----
     l.add (std::make_unique<AudioParameterBool> (ParameterID { pid::anOn, 7 }, "Analog on", false));
-    l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::anModel, 7 }, "Analog model", StringArray { "Passive Mastering", "Precision Parametric", "Air Band", "British Curve", "Program 7-Band", "Tube Program", "British Console A", "British Console E", "American Console" }, 0));
+    l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::anModel, 7 }, "Analog model", StringArray { "Passive Tube Master", "Precision Master 3-Band", "Fixed-Band Air Lift", "British Stepped Bus", "60s Studio 7-Band", "Vintage Tube Boost/Atten", "70s British Inductor", "80s British Large Console", "American Discrete Punch" }, 0));
     l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::anDrive, 7 }, "Analog drive", NormalisableRange<float> (0.0f, 24.0f, 0.1f), 4.0f, AudioParameterFloatAttributes().withLabel ("dB")));
     l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::anOut, 7 }, "Analog output", NormalisableRange<float> (-12.0f, 12.0f, 0.1f), 0.0f, AudioParameterFloatAttributes().withLabel ("dB")));
     for (int i = 0; i < 16; ++i)
         l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::anK (i), 7 }, "Analog control " + String (i + 1), NormalisableRange<float> (0.0f, 1.0f, 0.0f), 0.5f));
     // ---- 1.0: each band's curve style (was one setting for all bands) ----
     for (int i = 0; i < eqcore::kBands; ++i)
-        l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::band (i, "cv"), 8 }, "Band " + String (i + 1) + " Curve", curveNames(), 0));
+        l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::band (i, "cv"), i < 8 ? 8 : 9 }, "Band " + String (i + 1) + " Curve", curveNames(), 0));
+    // ---- 1.0: bands 9-24 (used by "expand to EQ" and when more bands are added) and the analog link ----
+    for (int i = 8; i < eqcore::kBands; ++i) { addBandMain (l, i, 9); addBandDyn (l, i, 9); }
+    l.add (std::make_unique<AudioParameterBool> (ParameterID { pid::anLink, 9 }, "Analog expanded to EQ", false));
     return l;
 }

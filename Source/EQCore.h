@@ -14,7 +14,7 @@
 // =============================================================================
 namespace eqcore
 {
-constexpr int kBands = 8;      // bands 7 and 8 were added in 0.1.1 (parameters appended)
+constexpr int kBands = 24;     // 7 and 8 were added in 0.1.1, 9-24 in 1.0 (parameters appended; off by default, hidden until used)
 constexpr double kPi  = 3.14159265358979323846;
 constexpr double kTau = 2.0 * kPi;
 
@@ -27,13 +27,13 @@ enum class QMode { Constant = 0, Proportional, BritishA, US500, ConsoleE, TubePa
 constexpr int kCurves = 11;
 inline const char* curveName (int i)
 {
-    static const char* n[] = { "Clean Const", "Clean Prop", "British A", "US 500", "Console E", "Tube Passive", "Precision",
-                               "Passive Master", "Air Band", "British Curve", "Program 7" };
+    static const char* n[] = { "Clean Const", "Clean Prop", "70s British Inductor", "American Discrete", "80s British Console", "Vintage Tube", "Precision Master",
+                               "Passive Tube Master", "Air Lift", "British Stepped Bus", "60s Studio" };
     return n[std::clamp (i, 0, kCurves - 1)];
 }
 inline const char* curveShort (int i)
 {
-    static const char* n[] = { "Clean", "Prop", "Brit A", "US 500", "Cons E", "Tube P", "Precis", "Pass M", "Air", "Brit C", "Prog 7" };
+    static const char* n[] = { "Clean", "Prop", "Brit 70s", "Am Disc", "Brit 80s", "Vint Tube", "Precision", "Pass Tube", "Air Lift", "Brit Bus", "60s Std" };
     return n[std::clamp (i, 0, kCurves - 1)];
 }
 

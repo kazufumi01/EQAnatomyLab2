@@ -37,7 +37,7 @@ inline const std::vector<Lesson>& lessons()
         { "一定Qと比例Q", "Constant Q vs proportional Q",
           { "2.5 kHz のベルを +3 dB と +12 dB で行き来する", "ヘッダーの Q を Const と Prop で切り替える", "塗りの形（帯域幅）の変わり方を比べる" },
           { "Move a 2.5 kHz bell between +3 dB and +12 dB", "Switch Q between Const and Prop in the header", "Compare how the shaded width changes" },
-          "比例Qは小さなブーストを広く、大きなカットを細くする（API・SSL E系の振る舞い）", "Proportional Q keeps small boosts broad and big cuts narrow (API / SSL E style)",
+          "比例Qは小さなブーストを広く、大きなカットを細くする（米国ディスクリート卓や80年代英国大型卓の振る舞い）", "Proportional Q keeps small boosts broad and big cuts narrow (the way American discrete and 1980s British large consoles behave)",
           0, -1, 0, { { true, T::Bell, 2500, 3, 1, 3 } } },
 
         { "シェルフの「肩」とレゾナンス", "Shelf shoulders and resonance",
@@ -46,7 +46,7 @@ inline const std::vector<Lesson>& lessons()
           "Q 0.5 前後はなだらか、1.5 前後は低域に芯が出てすぐ上の濁りが減る", "Around Q 0.5 is smooth; around 1.5 firms up the low end and clears the mud above",
           0, -1, 0, { { true, T::LowShelf, 120, 6, 0.707, 3 } } },
 
-        { "Pultec トリック", "The Pultec trick",
+        { "真空管EQの低域トリック", "The vintage tube low-end trick",
           { "60 Hz のブーストとカットのシェルフを重ねた状態で聴く", "バンド 2 をオフにして、ただのブーストと比べる", "45 Hz の山と 100 Hz のへこみを見る" },
           { "Listen with a boosting and a cutting shelf, both at 60 Hz", "Switch band 2 off and compare with a plain boost", "Find the bump near 45 Hz and the dip near 100 Hz" },
           "傾き（Q）が違う2つのシェルフの差し引きで、量感を足しつつもたつきを減らす", "Two shelves with different slopes add weight while removing flab",
@@ -137,8 +137,8 @@ inline const std::vector<Lesson>& lessons()
           0, -1, 0, { { true, T::Bell, 4000, 6, 1.2, 3, false, -24, -6, false, 0, 0, -80.0f } }, 0 },
 
         { "カーブの性格：同じ数値でも形が違う", "Curve character: same numbers, different shapes",
-          { "1 kHz +6 dB・Q 1 のベルと、100 Hz +6 dB のローシェルフを Clean Const で見る", "浮き窓の CURVE（SLOPE の左）を British A → US 500 → Console E と切り替える（メニュー下の「全バンドをこのカーブにする」で両方のバンドがそろう）", "Tube Passive で、ローシェルフのブーストとカットを重ねた形を見る（バンド 3 をオン）", "質感まで比べるなら、SAT の Transformer・Tube・Class A を足す" },
-          { "Look at a +6 dB bell at 1 kHz (Q 1) and a +6 dB low shelf at 100 Hz in Clean Const", "Switch CURVE in the floating panel (left of SLOPE): British A, US 500, Console E ('Use this band's curve on every band' at the bottom of its menu sets both bands)", "In Tube Passive, switch on band 3 to stack a low boost and cut", "For texture as well, add SAT Transformer, Tube or Class A" },
+          { "1 kHz +6 dB・Q 1 のベルと、100 Hz +6 dB のローシェルフを Clean Const で見る", "浮き窓の CURVE（SLOPE の左）を 70s British Inductor → American Discrete → 80s British Console と切り替える（メニュー下の「全バンドをこのカーブにする」で両方のバンドがそろう）", "Vintage Tube で、ローシェルフのブーストとカットを重ねた形を見る（バンド 3 をオン）", "質感まで比べるなら、SAT の Transformer・Tube・Class A を足す" },
+          { "Look at a +6 dB bell at 1 kHz (Q 1) and a +6 dB low shelf at 100 Hz in Clean Const", "Switch CURVE in the floating panel (left of SLOPE): 70s British Inductor, American Discrete, 80s British Console ('Use this band's curve on every band' at the bottom of its menu sets both bands)", "In Vintage Tube, switch on band 3 to stack a low boost and cut", "For texture as well, add SAT Transformer, Tube or Class A" },
           "アナログ EQ の個性は、Q の決まり方とシェルフの肩の形に表れる。カーブの傾向だけで、機材の音そのものではない", "Analog EQ character shows in how Q behaves and in the shelf shoulders. These are shape tendencies, not the sound of the hardware",
           0, -1, 0, { { true, T::Bell, 1000, 6, 1, 3 }, { true, T::LowShelf, 100, 6, 0.7, 3 }, { false, T::LowShelf, 100, -4, 0.7, 3 } }, 0 },
 

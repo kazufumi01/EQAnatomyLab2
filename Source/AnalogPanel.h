@@ -112,6 +112,10 @@ public:
         for (int i = 0; i < analog::kSlots; ++i) { knobs.add (new AnaKnob (h)); switches.add (new AnaSwitch (h)); addChildComponent (knobs.getLast()); addChildComponent (switches.getLast()); }
         addAndMakeVisible (modelBtn); modelBtn.getProperties().set ("chevron", 1);
         modelBtn.onClick = [this] { modelMenu(); };
+        addAndMakeVisible (expBtn); expBtn.setClickingTogglesState (false);
+        expBtn.onClick = [this] { expandMenu(); };
+        setHelp (expBtn, "EXPAND TO EQ", "このモデルを、メインEQの空いているバンド（B9 から順に）に展開する。展開後もこのパネルで操作でき、つまみの動きがそのままバンドに反映される。\n| 何が起きるか | 中身 |\n| フィルター | モデルの各フィルターが、普通のベル・シェルフ・カットのバンドになる（カーブは Clean Const。形はモデルと同じ） |\n| 回路 | SAT が Analog 系のタイプ・全帯域・同じ DRIVE になる（アナログ段と同じかかり方） |\n| OUT | このパネルの OUT がそのまま効く |\nアナログEQが「普通のEQのどんなバンドの組み合わせか」がグラフの点で見える。展開中にもう一度押すと、切り離す（バンドを残す）か元に戻すかを選べる",
+                 "Lays this model out on free main-EQ bands (from B9 up). The panel keeps working after that: every knob move goes straight to those bands.\n| What happens | Detail |\n| Filters | each of the model's filters becomes an ordinary bell, shelf or cut band (curve Clean Const, the same shape as the model) |\n| Circuit | SAT takes the matching Analog type, full band, the same DRIVE (drives exactly like the analog stage) |\n| OUT | this panel's OUT still applies |\nYou see, as dots on the graph, which ordinary bands the analog EQ is made of. Press again while expanded to detach (keep the bands) or undo the expansion");
         addAndMakeVisible (onBtn); onBtn.setClickingTogglesState (false);
         onBtn.onClick = [this] { ph.toggleGesture (pid::anOn); };
         drive.id = pid::anDrive; drive.label = "DRIVE"; drive.def = 4.0f / 24.0f;
@@ -128,8 +132,8 @@ public:
         setHelp (seeThru, "SEE-THROUGH", "パネルの透過。上げるほど後ろのグラフ（カーブ・スペアナ・C）が透けて見える。ダブルクリックで 30 %", "How see-through the panel is: more = the graph behind (curves, analyzer, C) shows through. Double-click: 30 %");
         setHelp (onBtn, "ANALOG IN", "アナログEQモデルのオン／オフ。メインEQとレゾナンス・サプレッサーの後ろ、帯域サチュレーターの前に入る。オフの時は処理を通らない（レイテンシーなし）",
                  "Analog EQ model on / off. It sits after the main EQ and the resonance suppressor, before the band saturator. Off = not in the signal path (no latency)");
-        setHelp (modelBtn, "ANALOG MODEL", "モデルを選ぶ。選ぶとそのモデルのつまみが初期値に戻り、メインEQの全バンドのカーブ（浮き窓の CURVE）と SAT のタイプも、そのモデルに合わせて変わる（Cmd＋Z で戻せる）。プリセット欄の「アナログEQタイプ別」からも選べる。\n| モデル | 系統 |\n| Passive Mastering | Massive Passive 系 |\n| Precision Parametric | Sontec 系 |\n| Air Band | Maag EQ4 系 |\n| British Curve | Curve Bender 系 |\n| Program 7-Band | Hitsville EQ のモデリング元の系統 |\n| Tube Program | Pultec EQP-1A 系 |\n| British Console A | Neve 1073 系 |\n| British Console E | SSL E / G 系 |\n| American Console | API 550 系 |\nどれも公開されている動作を参考にした学習用の汎用モデルで、実機の回路を測ったものではない",
-                 "Pick the model. Choosing one resets its controls and sets every main-EQ band's curve (CURVE in the floating panel) and the SAT type to match the model (Cmd+Z undoes). Also in the preset menu under 'By analog EQ type'.\n| Model | Family |\n| Passive Mastering | Massive Passive style |\n| Precision Parametric | Sontec style |\n| Air Band | Maag EQ4 style |\n| British Curve | Curve Bender style |\n| Program 7-Band | the family modelled by Hitsville EQ |\n| Tube Program | Pultec EQP-1A style |\n| British Console A | Neve 1073 style |\n| British Console E | SSL E / G style |\n| American Console | API 550 style |\nAll are generic learning models after the published behaviour, not measured circuits");
+        setHelp (modelBtn, "ANALOG MODEL", "モデルを選ぶ。選ぶとそのモデルのつまみが初期値に戻り、メインEQの全バンドのカーブ（浮き窓の CURVE）と SAT のタイプも、そのモデルに合わせて変わる（Cmd＋Z で戻せる）。プリセット欄の「アナログEQタイプ別」からも選べる。\n| モデル | タイプ・用途 |\n| Passive Tube Master | 真空管で持ち上げる、4バンドのパッシブ・マスタリングEQ |\n| Precision Master 3-Band | 色付けの少ない、精密なマスタリング用パラメトリック |\n| Fixed-Band Air Lift | 幅の広い固定6バンドと、超高域から持ち上げる AIR |\n| British Stepped Bus | ミックスバスやドラム向けの、ステップ式の英国コンソール系カーブ |\n| 60s Studio 7-Band | 60年代スタジオの自作コンソールEQ（2 dB ステップ） |\n| Vintage Tube Boost/Atten | 50〜60年代の真空管プログラムEQ（同じ低域をブーストとアッテン） |\n| 70s British Inductor | 70年代英国卓の、インダクターと Class A のチャンネルEQ |\n| 80s British Large Console | 80年代の大型コンソールの、4バンド・チャンネルEQ |\n| American Discrete Punch | ステップ式と比例 Q の、米国ディスクリート卓EQ |\n名前は時代・回路・用途のヒント。どれも学習用の汎用モデルで、特定の製品の回路を測ったものではない",
+                 "Pick the model. Choosing one resets its controls and sets every main-EQ band's curve (CURVE in the floating panel) and the SAT type to match the model (Cmd+Z undoes). Also in the preset menu under 'By analog EQ type'.\n| Model | Kind / use |\n| Passive Tube Master | passive 4-band mastering EQ with a tube make-up stage |\n| Precision Master 3-Band | clean, exact solid-state mastering parametric |\n| Fixed-Band Air Lift | six wide fixed bands plus an ultra-high AIR shelf |\n| British Stepped Bus | stepped British console curves for the mix bus and drums |\n| 60s Studio 7-Band | a 1960s studio's home-built console EQ, 2 dB steps |\n| Vintage Tube Boost/Atten | a 1950s-60s tube program EQ: boost and attenuate the same lows |\n| 70s British Inductor | the class-A inductor channel EQ of 1970s British desks |\n| 80s British Large Console | the four-band channel EQ of large 1980s consoles |\n| American Discrete Punch | a discrete American console EQ: stepped, proportional Q |\nThe names hint at the era, the circuit and the job. All are generic learning models, not measured circuits of any product");
         setHelp (drive, "ANALOG DRIVE", "モデルの回路（真空管・トランス・Class A）にどれだけ強く入れるか。上げるほど倍音が増え、ピークが丸くなる。音量は自動で合わせる。\n| 値 | 聴こえ方 |\n| 0〜6 dB | ほぼ透明。太さがわずかに増える |\n| 6〜12 dB | 倍音がはっきり。中低域が濃くなる |\n| 12 dB〜 | 歪みとして聴こえる。効果音的 |",
                  "How hard the model's circuit (tube, transformer, class A) is driven. More = more harmonics and rounder peaks; the level is matched.\n| Value | Sounds like |\n| 0-6 dB | nearly transparent, a touch thicker |\n| 6-12 dB | clear harmonics, denser low-mids |\n| 12 dB up | audible distortion, an effect |");
         setHelp (out, "ANALOG OUT", "アナログ段の出力レベル（±12 dB）。オン／オフで音量をそろえて比べるために使う", "The analog stage's output level (±12 dB). Use it to match the level when comparing on / off");
@@ -139,6 +143,8 @@ public:
         const int m = juce::jlimit (0, analog::kModels - 1, (int) ph.value (pid::anModel));
         const bool on = ph.value (pid::anOn) > 0.5f;
         onBtn.setButtonText ("IN"); onBtn.setToggleState (on, juce::dontSendNotification);
+        const bool linked = ph.value (pid::anLink) > 0.5f;
+        expBtn.setButtonText (linked ? ph.tr ("EQに展開中", "EXPANDED") : ph.tr ("EQに展開", "EXPAND")); expBtn.setToggleState (linked, juce::dontSendNotification);
         seeThru.setValue ((double) ph.proc.uiState.getProperty ("anAlpha", 30.0), juce::dontSendNotification);
         if (m != shown) { shown = m; layoutModel(); }
         modelBtn.setButtonText (juce::String (models()[(size_t) m].name));
@@ -160,9 +166,15 @@ public:
         if (shown < 0) return;
         const auto& M = models()[(size_t) shown];
         g.setColour (st.ink); g.setFont (theme::ui (13.0f, true));
-        g.drawText (juce::String::fromUTF8 (ph.ja() ? M.nameJa : M.name), 210, 5, 260, 18, juce::Justification::centredLeft);
+        g.drawText (juce::String::fromUTF8 (ph.ja() ? M.nameJa : M.name), 344, 5, 420, 18, juce::Justification::centredLeft);
         g.setColour (st.ink.withAlpha (0.6f)); g.setFont (theme::ui (10.0f));
-        g.drawText (ph.tr ("参考：", "After: ") + juce::String::fromUTF8 (M.family) + ph.tr (" 系", " style"), 210, 21, 300, 14, juce::Justification::centredLeft);
+        if (ph.proc.isLinkedBand (ph.proc.linkedBands().isEmpty() ? -1 : ph.proc.linkedBands()[0]))
+        {
+            juce::StringArray b; for (int x : ph.proc.linkedBands()) b.add ("B" + juce::String (x + 1));
+            g.setColour (juce::Colour (0xff6fd3a4));
+            g.drawText (ph.tr ("展開先：", "Expanded to: ") + b.joinIntoString (" ") + ph.tr ("（つまみの動きがそのまま反映）", " (the knobs drive them live)"), 344, 21, 440, 14, juce::Justification::centredLeft);
+        }
+        else g.drawText (analog::hint (shown, ph.ja()), 344, 21, 420, 14, juce::Justification::centredLeft);
         g.setColour (st.ink.withAlpha (0.7f)); g.setFont (theme::ui (9.5f, true));
         g.drawText (ph.tr ("透過 ", "SEE-THRU ") + juce::String ((int) seeThru.getValue()) + "%", seeThru.getX() - 78, seeThru.getY(), 74, seeThru.getHeight(), juce::Justification::centredRight);
         // column titles and dividers
@@ -197,7 +209,7 @@ private:
         const int m = shown < 0 ? 0 : shown;
         const auto& M = models()[(size_t) m];
         const auto st = style (m);
-        modelBtn.setBounds (12, 8, 150, 22); onBtn.setBounds (166, 8, 34, 22);
+        modelBtn.setBounds (12, 8, 190, 22); onBtn.setBounds (206, 8, 34, 22); expBtn.setBounds (244, 8, 92, 22);
         const int W = getWidth(), H = getHeight();
         const int ctrlW = 64;
         drive.setBounds (W - 2 * ctrlW - 14, 4, ctrlW, std::min (H - 8, 78)); out.setBounds (W - ctrlW - 10, 4, ctrlW, std::min (H - 8, 78));
@@ -269,12 +281,36 @@ private:
         }
         return "";
     }
+    void expandMenu()
+    {
+        auto& pr = ph.proc;
+        if (ph.value (pid::anLink) < 0.5f)
+        {
+            pr.undo.beginNewTransaction();
+            if (! pr.expandAnalog())
+            {
+                const int need = analog::maxSections ((int) ph.value (pid::anModel));
+                juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, ph.tr ("空いているバンドが足りません", "Not enough free bands"),
+                    ph.tr ("このモデルには ", "This model needs ") + juce::String (need) + ph.tr (" バンド必要です（空き ", " bands (free: ") + juce::String (pr.freeBandCount())
+                    + ph.tr ("）。使っていないバンドをオフにしてから、もう一度押してください。", "). Switch off bands you do not use, then press again."));
+            }
+            refresh(); return;
+        }
+        juce::PopupMenu m;
+        m.addItem (1, ph.tr ("切り離す（バンドは普通のバンドとして残す。パネルはオフ）", "Detach (the bands stay as ordinary bands; the panel goes off)"));
+        m.addItem (2, ph.tr ("展開を戻す（バンドを消して、アナログ段に戻す）", "Undo the expansion (remove the bands, back to the analog stage)"));
+        m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&expBtn), [this] (int r)
+        {
+            if (r <= 0) return;
+            ph.proc.undo.beginNewTransaction(); ph.proc.collapseAnalog (r == 1); refresh();
+        });
+    }
     void modelMenu()
     {
         juce::PopupMenu menu;
         const int cur = (int) ph.value (pid::anModel);
         for (int i = 0; i < analog::kModels; ++i)
-            menu.addItem (i + 1, juce::String (models()[(size_t) i].name) + "  (" + ph.tr ("参考：", "after ") + juce::String::fromUTF8 (models()[(size_t) i].family) + ")", true, i == cur);
+            menu.addItem (i + 1, juce::String (models()[(size_t) i].name) + juce::String::fromUTF8 ("   \xe2\x80\x94 ") + analog::hint (i, ph.ja()), true, i == cur);
         menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&modelBtn), [this] (int r)
         {
             if (r <= 0) return;
@@ -284,7 +320,7 @@ private:
         });
     }
     ParamHelp& ph;
-    juce::TextButton modelBtn, onBtn;
+    juce::TextButton modelBtn, onBtn, expBtn;
     AnaKnob drive, out;
     juce::Slider seeThru;
     juce::OwnedArray<AnaKnob> knobs; juce::OwnedArray<AnaSwitch> switches;

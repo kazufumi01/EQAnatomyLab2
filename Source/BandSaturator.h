@@ -20,11 +20,13 @@
 //    Transformer tanh after a low-shelf pre-emphasis, so lows saturate first
 //    Class A     tanh plus a tanh² term: some 2nd harmonic even at low drive
 //    Exciter     asymmetric shaper; only what it adds above the LOW edge is mixed in
+//    Analog Tube / Analog Trans / Analog Class A (1.0): exactly the circuits of the analog EQ models, with the same
+//                drive scale (the knob reads like the analog panel's DRIVE: 0 dB = well below the knee)
 // =============================================================================
 class SatCore
 {
 public:
-    enum Type { Tape = 0, Tube, Clip, Transformer, ClassA, Exciter };
+    enum Type { Tape = 0, Tube, Clip, Transformer, ClassA, Exciter, AnTube, AnTrans, AnClassA };
 
     void prepare (double fs, int maxBlock)
     {
@@ -47,7 +49,7 @@ public:
         if (hi < lo * 1.05f) hi = std::min (20000.0f, lo * 1.05f);
         tgtLo = lo; tgtHi = hi;
         if (t != type) { type = t; for (auto& s : st) { s.init = false; } }
-        drive.setTargetValue (juce::Decibels::decibelsToGain (driveDb));
+        drive.setTargetValue (juce::Decibels::decibelsToGain (driveDb - (t >= AnTube ? 12.0f : 0.0f)));
         mix.setTargetValue (mixPct * 0.01f);
     }
     void reset()
@@ -113,6 +115,9 @@ public:
             case Clip:    y = juce::jlimit (-1.0, 1.0, xb); break;
             case ClassA:  y = std::tanh (xb) + 0.15 * std::tanh (xb) * std::tanh (xb); break;
             case Exciter: y = std::tanh (xb + 0.5) - std::tanh (0.5); break;
+            case AnTube:  y = (std::tanh (xb + 0.25) - std::tanh (0.25)) / (1.0 - std::tanh (0.25) * std::tanh (0.25)); break;
+            case AnTrans: y = std::tanh (xb) + 0.08 * xb * xb * xb / (1.0 + xb * xb * xb * xb); break;
+            case AnClassA: { const double t = std::tanh (xb); y = t + 0.06 * t * t; break; }
             default:      y = std::tanh (xb);
         }
         return (float) y;
@@ -127,15 +132,17 @@ private:
     struct State { double x1 = 0, F1 = 0, env = 0; float dcx = 0, dcy = 0; bool init = false; Bq pre, post, hp1, hp2; };
 
     static double logcosh (double x) { const double a = std::abs (x); return a + std::log1p (std::exp (-2.0 * a)) - 0.6931471805599453; }
-    double bias (const State& s) const { return type == Tube ? 0.2 + 0.5 * std::min (1.0, s.env) : type == Exciter ? 0.5 : 0.0; }
+    double bias (const State& s) const { return type == Tube ? 0.2 + 0.5 * std::min (1.0, s.env) : type == Exciter ? 0.5 : type == AnTube ? 0.25 : 0.0; }
     double f (const State& s, double x) const
     {
         const double b = bias (s);
         switch (type)
         {
-            case Tube: case Exciter: return std::tanh (x + b) - std::tanh (b);
+            case Tube: case Exciter: case AnTube: return std::tanh (x + b) - std::tanh (b);
             case Clip:   return juce::jlimit (-1.0, 1.0, x);
             case ClassA: { const double t = std::tanh (x); return t + 0.15 * t * t; }
+            case AnTrans: return std::tanh (x) + 0.08 * x * x * x / (1.0 + x * x * x * x);
+            case AnClassA: { const double t = std::tanh (x); return t + 0.06 * t * t; }
             default:     return std::tanh (x);
         }
     }
@@ -144,16 +151,18 @@ private:
         const double b = bias (s);
         switch (type)
         {
-            case Tube: case Exciter: return logcosh (x + b) - x * std::tanh (b);
+            case Tube: case Exciter: case AnTube: return logcosh (x + b) - x * std::tanh (b);
             case Clip:   return std::abs (x) <= 1.0 ? 0.5 * x * x : std::abs (x) - 0.5;
             case ClassA: return logcosh (x) + 0.15 * (x - std::tanh (x));          // ∫tanh² = x − tanh
+            case AnTrans: return logcosh (x) + 0.02 * std::log1p (x * x * x * x);   // ∫ 0.08x³/(1+x⁴)
+            case AnClassA: return logcosh (x) + 0.06 * (x - std::tanh (x));
             default:     return logcosh (x);
         }
     }
     float slope0 (const State& s) const
     {
         const double b = bias (s);
-        return (type == Tube || type == Exciter) ? (float) (1.0 - std::tanh (b) * std::tanh (b)) : 1.0f;
+        return (type == Tube || type == Exciter || type == AnTube) ? (float) (1.0 - std::tanh (b) * std::tanh (b)) : 1.0f;
     }
     float shape (State& s, float xin)
     {
