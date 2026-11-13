@@ -10,8 +10,8 @@ by Johan Plus Kei — EQ の中身を「見て・聴いて・触って」学べ�
 
 | | 手動インストール（おすすめ） | インストーラー |
 |---|---|---|
-| **Mac**（macOS 11+, Apple Silicon / Intel） | `EQAnatomyLab2-0.2.0-mac.zip` | `EQAnatomyLab2-0.2.0-mac.pkg` |
-| **Windows**（10 / 11, 64bit）⚠️未検証 | `EQAnatomyLab2-0.2.0-win64.zip` | `EQAnatomyLab2-0.2.0-win64.exe` |
+| **Mac**（macOS 11+, Apple Silicon / Intel） | `EQAnatomyLab2-0.2.1-mac.zip` | `EQAnatomyLab2-0.2.1-mac.pkg` |
+| **Windows**（10 / 11, 64bit）⚠️未検証 | `EQAnatomyLab2-0.2.1-win64.zip` | `EQAnatomyLab2-0.2.1-win64.exe` |
 
 - 紹介記事（日本語）：**[このEQを触ると、自分に必要なEQが分かる](https://jpk.seesaa.net/article/521995892.html)**
 - インストール方法：**[INSTALL.md](INSTALL.md)**（日本語 / English）

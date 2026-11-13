@@ -1,13 +1,13 @@
 #!/bin/zsh
 # EQ Anatomy Lab 2 の Mac 用インストーラー（.pkg）を作る
 # 使い方： packaging/mac/build_pkg.sh [バージョン] [ビルド成果物フォルダ]
-#   例）packaging/mac/build_pkg.sh 0.2.0 build/EQAnatomyLab2_artefacts/Release
+#   例）packaging/mac/build_pkg.sh 0.2.1 build/EQAnatomyLab2_artefacts/Release
 # 出力：dist/EQAnatomyLab2-<ver>-mac.pkg
 # ※ 署名・公証なし（Apple Developer Program 未加入でも作れる）
 set -e
 cd "$(dirname "$0")/../.."
 
-VERSION="${1:-0.2.0}"
+VERSION="${1:-0.2.1}"
 ART="${2:-build/EQAnatomyLab2_artefacts/Release}"
 NAME="EQ Anatomy Lab 2"
 ID="com.jpk.eqanatomylab2"

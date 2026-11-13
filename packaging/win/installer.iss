@@ -1,9 +1,9 @@
 ﻿; EQ Anatomy Lab 2 — Windows インストーラー（Inno Setup 6）
-; GitHub Actions から:  iscc /DMyAppVersion=0.2.0 /DArtDir=..\..\build\EQAnatomyLab2_artefacts\Release packaging\win\installer.iss
+; GitHub Actions から:  iscc /DMyAppVersion=0.2.1 /DArtDir=..\..\build\EQAnatomyLab2_artefacts\Release packaging\win\installer.iss
 ; 出力: dist\EQAnatomyLab2-<ver>-win64.exe （コード署名なし）
 
 #ifndef MyAppVersion
-  #define MyAppVersion "0.2.0"
+  #define MyAppVersion "0.2.1"
 #endif
 #ifndef ArtDir
   #define ArtDir "..\..\build\EQAnatomyLab2_artefacts\Release"

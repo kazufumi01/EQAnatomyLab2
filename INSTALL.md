@@ -10,10 +10,10 @@
 
 | ファイル | 内容 |
 |---|---|
-| `EQAnatomyLab2-0.2.0-mac.zip` | Mac・手動インストール（おすすめ） |
-| `EQAnatomyLab2-0.2.0-mac.pkg` | Mac・インストーラー（ターミナルを使いたくない人向け） |
-| `EQAnatomyLab2-0.2.0-win64.zip` | Windows・手動インストール（未検証） |
-| `EQAnatomyLab2-0.2.0-win64.exe` | Windows・インストーラー（未検証） |
+| `EQAnatomyLab2-0.2.1-mac.zip` | Mac・手動インストール（おすすめ） |
+| `EQAnatomyLab2-0.2.1-mac.pkg` | Mac・インストーラー（ターミナルを使いたくない人向け） |
+| `EQAnatomyLab2-0.2.1-win64.zip` | Windows・手動インストール（未検証） |
+| `EQAnatomyLab2-0.2.1-win64.exe` | Windows・インストーラー（未検証） |
 
 ---
 
