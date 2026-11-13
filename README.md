@@ -21,7 +21,7 @@
 | | 日本語 | English |
 |---|---|---|
 | インストール方法 / How to install | [INSTALL.md（日本語）](INSTALL.md#日本語) | [INSTALL.md (English)](INSTALL.md#english) |
-| 紹介記事 / Article | [このEQを触ると、自分に必要なEQが分かる](https://jpk.seesaa.net/article/521995892.html) | — |
+| 紹介記事 / Article | [名機と呼ばれるEQは、普通のEQの何でできているのか（1.0）](https://jpk.seesaa.net/article/522012117.html)・[β版の紹介](https://jpk.seesaa.net/article/521995892.html) | — |
 | DAW 上の名前 / Name in your DAW | **EQ Anatomy Lab 2 v1** | **EQ Anatomy Lab 2 v1** |
 | 不具合・要望 / Bugs & requests | [Issues](https://github.com/kazufumi01/EQAnatomyLab2/issues) | [Issues](https://github.com/kazufumi01/EQAnatomyLab2/issues) |
 
@@ -36,7 +36,21 @@
 
 ### 1.0 の新機能
 
-- **アナログEQモデル 9 種**：真空管パッシブ・マスター、精密マスタリング、固定バンドのエアリフト、英国ステップ式バスEQ、60年代スタジオ7バンド、ヴィンテージ真空管ブースト／アッテン、70年代英国インダクター、80年代英国大型卓、米国ディスクリート。実機のパネルを参考にした操作パネルと、モデルごとの回路の歪み付き（どれも学習用の汎用モデルで、特定の製品の再現ではありません）
+- **アナログEQモデル 9 種**：実機のパネルを参考にした操作パネルと、モデルごとの回路の歪み付き。
+
+  | モデル | 参考にした実機 |
+  |---|---|
+  | 真空管パッシブ・マスター | Manley Massive Passive |
+  | 精密マスタリング3バンド | Sontec MES-432 |
+  | 固定バンド・エアリフト | Maag Audio EQ4 |
+  | 英国ステップ・バスEQ | Chandler Limited Curve Bender（EMI TG12345 系） |
+  | 60年代スタジオ7バンド | Motown EQ |
+  | ヴィンテージ真空管ブースト／アッテン | Pultec EQP-1A |
+  | 70年代英国インダクター | Neve 1073 |
+  | 80年代英国大型卓 | SSL 4000 E / G |
+  | 米国ディスクリート・パンチ | API 550A |
+
+  実機名はパネルやカーブの参考にした機種です。どれも学習用の汎用モデルで、各製品の回路をそのまま再現したものではありません。製品名は各社の商標です。
 - **EQに展開**：アナログモデルを、普通のベル・シェルフ・カットのバンドに分解してメインEQに並べる。展開後もパネルのつまみでバンドを動かせるので、「アナログEQは普通のEQのどんな組み合わせか」がグラフの点で見える
 - **バンドは 24 まで**（B9〜B24 は使うときだけ表示）
 - **サチュレーターに Analog Tube / Trans / Class A**：アナログモデルと同じ回路・同じ DRIVE の目盛り
@@ -72,7 +86,21 @@
 
 ### What's new in 1.0
 
-- **Nine analog EQ models**: tube passive mastering EQ, precision mastering EQ, fixed-band "air lift", British stepped bus EQ, '60s studio 7-band, vintage tube boost/atten, '70s British inductor EQ, '80s British large-format console and American discrete. Each has a panel inspired by the hardware and its own circuit distortion (generic educational models, not reproductions of specific products).
+- **Nine analog EQ models**: each with a panel inspired by the hardware and its own circuit distortion.
+
+  | Model | Hardware it is based on |
+  |---|---|
+  | Passive Tube Master | Manley Massive Passive |
+  | Precision Master 3-Band | Sontec MES-432 |
+  | Fixed-Band Air Lift | Maag Audio EQ4 |
+  | British Stepped Bus | Chandler Limited Curve Bender (EMI TG12345 family) |
+  | 60s Studio 7-Band | Motown EQ |
+  | Vintage Tube Boost/Atten | Pultec EQP-1A |
+  | 70s British Inductor | Neve 1073 |
+  | 80s British Large Console | SSL 4000 E / G |
+  | American Discrete Punch | API 550A |
+
+  The hardware names show what each panel and curve was modelled on. These are generic educational models, not circuit-accurate recreations; product names are trademarks of their owners.
 - **Expand to EQ**: break an analog model down into ordinary bell / shelf / cut bands in the main EQ. The panel knobs still drive those bands afterwards, so you can see on the graph which combination of plain EQ bands an analog EQ really is.
 - **Up to 24 bands** (B9–B24 appear only when used).
 - **Analog Tube / Trans / Class A in the saturator**, using the same circuits and DRIVE scale as the analog models.
