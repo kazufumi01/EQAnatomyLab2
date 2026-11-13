@@ -169,7 +169,10 @@ private:
         const double x = xin, Fx = F (s, x);
         if (! s.init) { s.init = true; s.x1 = x; s.F1 = Fx; return (float) f (s, x); }
         const double dx = x - s.x1;
-        const double y = std::abs (dx) < 1e-5 ? f (s, 0.5 * (x + s.x1)) : (Fx - s.F1) / dx;
+        // Tube: the bias follows the level and changes every sample. The previous antiderivative must use the SAME
+        // (current) bias, or the bias change divided by a tiny dx (slow, loud lows near their peaks) becomes a spike
+        const double F1 = type == Tube ? F (s, s.x1) : s.F1;
+        const double y = std::abs (dx) < 1e-5 ? f (s, 0.5 * (x + s.x1)) : (Fx - F1) / dx;
         s.x1 = x; s.F1 = Fx;
         return (float) y;
     }
