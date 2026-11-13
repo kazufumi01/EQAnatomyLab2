@@ -17,7 +17,7 @@
 // =============================================================================
 namespace analog
 {
-constexpr int kModels = 5, kSlots = 16;
+constexpr int kModels = 9, kSlots = 16;
 
 enum Kind { Gain, Freq, Width, Choice, Steps };
 struct Slot
@@ -72,7 +72,7 @@ inline juce::String text (const Slot& s, float v01)
     auto hz = [] (float f) { return f >= 1000.0f ? juce::String (f / 1000.0f, f >= 10000.0f ? 0 : 1) + "k" : juce::String ((int) std::lround (f)); };
     switch (s.kind)
     {
-        case Gain:  return (v > 0.05f ? "+" : "") + juce::String (v, 1);
+        case Gain:  return s.uni && s.hi == 10.0f ? juce::String (v, 1) : (v > 0.05f ? "+" : "") + juce::String (v, 1);
         case Freq:  return hz (v);
         case Width: return juce::String (v, 2);
         case Steps: return (v > 0 ? "+" : "") + juce::String ((int) std::lround (v));
@@ -96,6 +96,10 @@ inline const std::array<Model, kModels>& models()
     { Slot s; s.label = l; s.kind = Choice; s.values = std::move (v); s.names = std::move (n); s.def = s.values.size() > 1 ? (float) defIdx / (float) (s.values.size() - 1) : 0.0f; s.group = grp; return s; };
     auto S = [] (const char* l, int grp)
     { Slot s; s.label = l; s.kind = Steps; s.values = { -8, -6, -4, -2, 0, 2, 4, 6, 8 }; s.def = 0.5f; s.group = grp; return s; };
+    auto S2 = [] (const char* l, std::vector<float> v, int grp)
+    { Slot s; s.label = l; s.kind = Steps; s.values = std::move (v); s.def = 0.5f; s.group = grp; return s; };
+    auto D = [] (const char* l, int grp)       // a 0-10 dial (the circuit decides how many dB that is)
+    { Slot s; s.label = l; s.kind = Gain; s.uni = true; s.hi = 10.0f; s.def = 0.0f; s.group = grp; return s; };
 
     static const std::array<Model, kModels> m = [&]
     {
@@ -161,6 +165,58 @@ inline const std::array<Model, kModels>& models()
                  "Use: broad tone shaping of vocals, bass or the whole mix.",
                  { S ("dB", 0), S ("dB", 1), S ("dB", 2), S ("dB", 3), S ("dB", 4), S ("dB", 5), S ("dB", 6) },
                  { "50", "130", "320", "800", "2K", "5K", "12.5K" } };
+        // 5 Tube program EQ: low boost and low attenuation on the same frequency, high boost with bandwidth, high attenuation
+        a[5] = { "Tube Program", "チューブ・プログラム", "Pultec EQP-1A", 1, 5.0f,
+                 "真空管のプログラムEQ（Pultec EQP-1A 系の考え方を参考にした汎用モデル）。低域は BOOST と ATTEN が同じ周波数のつまみで、同時に回せる。\n"
+                 "| 特徴 | 中身 |\n| 低域の同時操作 | BOOST はシェルフ、ATTEN はそれより少し上から効く。両方上げると、低域が持ち上がり、その少し上が凹む（有名な使い方） |\n| 高域 BOOST | ベル。BANDWIDTH で幅（Sharp⇄Broad） |\n| 高域 ATTEN | 5k・10k・20k から下げるシェルフ |\n| 目盛り | 0〜10。dB ではない（回路で決まる） |\n"
+                 "使いどころ：キックやベースの「太いのに濁らない低域」、ボーカルの柔らかい空気感。",
+                 "A tube program EQ (a generic model after the Pultec EQP-1A approach). In the lows, BOOST and ATTEN share one frequency and can be used together.\n"
+                 "| Trait | What it means |\n| Lows together | BOOST is a shelf, ATTEN starts a little higher: both up = more lows with a dip just above (the famous trick) |\n| High BOOST | a bell; BANDWIDTH from sharp to broad |\n| High ATTEN | a shelf down from 5k, 10k or 20k |\n| Scale | 0-10 dials, not dB (the circuit decides) |\n"
+                 "Use: big lows that stay clear on kick and bass, soft air on vocals.",
+                 { C ("CPS", { 20, 30, 60, 100 }, {}, 2, 0), D ("BOOST", 0), D ("ATTEN", 0),
+                   C ("KCS", { 3000, 4000, 5000, 8000, 10000, 12000, 16000 }, {}, 4, 1), D ("BOOST", 1), W ("BANDWIDTH", 0.5f, 2.5f, 1.0f, 1),
+                   C ("ATTEN SEL", { 5000, 10000, 20000 }, { "5k", "10k", "20k" }, 1, 2), D ("ATTEN", 2) },
+                 { "LOW FREQUENCY", "HIGH BOOST", "HIGH ATTEN" } };
+        // 6 British console A: stepped low / mid frequencies, fixed 12k shelf, high-pass, transformer weight
+        a[6] = { "British Console A", "ブリティッシュ・コンソールA", "Neve 1073", 3, 8.0f,
+                 "インダクターとトランスのコンソールEQ（Neve 1073 系の考え方を参考にした汎用モデル）。周波数はステップ式、高域は 12 kHz 固定のシェルフ。\n"
+                 "| 特徴 | 中身 |\n| ステップ周波数 | 低域 35・60・110・220、中域 360〜7.2k |\n| 中域の幅 | やや広めの固定。上げると前に出る |\n| 高域 12k | 固定のシェルフ。上げると柔らかい輝き |\n| トランス | 低域の厚みと倍音。DRIVE で量 |\n"
+                 "使いどころ：ボーカル・ギター・ドラムの録りやミックスで、太さと存在感を足す。",
+                 "An inductor and transformer console EQ (a generic model after the Neve 1073 approach). Stepped frequencies, a fixed 12 kHz high shelf.\n"
+                 "| Trait | What it means |\n| Stepped frequencies | low 35, 60, 110, 220; mid 360 to 7.2k |\n| Mid width | fixed, fairly wide: boosts push forward |\n| High 12k | a fixed shelf: a soft sheen |\n| Transformer | weight and harmonics in the lows; DRIVE sets the amount |\n"
+                 "Use: thickness and presence on vocals, guitars and drums.",
+                 { C ("HPF", { 0, 50, 80, 160, 300 }, {}, 0, 0),
+                   C ("FREQ", { 35, 60, 110, 220 }, {}, 1, 1), G ("GAIN", 16, 1),
+                   C ("FREQ", { 360, 700, 1600, 3200, 4800, 7200 }, {}, 2, 2), G ("GAIN", 18, 2),
+                   G ("GAIN", 16, 3) },
+                 { "HIGH PASS", "LOW", "MID", "HIGH 12K" } };
+        // 7 British console E: four-band parametric with bell switches, filters, E (constant Q) / G (proportional Q)
+        a[7] = { "British Console E", "ブリティッシュ・コンソールE", "SSL E / G", 2, 2.0f,
+                 "大型コンソールのチャンネルEQ（SSL E / G 系の考え方を参考にした汎用モデル）。4バンドのパラメトリックとハイパス／ローパス。\n"
+                 "| 特徴 | 中身 |\n| 4バンド | HF と LF はシェルフ⇄ベル切替、HMF と LMF は Q つき |\n| E／G | E＝Q が一定（鋭く切れる）。G＝ゲインで Q が変わる（小さく動かすと広く、大きく動かすと鋭い） |\n| フィルター | HPF 16〜350 Hz、LPF 3〜22 kHz |\n| 色付け | VCA と Class A。DRIVE 0 でほぼ透明 |\n"
+                 "使いどころ：ドラムやボーカルの素早い整形、不要な帯域の外科的なカット。",
+                 "A large-format console channel EQ (a generic model after the SSL E / G approach). A four-band parametric plus high-pass / low-pass.\n"
+                 "| Trait | What it means |\n| Four bands | HF and LF switch shelf / bell, HMF and LMF have Q |\n| E / G | E = constant Q (cuts sharply); G = Q follows the gain (wide for small moves, sharp for big ones) |\n| Filters | HPF 16-350 Hz, LPF 3-22 kHz |\n| Colour | VCA and class A; nearly clean at DRIVE 0 |\n"
+                 "Use: quick shaping of drums and vocals, surgical cuts.",
+                 { G ("GAIN", 15, 0), F ("FREQ", 1500, 16000, 8000, 0), C ("BELL", { 0, 1 }, { "Shelf", "Bell" }, 0, 0),
+                   G ("GAIN", 18, 1), F ("FREQ", 600, 7000, 2500, 1), W ("Q", 0.5f, 3.0f, 1.0f, 1),
+                   G ("GAIN", 18, 2), F ("FREQ", 200, 2500, 600, 2), W ("Q", 0.5f, 3.0f, 1.0f, 2),
+                   G ("GAIN", 16, 3), F ("FREQ", 30, 450, 100, 3), C ("BELL", { 0, 1 }, { "Shelf", "Bell" }, 0, 3),
+                   [&] { Slot s = F ("HPF", 16, 350, 16, 4); s.def = 0.0f; return s; }(), [&] { Slot s = F ("LPF", 3000, 22000, 22000, 4); s.def = 1.0f; return s; }(),
+                   C ("TYPE", { 0, 1 }, { "E", "G" }, 0, 5) },
+                 { "HF", "HMF", "LMF", "LF", "FILTER", "CHAR" } };
+        // 8 American console: stepped frequencies and gains, proportional Q, shelf / peak switches
+        a[8] = { "American Console", "アメリカン・コンソール", "API 550", 3, 6.0f,
+                 "ディスクリートのコンソールEQ（API 550 系の考え方を参考にした汎用モデル）。周波数もゲインもステップ式、Q はゲインに比例。\n"
+                 "| 特徴 | 中身 |\n| ステップ | 3バンドとも5つの周波数、ゲインは ±2・4・6・9・12 dB |\n| 比例 Q | 小さく動かすと広く、大きく動かすと鋭い。強く押し出しても濁りにくい |\n| LOW／HIGH | シェルフ⇄ピーク切替 |\n| 色付け | トランスとディスクリート回路の押し出し。DRIVE で量 |\n"
+                 "使いどころ：スネアやキックのアタック、ギターの押し出しなど、パンチを足したい時。",
+                 "A discrete console EQ (a generic model after the API 550 approach). Stepped frequencies and gains, proportional Q.\n"
+                 "| Trait | What it means |\n| Steps | five frequencies per band, gains ±2, 4, 6, 9, 12 dB |\n| Proportional Q | wide for small moves, sharp for big ones: strong pushes stay clean |\n| LOW / HIGH | shelf / peak switch |\n| Colour | transformer and discrete push; DRIVE sets the amount |\n"
+                 "Use: punch: snare and kick attack, pushing guitars forward.",
+                 { C ("FREQ", { 30, 40, 50, 100, 200 }, {}, 3, 0), S2 ("GAIN", { -12, -9, -6, -4, -2, 0, 2, 4, 6, 9, 12 }, 0), C ("SHAPE", { 0, 1 }, { "Peak", "Shelf" }, 1, 0),
+                   C ("FREQ", { 400, 800, 1500, 3000, 5000 }, {}, 2, 1), S2 ("GAIN", { -12, -9, -6, -4, -2, 0, 2, 4, 6, 9, 12 }, 1),
+                   C ("FREQ", { 5000, 7000, 10000, 12500, 15000 }, {}, 2, 2), S2 ("GAIN", { -12, -9, -6, -4, -2, 0, 2, 4, 6, 9, 12 }, 2), C ("SHAPE", { 0, 1 }, { "Peak", "Shelf" }, 1, 2) },
+                 { "LOW", "MID", "HIGH" } };
         return a;
     }();
     return m;
@@ -266,6 +322,45 @@ inline int design (int model, const float* k, double fs, std::array<Biquad, 16>&
         {
             const double fq[] = { 50, 130, 320, 800, 2000, 5000, 12500 };
             for (int b = 0; b < 7; ++b) { const double g = v (b); if (std::abs (g) > 0.01) add().peak (fq[b], 0.9, g, fs); }
+            break;
+        }
+        case 5:   // tube program: dial 0-10 -> dB set by the circuit
+        {
+            const double lf = v (0), lb = v (1) * 1.35, la = v (2) * 1.75;      // about +13.5 / -17.5 dB at 10
+            if (lb > 0.01) add().lowShelf (lf, 0.9, lb, fs);                      // resonant shelf: a little bump at the corner
+            if (la > 0.01) add().lowShelf (lf * 2.2, 0.55, -la, fs);              // starts higher: boost + atten = lows up, dip above
+            const double hb = v (4) * 1.6;
+            if (hb > 0.01) add().peak (v (3), 1.0 / std::max (0.3, (double) v (5)) * 0.9, hb, fs);   // BANDWIDTH: larger = broader
+            const double ha = v (7) * 1.6;
+            if (ha > 0.01) add().highShelf (v (6), 0.55, -ha, fs);
+            break;
+        }
+        case 6:   // British console A
+        {
+            if (v (0) > 1) { add().highPass (v (0), 0.707, fs); add().highPass (v (0), 0.707, fs); }   // 18-ish dB/oct: two sections
+            if (std::abs (v (2)) > 0.01) add().lowShelf (v (1), 0.7, v (2), fs);
+            if (std::abs (v (4)) > 0.01) add().peak (v (3), 1.0, v (4), fs);
+            if (std::abs (v (5)) > 0.01) add().highShelf (12000, 0.6, v (5), fs);
+            break;
+        }
+        case 7:   // British console E / G
+        {
+            const bool gType = v (14) > 0.5f;
+            auto pq = [&] (double q, double g) { return gType ? q * juce::jlimit (0.5, 2.5, 0.45 + std::abs (g) / 9.0) : q; };   // G: Q follows the gain
+            if (std::abs (v (0)) > 0.01) { if (v (2) > 0.5f) add().peak (v (1), pq (0.8, v (0)), v (0), fs); else add().highShelf (v (1), 0.7, v (0), fs); }
+            if (std::abs (v (3)) > 0.01) add().peak (v (4), pq (v (5), v (3)), v (3), fs);
+            if (std::abs (v (6)) > 0.01) add().peak (v (7), pq (v (8), v (6)), v (6), fs);
+            if (std::abs (v (9)) > 0.01) { if (v (11) > 0.5f) add().peak (v (10), pq (0.8, v (9)), v (9), fs); else add().lowShelf (v (10), 0.7, v (9), fs); }
+            if (v (12) > 17.0f) { add().highPass (v (12), 0.54, fs); add().highPass (v (12), 1.31, fs); }   // 18-24 dB/oct
+            if (v (13) < 21000.0f) add().lowPass (v (13), 0.707, fs);                                       // 12 dB/oct
+            break;
+        }
+        case 8:   // American console: proportional Q
+        {
+            auto q = [] (double g) { return 0.45 + std::abs (g) / 12.0 * 1.5; };
+            if (std::abs (v (1)) > 0.01) { if (v (2) > 0.5f) add().lowShelf (v (0), 0.6 + std::abs (v (1)) / 30.0, v (1), fs); else add().peak (v (0), q (v (1)), v (1), fs); }
+            if (std::abs (v (4)) > 0.01) add().peak (v (3), q (v (4)), v (4), fs);
+            if (std::abs (v (6)) > 0.01) { if (v (7) > 0.5f) add().highShelf (v (5), 0.6 + std::abs (v (6)) / 30.0, v (6), fs); else add().peak (v (5), q (v (6)), v (6), fs); }
             break;
         }
         default: break;

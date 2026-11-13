@@ -197,7 +197,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     l.add (std::make_unique<AudioParameterBool> (ParameterID { pid::rsSc, 6 }, "Res sidechain detect", false));
     // ---- 1.0: analog EQ models. The 16 slots mean different controls for each model (see AnalogEQ.h) ----
     l.add (std::make_unique<AudioParameterBool> (ParameterID { pid::anOn, 7 }, "Analog on", false));
-    l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::anModel, 7 }, "Analog model", StringArray { "Passive Mastering", "Precision Parametric", "Air Band", "British Curve", "Program 7-Band" }, 0));
+    l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::anModel, 7 }, "Analog model", StringArray { "Passive Mastering", "Precision Parametric", "Air Band", "British Curve", "Program 7-Band", "Tube Program", "British Console A", "British Console E", "American Console" }, 0));
     l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::anDrive, 7 }, "Analog drive", NormalisableRange<float> (0.0f, 24.0f, 0.1f), 4.0f, AudioParameterFloatAttributes().withLabel ("dB")));
     l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::anOut, 7 }, "Analog output", NormalisableRange<float> (-12.0f, 12.0f, 0.1f), 0.0f, AudioParameterFloatAttributes().withLabel ("dB")));
     for (int i = 0; i < 16; ++i)

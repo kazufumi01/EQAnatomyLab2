@@ -121,8 +121,8 @@ public:
         addAndMakeVisible (drive); addAndMakeVisible (out);
         setHelp (onBtn, "ANALOG IN", "アナログEQモデルのオン／オフ。メインEQとレゾナンス・サプレッサーの後ろ、帯域サチュレーターの前に入る。オフの時は処理を通らない（レイテンシーなし）",
                  "Analog EQ model on / off. It sits after the main EQ and the resonance suppressor, before the band saturator. Off = not in the signal path (no latency)");
-        setHelp (modelBtn, "ANALOG MODEL", "モデルを選ぶ。選ぶとそのモデルのつまみが初期値に戻る（Cmd＋Z で戻せる）。\n| モデル | 系統 |\n| Passive Mastering | Massive Passive 系 |\n| Precision Parametric | Sontec 系 |\n| Air Band | Maag EQ4 系 |\n| British Curve | Curve Bender 系 |\n| Program 7-Band | Hitsville EQ のモデリング元の系統 |\nどれも公開されている動作を参考にした学習用の汎用モデルで、実機の回路を測ったものではない",
-                 "Pick the model. Choosing one resets its controls (Cmd+Z undoes).\n| Model | Family |\n| Passive Mastering | Massive Passive style |\n| Precision Parametric | Sontec style |\n| Air Band | Maag EQ4 style |\n| British Curve | Curve Bender style |\n| Program 7-Band | the family modelled by Hitsville EQ |\nAll are generic learning models after the published behaviour, not measured circuits");
+        setHelp (modelBtn, "ANALOG MODEL", "モデルを選ぶ。選ぶとそのモデルのつまみが初期値に戻る（Cmd＋Z で戻せる）。\n| モデル | 系統 |\n| Passive Mastering | Massive Passive 系 |\n| Precision Parametric | Sontec 系 |\n| Air Band | Maag EQ4 系 |\n| British Curve | Curve Bender 系 |\n| Program 7-Band | Hitsville EQ のモデリング元の系統 |\n| Tube Program | Pultec EQP-1A 系 |\n| British Console A | Neve 1073 系 |\n| British Console E | SSL E / G 系 |\n| American Console | API 550 系 |\nどれも公開されている動作を参考にした学習用の汎用モデルで、実機の回路を測ったものではない",
+                 "Pick the model. Choosing one resets its controls (Cmd+Z undoes).\n| Model | Family |\n| Passive Mastering | Massive Passive style |\n| Precision Parametric | Sontec style |\n| Air Band | Maag EQ4 style |\n| British Curve | Curve Bender style |\n| Program 7-Band | the family modelled by Hitsville EQ |\n| Tube Program | Pultec EQP-1A style |\n| British Console A | Neve 1073 style |\n| British Console E | SSL E / G style |\n| American Console | API 550 style |\nAll are generic learning models after the published behaviour, not measured circuits");
         setHelp (drive, "ANALOG DRIVE", "モデルの回路（真空管・トランス・Class A）にどれだけ強く入れるか。上げるほど倍音が増え、ピークが丸くなる。音量は自動で合わせる。\n| 値 | 聴こえ方 |\n| 0〜6 dB | ほぼ透明。太さがわずかに増える |\n| 6〜12 dB | 倍音がはっきり。中低域が濃くなる |\n| 12 dB〜 | 歪みとして聴こえる。効果音的 |",
                  "How hard the model's circuit (tube, transformer, class A) is driven. More = more harmonics and rounder peaks; the level is matched.\n| Value | Sounds like |\n| 0-6 dB | nearly transparent, a touch thicker |\n| 6-12 dB | clear harmonics, denser low-mids |\n| 12 dB up | audible distortion, an effect |");
         setHelp (out, "ANALOG OUT", "アナログ段の出力レベル（±12 dB）。オン／オフで音量をそろえて比べるために使う", "The analog stage's output level (±12 dB). Use it to match the level when comparing on / off");
@@ -174,7 +174,11 @@ private:
             case 1:  return { juce::Colour (0xffb9bcc0), juce::Colour (0xff1c1f24), juce::Colour (0xffc0392b), juce::Colour (0xff3a3d42) };   // brushed silver
             case 2:  return { juce::Colour (0xff1d1f22), juce::Colour (0xffdedede), juce::Colour (0xffd8c25a), juce::Colour (0xff9ea3a8) };   // black, silver knobs
             case 3:  return { juce::Colour (0xff59646e), juce::Colour (0xfff1ede4), juce::Colour (0xffe8a33a), juce::Colour (0xff23272c) };   // blue-grey console
-            default: return { juce::Colour (0xffd9cfb6), juce::Colour (0xff2a241b), juce::Colour (0xff2f6b4f), juce::Colour (0xff3b3328) };   // cream, green accent
+            case 4:  return { juce::Colour (0xffd9cfb6), juce::Colour (0xff2a241b), juce::Colour (0xff2f6b4f), juce::Colour (0xff3b3328) };   // cream, green accent
+            case 5:  return { juce::Colour (0xff3d4a57), juce::Colour (0xffeee6d2), juce::Colour (0xffe0b25a), juce::Colour (0xff15171a) };   // slate blue, cream lettering
+            case 6:  return { juce::Colour (0xff5d6b7c), juce::Colour (0xfff2efe8), juce::Colour (0xfff3dca8), juce::Colour (0xff7a2a26) };   // console blue-grey, red knobs, cream titles
+            case 7:  return { juce::Colour (0xff2e3135), juce::Colour (0xffe6e6e6), juce::Colour (0xff5fa8e0), juce::Colour (0xff5a5d62) };   // dark grey, coloured caps
+            default: return { juce::Colour (0xff141518), juce::Colour (0xffd8dde4), juce::Colour (0xff3d8de0), juce::Colour (0xff6d737b) };   // black, blue
         }
     }
     void layoutModel()
