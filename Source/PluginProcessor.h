@@ -7,6 +7,7 @@
 #include "XfadeConvolver.h"
 #include "LinkRegistry.h"
 #include "ResSuppressor.h"
+#include "AnalogEQ.h"
 #include "SamplePlayer.h"
 
 // =============================================================================
@@ -243,7 +244,7 @@ public:
 
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override { return true; }
-    const juce::String getName() const override { return "EQ Anatomy Lab 2"; }
+    const juce::String getName() const override { return "EQ Anatomy Lab 2 v1"; }
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }
     double getTailLengthSeconds() const override { return 0.4; }
@@ -361,6 +362,8 @@ private:
     SamplePlayer player; int playerWas = -1;
     Delay scDelay[2]; std::vector<float> scBuf[2];      // the sidechain, delayed like the EQ's output, for the suppressor's detector
     std::array<std::atomic<float>*, 10> rsNodeP {};      // threshold nodes f / g, looked up once
+    analog::Processor analogEq; bool anWasOn = false;     // 1.0: analog EQ model stage
+    std::array<std::atomic<float>*, analog::kSlots> anKP {};
     std::array<DynDetector, eqcore::kBands> det; std::array<double, eqcore::kBands> dynNow {}; double detAtt = 0.1, detRel = 0.01;
     TransientDetector trans;
     std::vector<double> maskBuf, maskDel;     // per-block transient mask, and the same delayed to match the output

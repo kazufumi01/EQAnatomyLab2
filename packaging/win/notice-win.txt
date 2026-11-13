@@ -1,4 +1,4 @@
-EQ Anatomy Lab 2 (Beta) - Windows
+EQ Anatomy Lab 2 v1  - Windows
 
 [日本語]
 この Windows 版は、実機での動作確認ができていません（自動ビルドで作成）。

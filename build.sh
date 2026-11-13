@@ -7,4 +7,4 @@ cmake -B build -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release \
   -DJUCE_PATH=$HOME/Documents/jpkplugins/JUCE
 cmake --build build --config Release -j
 killall -9 AudioComponentRegistrar 2>/dev/null || true
-auval -v aufx Eqa2 Jpkl | tail -3
+auval -v aufx Eqa3 Jpkl | tail -3

@@ -5,15 +5,15 @@
 EQAnatomyView::EQAnatomyView (EQAnatomyProcessor& p) : proc (p)
 {
     // the look is shared by every instance on this computer
-    theme::setSkin ((int) ZoomPrefs::file().getIntValue ("eqanatomy2.skin", 0)); lnf.apply();
+    theme::setSkin ((int) ZoomPrefs::file().getIntValue ("eqa2v1.skin", 0)); lnf.apply();
     for (int i = 0; i < theme::numSkins(); ++i) zoom.skinNames.add (theme::skinName (i));
     zoom.getSkin = [] { return theme::current; };
     zoom.setSkin = [this] (int i) { applySkin (i); };
-    theme::surface = juce::jlimit (0, theme::numSurfaces() - 1, ZoomPrefs::file().getIntValue ("eqanatomy2.surface", 0));
+    theme::surface = juce::jlimit (0, theme::numSurfaces() - 1, ZoomPrefs::file().getIntValue ("eqa2v1.surface", 0));
     for (int i = 0; i < theme::numSurfaces(); ++i) zoom.surfaceNames.add (theme::surfaceName (i));
     zoom.getSurface = [] { return theme::surface; };
     zoom.setSurface = [this] (int i) { applySurface (i); };
-    zoom.getScale = [] { return juce::jlimit (0, 4, ZoomPrefs::file().getIntValue ("eqanatomy2.gscale3", 0)); };
+    zoom.getScale = [] { return juce::jlimit (0, 4, ZoomPrefs::file().getIntValue ("eqa2v1.gscale3", 0)); };
     graph.onScale = [this] (int i) { applyScale (i); };   // the scale menu is on the graph (top left), not in the zoom menu
     applyScale (zoom.getScale());
     setLookAndFeel (&lnf);
@@ -212,7 +212,7 @@ void EQAnatomyView::mouseDown (const juce::MouseEvent& e)
 void EQAnatomyView::applySkin (int i)
 {
     theme::setSkin (i);
-    ZoomPrefs::file().setValue ("eqanatomy2.skin", i); ZoomPrefs::file().saveIfNeeded();
+    ZoomPrefs::file().setValue ("eqa2v1.skin", i); ZoomPrefs::file().saveIfNeeded();
     lnf.apply();
     sendLookAndFeelChange();
     refreshTexts();
@@ -222,14 +222,14 @@ void EQAnatomyView::applySkin (int i)
 void EQAnatomyView::applySurface (int i)
 {
     theme::surface = juce::jlimit (0, theme::numSurfaces() - 1, i);
-    ZoomPrefs::file().setValue ("eqanatomy2.surface", theme::surface); ZoomPrefs::file().saveIfNeeded();
+    ZoomPrefs::file().setValue ("eqa2v1.surface", theme::surface); ZoomPrefs::file().saveIfNeeded();
     repaint();
 }
 
 void EQAnatomyView::applyScale (int i)
 {
     i = juce::jlimit (0, 4, i);
-    ZoomPrefs::file().setValue ("eqanatomy2.gscale3", i); ZoomPrefs::file().saveIfNeeded();
+    ZoomPrefs::file().setValue ("eqa2v1.gscale3", i); ZoomPrefs::file().saveIfNeeded();
     static const float r[] = { 3.0f, 6.0f, 12.0f, 20.0f, 30.0f };
     graph.setDbRange (r[i]);
     repaint();
@@ -350,8 +350,6 @@ void EQAnatomyView::paint (juce::Graphics& g)
     g.drawText ("EQ ANATOMY LAB 2", 12, 6, 104, 20, juce::Justification::centredLeft);
     g.setColour (theme::faint); g.setFont (theme::ui (9.0f));
     g.drawText ("by Johan Plus Kei", 12, 24, 100, 14, juce::Justification::centredLeft);
-    g.setColour (theme::accent); g.setFont (theme::mono (8.5f, true));
-    g.drawText (juce::String::fromUTF8 ("\xce\xb2"), 88, 24, 12, 14, juce::Justification::centredLeft);   // beta mark
 
     const int lat = proc.currentLatency();
     const double fs = proc.getSampleRateOrDefault();

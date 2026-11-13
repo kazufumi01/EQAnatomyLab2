@@ -100,6 +100,7 @@ void EQAnatomyProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     for (auto& d : postDelay) d.prepare (256);
     maskDelay.prepare (eqcore::linearTaps (2) / 2 + 64 + 512 + ResSuppressor::latency());
     rs.prepare (sampleRate); player.prepare (sampleRate);
+    analogEq.prepare (sampleRate); for (int i = 0; i < analog::kSlots; ++i) anKP[(size_t) i] = apvts.getRawParameterValue (pid::anK (i));
     for (auto& d : scDelay) d.prepare (eqcore::linearTaps (2) / 2 + 64);
     for (auto& b : scBuf) b.assign ((size_t) samplesPerBlock, 0.0f);
     for (int i = 0; i < pid::kRsNodes; ++i) { rsNodeP[(size_t) (2 * i)] = apvts.getRawParameterValue (pid::rsNode (i, "f")); rsNodeP[(size_t) (2 * i + 1)] = apvts.getRawParameterValue (pid::rsNode (i, "g")); } for (auto& d : rsDelay) d.prepare (ResSuppressor::latency() + 8);
@@ -419,6 +420,19 @@ void EQAnatomyProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
         rsWasOn = run;
     }
 
+    // 1.0: analog EQ model (filters + the model's saturation), after the suppressor and before the band saturator
+    {
+        const bool run = P (pid::anOn) > 0.5f && ! bypass && ! delta && ! solo && ! ear;
+        if (run)
+        {
+            float k[analog::kSlots]; for (int i = 0; i < analog::kSlots; ++i) k[i] = anKP[(size_t) i] != nullptr ? anKP[(size_t) i]->load() : 0.5f;
+            analogEq.set ((int) P (pid::anModel), k, P (pid::anDrive), P (pid::anOut));
+            if (! anWasOn) analogEq.reset();
+            analogEq.process (oL, oR, n);
+        }
+        anWasOn = run;
+    }
+
     // band saturator, after the EQ (left out of Bypass / Delta / Pre-ring solo / ear training)
     {
         const bool satOn = P (pid::satOn) > 0.5f;
@@ -721,7 +735,7 @@ void EQAnatomyProcessor::resetToFlat()
 
 juce::File EQAnatomyProcessor::userPresetDir()
 {
-    return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile ("JPK").getChildFile ("EQ Anatomy Lab 2").getChildFile ("Presets");
+    return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile ("JPK").getChildFile ("EQ Anatomy Lab 2 v1").getChildFile ("Presets");
 }
 juce::Array<juce::File> EQAnatomyProcessor::userPresets() const
 {

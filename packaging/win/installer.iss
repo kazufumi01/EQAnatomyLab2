@@ -1,17 +1,17 @@
-﻿; EQ Anatomy Lab 2 — Windows インストーラー（Inno Setup 6）
-; GitHub Actions から:  iscc /DMyAppVersion=0.2.0 /DArtDir=..\..\build\EQAnatomyLab2_artefacts\Release packaging\win\installer.iss
-; 出力: dist\EQAnatomyLab2-<ver>-win64.exe （コード署名なし）
+; EQ Anatomy Lab 2 v1 — Windows インストーラー（Inno Setup 6）
+; GitHub Actions から:  iscc /DMyAppVersion=1.0.0 /DArtDir=..\..\build\EQAnatomyLab2v1_artefacts\Release packaging\win\installer.iss
+; 出力: dist\EQAnatomyLab2v1-<ver>-win64.exe （コード署名なし）
 
 #ifndef MyAppVersion
-  #define MyAppVersion "0.2.0"
+  #define MyAppVersion "1.0.0"
 #endif
 #ifndef ArtDir
-  #define ArtDir "..\..\build\EQAnatomyLab2_artefacts\Release"
+  #define ArtDir "..\..\build\EQAnatomyLab2v1_artefacts\Release"
 #endif
-#define MyAppName "EQ Anatomy Lab 2"
+#define MyAppName "EQ Anatomy Lab 2 v1"
 
 [Setup]
-AppId={{6E1B0C72-8A45-4F39-9D2E-3C7B5A1F2E64}
+AppId={{A3C5E9D1-7B24-4E6A-8F13-2D9C4B6E7A10}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher=JPK (by Johan Plus Kei)
@@ -22,7 +22,7 @@ DisableProgramGroupPage=yes
 LicenseFile=license-win.txt
 InfoBeforeFile=notice-win.txt
 OutputDir=..\..\dist
-OutputBaseFilename=EQAnatomyLab2-{#MyAppVersion}-win64
+OutputBaseFilename=EQAnatomyLab2v1-{#MyAppVersion}-win64
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin

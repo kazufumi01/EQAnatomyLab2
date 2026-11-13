@@ -87,5 +87,5 @@ private:
 class EQAnatomyEditor : public ScalingEditor<EQAnatomyView, EQAnatomyProcessor>
 {
 public:
-    explicit EQAnatomyEditor (EQAnatomyProcessor& p) : ScalingEditor (p, 1160, 760, "eqanatomy2.zoom2") {}
+    explicit EQAnatomyEditor (EQAnatomyProcessor& p) : ScalingEditor (p, 1160, 760, "eqa2v1.zoom2") {}
 };

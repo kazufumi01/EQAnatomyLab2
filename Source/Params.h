@@ -50,6 +50,12 @@ static const char* rsSc = "rs_sc";          // detect from the sidechain input
 inline juce::String rsNode (int i, const char* what) { return "rs_n" + juce::String (i + 1) + "_" + what; }
 constexpr int kRsNodes = 5;
 inline float rsNodeDefaultF (int i) { static const float f[] = { 100.0f, 300.0f, 1000.0f, 3000.0f, 10000.0f }; return f[i]; }
+// 1.0: analog-type EQ models (after the suppressor, before the band saturator). Off by default
+static const char* anOn = "an_on";
+static const char* anModel = "an_model";
+static const char* anDrive = "an_drive";
+static const char* anOut = "an_out";
+inline juce::String anK (int i) { return "an_k" + juce::String (i + 1); }
 }
 
 inline const juce::StringArray& typeNames()
@@ -189,5 +195,12 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     // ---- Lab 2: the suppressor's channels and its sidechain detection ----
     l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::rsMode, 6 }, "Res channels", StringArray { "Stereo", "Mid", "Side", "M/S" }, 0));
     l.add (std::make_unique<AudioParameterBool> (ParameterID { pid::rsSc, 6 }, "Res sidechain detect", false));
+    // ---- 1.0: analog EQ models. The 16 slots mean different controls for each model (see AnalogEQ.h) ----
+    l.add (std::make_unique<AudioParameterBool> (ParameterID { pid::anOn, 7 }, "Analog on", false));
+    l.add (std::make_unique<AudioParameterChoice> (ParameterID { pid::anModel, 7 }, "Analog model", StringArray { "Passive Mastering", "Precision Parametric", "Air Band", "British Curve", "Program 7-Band" }, 0));
+    l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::anDrive, 7 }, "Analog drive", NormalisableRange<float> (0.0f, 24.0f, 0.1f), 4.0f, AudioParameterFloatAttributes().withLabel ("dB")));
+    l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::anOut, 7 }, "Analog output", NormalisableRange<float> (-12.0f, 12.0f, 0.1f), 0.0f, AudioParameterFloatAttributes().withLabel ("dB")));
+    for (int i = 0; i < 16; ++i)
+        l.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::anK (i), 7 }, "Analog control " + String (i + 1), NormalisableRange<float> (0.0f, 1.0f, 0.0f), 0.5f));
     return l;
 }

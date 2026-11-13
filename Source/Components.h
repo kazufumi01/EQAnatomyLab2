@@ -69,6 +69,8 @@ private:
     bool skip = false;
 };
 inline void markReset (juce::Component& c) { c.getProperties().set ("resettable", true); }
+#include "AnalogPanel.h"
+#include "RefCurve.h"
 
 inline const char* mouseHelpJa() { return "| 操作 | 結果 |\n| 点をドラッグ | 周波数とゲイン |\n| Cmd＋ドラッグ | 縦か横に固定 |\n| Alt＋ドラッグ | そのバンドだけ試聴 |\n| Shift＋上下・ホイール | Q |\n| ダブルクリック | 追加（周波数で形を自動選択）・オフ |\n| 空きをクリック | 浮き窓をそこへ（点との位置関係を記憶） |\n| 右クリック | 浮き窓の表示切替 |\n| Cmd＋Z | 元に戻す |\n| ↑ ↓ キー | 最後に触った値を変える（Shift＋↑↓ で細かく） |\nグラフ・メーターの各部分にマウスを置くと、その説明が出る"; }
 inline const char* mouseHelpJaOld() { return "点をドラッグ：周波数とゲイン／Cmd＋ドラッグ：縦か横に固定／Alt＋ドラッグ：そのバンドだけを試聴／幅ハンドル・Shift＋上下・ホイール：Q／ダブルクリック：追加（クリックした周波数で形を自動選択：〜45 Hz ローカット／〜180 Hz ローシェルフ／〜6 kHz ベル／〜14 kHz ハイシェルフ／それ以上ハイカット）・オフ／右クリック：浮き窓の表示切替／DYN の▲▼（塗り＝ABOVE、輪＝BELOW）：上下ドラッグで可動範囲、Option＋クリックで初期値／上部の SAT タブ：サチュレーターの帯域／Cmd＋Z：元に戻す"; }
@@ -862,14 +864,24 @@ private:
 // =============================================================================
 //  The big graph: magnitude, phase / group delay overlay, analyzer, nodes
 // =============================================================================
-class GraphView : public juce::Component, public HoverHelp
+class GraphView : public juce::Component, public HoverHelp, public juce::FileDragAndDropTarget
 {
 public:
     explicit GraphView (ParamHelp& h) : ph (h), popup (h), popupFull (h, true), scSens (h, "SENS dB"), scWidth (h, "WIDTH dB"), scAtt (h, "ATTACK ms"),
         scLc (h, "LOW CUT"), scE1f (h, "EQ1 Hz"), scE1g (h, "EQ1 dB"), scE1q (h, "EQ1 Q"), scE2f (h, "EQ2 Hz"), scE2g (h, "EQ2 dB"), scE2q (h, "EQ2 Q"),
-        scMethod (h, { "Ratio", "Slope" })
+        scMethod (h, { "Ratio", "Slope" }), anPanel (h)
     {
         addChildComponent (popup);
+        // 1.0: the analog EQ model's panel (4th lower view) and the reference curve C
+        addChildComponent (anPanel);
+        anViewBtn.setClickingTogglesState (false); anViewBtn.setButtonText ("Analog"); addAndMakeVisible (anViewBtn);
+        anViewBtn.onClick = [this] { lowerToggle (3); };
+        setHelp (anViewBtn, "ANALOG", "下の枠にアナログEQモデルのパネルを出す。メインEQの後ろに、実機の考え方を参考にしたEQ＋回路の色付けを足す。\n| モデル | 系統 |\n| Passive Mastering | Massive Passive 系 |\n| Precision Parametric | Sontec 系 |\n| Air Band | Maag EQ4 系 |\n| British Curve | Curve Bender 系 |\n| Program 7-Band | Hitsville EQ のモデリング元の系統 |\nオンの間、グラフにそのカーブ（点線）が出る",
+                 "Shows the analog EQ model's panel in the lower view: an EQ plus circuit colour after classic hardware, added after the main EQ.\n| Model | Family |\n| Passive Mastering | Massive Passive style |\n| Precision Parametric | Sontec style |\n| Air Band | Maag EQ4 style |\n| British Curve | Curve Bender style |\n| Program 7-Band | the family modelled by Hitsville EQ |\nWhile on, its curve is drawn on the graph (dotted)");
+        addAndMakeVisible (refBtn); refBtn.getProperties().set ("chevron", 1);
+        refBtn.onClick = [this] { refMenu(); };
+        setHelp (refBtn, "REFERENCE C", "参照カーブ C。音声ファイルの平均的な周波数の特徴（または内蔵の参考カーブ）を、スペアナと同じ目盛りで重ねる。\n| 操作 | 結果 |\n| ファイルをグラフにドロップ | 解析して C に表示 |\n| メニュー → 読み込み | 同じ（WAV / AIFF / FLAC / MP3 / OGG） |\n| メニュー → 保存 | 今の C をプリセットとして登録 |\n無音と、平均より 20 dB 以上小さい部分は解析に含めない。C は「偏りを確かめる目安」で、完全に合わせる正解線ではない",
+                 "Reference curve C: the average frequency balance of an audio file (or a built-in reference), drawn on the analyzer's scale.\n| Action | Result |\n| Drop a file on the graph | analyse it into C |\n| Menu > Load | the same (WAV / AIFF / FLAC / MP3 / OGG) |\n| Menu > Save | store the current C as a preset |\nSilence and parts more than 20 dB below the average are left out. C is a guide to spot a lean, not a line to match exactly");
         popup.onMoved = popupFull.onMoved = [this] { placePopup(); };
         // T/B scope: the input's attack (Transient) and body share, scrolling, with the detector and its Sens / Width band
         scopeBtn.setClickingTogglesState (false); scopeBtn.setButtonText ("T/B scope"); addAndMakeVisible (scopeBtn);
@@ -1022,11 +1034,14 @@ public:
         }
         {
             const bool sc = (bool) ph.proc.uiState.getProperty ("scope", false) && ! ph.proc.earActive();
-            const int lv = sc ? juce::jlimit (0, 2, (int) ph.proc.uiState.getProperty ("lowerView", 0)) : -1;
+            const int lv = sc ? juce::jlimit (0, 3, (int) ph.proc.uiState.getProperty ("lowerView", 0)) : -1;
             const bool fd = lv > 0;           // anything but the T/B scope
             ph.proc.scopeNeed = lv == 0;
             scopeBtn.setToggleState (lv == 0, juce::dontSendNotification); fdTab.setToggleState (lv == 1, juce::dontSendNotification); resViewBtn.setToggleState (lv == 2, juce::dontSendNotification);
-            if (lv != lastLower) { lastLower = lv; lastField = fd; resized(); }
+            anViewBtn.setToggleState (lv == 3, juce::dontSendNotification);
+            if (lv != lastLower) { lastLower = lv; lastField = fd; anPanel.setVisible (lv == 3); popup.toFront (false); popupFull.toFront (false); resized(); }
+            if (lv == 3) anPanel.refresh();
+            updateAnalogAndRef();
             if (lv == 2) repaint();
             if (sc != lastScope) { lastScope = sc; if (sc) { scEnableW = ph.proc.scopeRawW.load(); scSig = {}; } else if (scPaused) setPaused (false); resized(); }
             if (sc && ! fd) scopeTick();
@@ -1132,6 +1147,9 @@ public:
         scaleBtn.setBounds (42, 6, 64, 20);
         pairBtn.setBounds (112, 6, 96, 20);
         anaA.setBounds (212, 6, 84, 20); anaB.setBounds (300, 6, 96, 20);
+        refBtn.setBounds (402, 6, 150, 20);
+        anViewBtn.setBounds (getWidth() - 448, 6, 64, 20);
+        if (lastScope && lastLower == 3) anPanel.setBounds (panelArea().toNearestInt().reduced (2, 0).withTrimmedBottom (2));
         {
             // Lab 2: every T/B Scope setting in one row under the graph (shown while the scope is open)
             const int yr = getHeight() - 32;
@@ -1211,6 +1229,7 @@ public:
                 g.setColour (srcColour (srcB, theme::text).withAlpha (0.5f)); g.strokePath (q, juce::PathStrokeType (1.0f));
             }
         }
+        paintRefAndAnalog (g);
         // grid
         g.setFont (theme::mono (10.0f));
         auto vgrid = [&] (juce::Rectangle<float> a)
@@ -1467,7 +1486,7 @@ public:
         g.setColour (theme::phase.withAlpha (0.85f));
         const juce::String ptxt = gd ? juce::String ("Group delay") : juce::String ("Phase");
         if (autoAna) { g.setColour (theme::accent); g.setFont (theme::ui (9.5f, true)); g.drawText ("SOLO auto", 300, 6, 70, 20, juce::Justification::centredLeft); g.setColour (theme::phase.withAlpha (0.85f)); g.setFont (theme::ui (10.5f, true)); }
-        g.drawText (ptxt + " (right, dotted)", getWidth() - 594, 8, 210, 16, juce::Justification::centredRight);
+        juce::ignoreUnused (ptxt);       // 1.0: the "(right, dotted)" caption made room for the C and Analog buttons; the Phase button and the help say it
         if (rsOnGraph())
         {
             g.setColour (theme::well.withAlpha (0.45f)); g.fillRect (plot());          // the EQ steps back: its points are locked meanwhile
@@ -1804,7 +1823,7 @@ public:
             return true;
         }
         // the lower panel
-        if (panelShown() && panelArea().contains (p))
+        if (panelShown() && panelArea().contains (p) && ! (lastScope && lastLower == 3))
         {
             if (lastScope && lastLower == 1)
             {
@@ -1926,10 +1945,13 @@ public:
                  + T ("| 線（B） | ", "| Line (B) | ") + b + T ("：スペアナ B（比較用） |\n", ": analyzer B (to compare) |\n")
                  + T ("| オレンジの曲線 | EQ 全体の周波数特性 |\n| 色付きの塗り | 選んだバンドだけの形 |\n", "| Orange curve | the whole EQ response |\n| Coloured fill | the selected band alone |\n")
                  + (split ? juce::String() : T ("| 黄色の点線 | 位相（または群遅延）。右の目盛り |\n", "| Yellow dotted | phase (or group delay), right scale |\n"))
+                 + (anShown ? T ("| 緑の点線 | アナログEQモデルのカーブ |\n", "| Green dotted | the analog EQ model's curve |\n") : juce::String())
+                 + (refC.valid() ? T ("| 紫の線 | 参照カーブ C：", "| Violet line | reference C: ") + refC.name + (refC.tolerance > 0.01f ? T ("（帯は ±", " (band ±") + juce::String (refC.tolerance, 0) + " dB)" : juce::String()) + " |\n" : juce::String())
                  + T ("スペアナ：8192 点 FFT。高域ほど持ち上げて表示（+3 dB/oct、1 kHz 基準）するので、普通の音楽はほぼ平らに見える。上がる時は即、下がる時はゆっくり。\n"
                       "| 操作 | 結果 |\n| ダブルクリック | バンド追加（周波数で形を自動選択） |\n| 点をドラッグ | 周波数とゲイン |\n| Cmd＋Z | 元に戻す |",
                       "Analyzer: 8192-point FFT, tilted +3 dB/oct around 1 kHz so typical music reads about flat. Rises at once, falls slowly.\n"
-                      "| Action | Result |\n| Double-click | add a band (shape follows the frequency) |\n| Drag a dot | frequency and gain |\n| Cmd + Z | undo |");
+                      "| Action | Result |\n| Double-click | add a band (shape follows the frequency) |\n| Drag a dot | frequency and gain |\n| Cmd + Z | undo |")
+                 + (refC.valid() && refC.note.isNotEmpty() ? "\n" + T ("C の出どころ：", "Where C comes from: ") + refC.note : juce::String());
             return true;
         }
         return false;
@@ -2199,7 +2221,7 @@ private:
     void paintPanel (juce::Graphics& g, bool split) const
     {
         if (! panelShown()) return;
-        if (lastScope) { if (lastLower == 1) paintField (g); else if (lastLower == 2) paintRes (g); else paintScope (g); }
+        if (lastScope) { if (lastLower == 1) paintField (g); else if (lastLower == 2) paintRes (g); else if (lastLower == 0) paintScope (g); }
         else if (split)
         {
             const auto a = panelArea(), pp = phasePlot();
@@ -2577,6 +2599,193 @@ private:
     double sAcc = 0, sAccT = 0, sPk = 0, sDmax = -100; int sCnt = 0;
     bool scPaused = false; std::vector<float> frozen; juce::String scSig;
     juce::TextButton fdTab, resViewBtn;
+    // ---- 1.0: analog model + reference curve C ----
+    AnalogPanel anPanel;
+    juce::TextButton anViewBtn, refBtn;
+    std::vector<double> anMag; bool anShown = false;
+    refc::Curve refC; juce::String refSig; float refOff = -40.0f; bool refAligned = false;
+    juce::String busy;                       // "analysing …" while a file is read
+    bool dragOver = false;
+    void updateAnalogAndRef()
+    {
+        // the analog stage's filter curve (drawn dotted on the graph while the stage is on)
+        anShown = ph.value (pid::anOn) > 0.5f;
+        if (anShown && ! fr.empty())
+        {
+            float k[analog::kSlots]; for (int i = 0; i < analog::kSlots; ++i) k[i] = ph.value (pid::anK (i));
+            analog::Processor::response ((int) ph.value (pid::anModel), k, ph.proc.getSampleRateOrDefault(), fr, anMag);
+        }
+        // the reference curve lives in the plugin state (uiState) so it comes back with the session
+        auto& ui = ph.proc.uiState;
+        const juce::String sig = ui.getProperty ("refPts", "").toString() + "|" + ui.getProperty ("refName", "").toString();
+        if (sig != refSig)
+        {
+            refSig = sig;
+            refC = refc::Curve::parse (ui.getProperty ("refName", "").toString(), ui.getProperty ("refNote", "").toString(), ui.getProperty ("refPts", "").toString());
+            refC.tolerance = (float) (double) ui.getProperty ("refTol", 0.0);
+            refBtn.setButtonText (refC.valid() ? "C: " + refC.name : juce::String ("C: none"));
+            refAligned = false;
+        }
+        // C sits on the analyzer's scale, lined up with A over 200 Hz - 5 kHz (or 1 kHz at -40 dB when nothing plays)
+        if (refC.valid() && spectrum.size() == fr.size())
+        {
+            double sa = 0, sc2 = 0; int n = 0;
+            for (size_t i = 0; i < fr.size(); ++i) if (fr[i] >= 200 && fr[i] <= 5000) { sa += spectrum[i]; sc2 += refC.at (fr[i]); ++n; }
+            const bool live = n > 0 && sa / n > -85.0;
+            const float target = live ? (float) ((sa - sc2) / n) : -40.0f;
+            refOff = refAligned ? refOff + (target - refOff) * 0.08f : target; refAligned = true;
+        }
+    }
+    void setRef (const refc::Curve& c)
+    {
+        auto& ui = ph.proc.uiState;
+        ui.setProperty ("refName", c.valid() ? c.name : juce::String(), nullptr);
+        ui.setProperty ("refNote", c.note, nullptr);
+        ui.setProperty ("refTol", c.tolerance, nullptr);
+        ui.setProperty ("refPts", c.valid() ? c.serialise() : juce::String(), nullptr);
+        repaint();
+    }
+    void analyseFile (const juce::File& f)
+    {
+        busy = ph.tr ("解析中：", "Analysing: ") + f.getFileName(); repaint();
+        std::thread ([sp = juce::Component::SafePointer<GraphView> (this), f]
+        {
+            auto r = refc::analyse (f);
+            juce::MessageManager::callAsync ([sp, r]
+            {
+                if (sp == nullptr) return;
+                sp->busy.clear();
+                if (r.error.isNotEmpty()) { sp->busy = r.error; sp->repaint(); juce::Timer::callAfterDelay (3000, [sp] { if (sp != nullptr) { sp->busy.clear(); sp->repaint(); } }); return; }
+                sp->setRef (r.curve);
+            });
+        }).detach();
+    }
+    void refMenu()
+    {
+        juce::PopupMenu m;
+        m.addItem (1, ph.tr ("音声ファイルを読み込んで解析…", "Load and analyse an audio file..."));
+        m.addItem (2, ph.tr ("C を消す", "Clear C"), refC.valid());
+        m.addSeparator();
+        juce::String grp; juce::PopupMenu sub; int id = 100; const auto& bi = refc::builtins();
+        auto flush = [&] { if (grp.isNotEmpty()) m.addSubMenu (grp, sub); sub = {}; };
+        static const std::map<juce::String, const char*> ja { { "Research", "研究の平均（ヒット曲）" }, { "Genre", "ジャンル（研究の傾向＋仮定）" }, { "Era", "年代（研究の傾向＋仮定）" } };
+        for (auto& b : bi)
+        {
+            const juce::String g (b.group);
+            if (g != grp) { flush(); grp = g; }
+            sub.addItem (id++, b.c.name, true, refC.name == b.c.name);
+        }
+        flush();
+        juce::ignoreUnused (ja);
+        const auto uf = refc::userFiles();
+        if (! uf.isEmpty())
+        {
+            juce::PopupMenu um; int k = 1000;
+            for (auto& f : uf) um.addItem (k++, f.getFileNameWithoutExtension(), true, refC.name == f.getFileNameWithoutExtension());
+            m.addSubMenu (ph.tr ("登録したカーブ", "My curves"), um);
+        }
+        m.addSeparator();
+        m.addItem (3, ph.tr ("今の C をプリセットとして登録…", "Save the current C as a preset..."), refC.valid());
+        if (! uf.isEmpty())
+        {
+            juce::PopupMenu dm; int k = 2000;
+            for (auto& f : uf) dm.addItem (k++, f.getFileNameWithoutExtension());
+            m.addSubMenu (ph.tr ("登録したカーブを削除（ゴミ箱へ）", "Delete a saved curve (to the Trash)"), dm);
+        }
+        m.addItem (4, ph.tr ("カーブのフォルダを開く", "Show the curves folder"));
+        m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&refBtn), [this, uf] (int r)
+        {
+            if (r == 1)
+            {
+                chooser = std::make_unique<juce::FileChooser> (ph.tr ("解析する音声ファイル", "Audio file to analyse"), juce::File(), "*.wav;*.wave;*.aif;*.aiff;*.flac;*.mp3;*.ogg");
+                chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [this] (const juce::FileChooser& fc)
+                { if (fc.getResult().existsAsFile()) analyseFile (fc.getResult()); });
+            }
+            else if (r == 2) setRef ({});
+            else if (r == 3) saveRefDialog();
+            else if (r == 4) { refc::userDir().createDirectory(); refc::userDir().revealToUser(); }
+            else if (r >= 2000 && r - 2000 < uf.size()) { uf[r - 2000].moveToTrash(); }
+            else if (r >= 1000 && r - 1000 < uf.size()) setRef (refc::load (uf[r - 1000]));
+            else if (r >= 100 && r - 100 < (int) refc::builtins().size()) setRef (refc::builtins()[(size_t) (r - 100)].c);
+        });
+    }
+    void saveRefDialog()
+    {
+        auto* aw = new juce::AlertWindow (ph.tr ("C をプリセットとして登録", "Save C as a preset"), ph.tr ("名前（同じ名前は上書き）", "Name (the same name overwrites)"), juce::MessageBoxIconType::NoIcon);
+        aw->addTextEditor ("name", refC.name); aw->addTextEditor ("note", refC.note, ph.tr ("メモ", "Note"));
+        aw->addButton ("OK", 1, juce::KeyPress (juce::KeyPress::returnKey)); aw->addButton (ph.tr ("キャンセル", "Cancel"), 0, juce::KeyPress (juce::KeyPress::escapeKey));
+        aw->enterModalState (true, juce::ModalCallbackFunction::create ([this, aw] (int res)
+        {
+            if (res == 1)
+            {
+                auto c = refC; c.name = aw->getTextEditorContents ("name").trim(); c.note = aw->getTextEditorContents ("note");
+                if (c.name.isNotEmpty() && refc::save (c)) setRef (c);
+            }
+        }), true);
+    }
+    std::unique_ptr<juce::FileChooser> chooser;
+    // drag and drop of audio files onto the graph
+    bool isInterestedInFileDrag (const juce::StringArray& files) override { for (auto& f : files) if (refc::isAudio (f)) return true; return false; }
+    void fileDragEnter (const juce::StringArray&, int, int) override { dragOver = true; repaint(); }
+    void fileDragExit (const juce::StringArray&) override { dragOver = false; repaint(); }
+    void filesDropped (const juce::StringArray& files, int, int) override
+    {
+        dragOver = false;
+        for (auto& f : files) if (refc::isAudio (f)) { analyseFile (juce::File (f)); break; }
+        repaint();
+    }
+    void paintRefAndAnalog (juce::Graphics& g) const
+    {
+        const auto ar = fullPlot();
+        if (refC.valid() && ! fr.empty() && ! ph.proc.earActive())
+        {
+            const juce::Colour cc (0xffb58cff);
+            auto y = [&] (double db) { return juce::jmap ((float) juce::jlimit (-95.0, 0.0, db + refOff), -90.0f, -10.0f, ar.getBottom(), ar.getY()); };
+            juce::Path line, band; bool first = true;
+            const double lo = std::max (frange::lo, refC.pts.front().first), hi = std::min (frange::hi, refC.pts.back().first);
+            std::vector<std::pair<float, float>> upper, lower;
+            for (size_t i = 0; i < fr.size(); ++i)
+            {
+                if (fr[i] < lo || fr[i] > hi) continue;
+                const double v = refC.at (fr[i]); const float x = xOf (fr[i]);
+                if (first) { line.startNewSubPath (x, y (v)); first = false; } else line.lineTo (x, y (v));
+                upper.push_back ({ x, y (v + refC.tolerance) }); lower.push_back ({ x, y (v - refC.tolerance) });
+            }
+            if (refC.tolerance > 0.01f && upper.size() > 1)
+            {
+                band.startNewSubPath (upper.front().first, upper.front().second);
+                for (auto& p : upper) band.lineTo (p.first, p.second);
+                for (auto it = lower.rbegin(); it != lower.rend(); ++it) band.lineTo (it->first, it->second);
+                band.closeSubPath();
+                g.setColour (cc.withAlpha (0.13f)); g.fillPath (band);
+            }
+            g.setColour (cc.withAlpha (0.95f)); g.strokePath (line, juce::PathStrokeType (1.8f));
+            g.setFont (theme::ui (10.0f, true));
+            const float lx = xOf (hi) - 150.0f, ly = y (refC.at (hi * 0.8)) - 16.0f;
+            g.drawText ("C  " + refC.name, (int) lx, (int) juce::jlimit (ar.getY(), ar.getBottom() - 14.0f, ly), 146, 14, juce::Justification::centredRight);
+        }
+        if (anShown && anMag.size() == fr.size())
+        {
+            juce::Path p;
+            for (size_t i = 0; i < fr.size(); ++i)
+            {
+                const float x = xOf (fr[i]), yy = yOf (juce::jlimit (-(double) dbRange, (double) dbRange, anMag[i]));
+                if (i == 0) p.startNewSubPath (x, yy); else p.lineTo (x, yy);
+            }
+            juce::Path d; const float dash[] = { 5.0f, 3.0f }; juce::PathStrokeType (1.6f).createDashedStroke (d, p, dash, 2);
+            g.setColour (juce::Colour (0xff6fd3a4)); g.fillPath (d);
+            g.setFont (theme::ui (10.0f, true));
+            g.drawText ("ANALOG  " + juce::String (analog::models()[(size_t) juce::jlimit (0, analog::kModels - 1, (int) ph.value (pid::anModel))].name), (int) plot().getX() + 8, (int) plot().getY() + 4, 220, 14, juce::Justification::centredLeft);
+        }
+        if (dragOver || busy.isNotEmpty())
+        {
+            auto r = ar.reduced (ar.getWidth() * 0.3f, ar.getHeight() * 0.4f);
+            g.setColour (theme::popup.withAlpha (0.9f)); g.fillRoundedRectangle (r, 8.0f);
+            g.setColour (juce::Colour (0xffb58cff)); g.drawRoundedRectangle (r, 8.0f, 1.5f);
+            g.setFont (theme::ui (14.0f, true)); g.setColour (theme::text);
+            g.drawFittedText (dragOver ? ph.tr ("ドロップして解析 → C", "Drop to analyse into C") : busy, r.toNearestInt().reduced (10), juce::Justification::centred, 2);
+        }
+    }
     bool lastField = false; int lastLower = -1;
 public:
     // stereo field per band, filled by the editor: [0] before the EQ, [1] after. NaN = too quiet to show
