@@ -120,10 +120,18 @@
 
 ---
 
-**Johan Plus Kei** — [Spotify](https://open.spotify.com/artist/30PV2gqUbDDwvuWtKaok0x) ・ [Apple Music](https://music.apple.com/us/artist/johan-plus-kei/519360150) ・ [X](https://x.com/johanpluskei) ・ [Instagram](https://www.instagram.com/johanpluskei) ・ [Learning labs](https://kazufumi01.github.io/)
+## 気に入ったら / If you like it
 
-## Support / 支援
+**🇯🇵 気に入ったら、曲の再生とページの拡散をお願いします！** EQ Anatomy Lab 2 は無料です。友人や授業へのシェア、[ブログ記事](https://jpk.seesaa.net/article/521891797.html)の拡散、曲の再生が何よりの応援になります。
 
-EQ Anatomy Lab 2 is free. A one-time tip via [PayPal](https://paypal.me/johanpluskei) is always welcome — **but what helps even more is sharing it and playing my music on [Spotify](https://open.spotify.com/artist/30PV2gqUbDDwvuWtKaok0x)!** Please do! More ways to help: <https://kazufumi01.github.io/support/>
+**🇬🇧 If you like it, please play my music and share this page!** EQ Anatomy Lab 2 is free, and streams and shares help more than anything else.
 
-EQ Anatomy Lab 2 は無料です。[PayPal](https://paypal.me/johanpluskei) からの投げ銭も歓迎ですが、**それ以上にうれしいのは記事の拡散と曲の再生です！** [ブログ記事](https://jpk.seesaa.net/article/521891797.html)のシェアや [Spotify](https://open.spotify.com/artist/30PV2gqUbDDwvuWtKaok0x) での再生、ぜひよろしくお願いします！
+[![Listen on Spotify](https://img.shields.io/badge/Spotify-Listen-1DB954?logo=spotify&logoColor=white)](https://open.spotify.com/artist/30PV2gqUbDDwvuWtKaok0x)
+[![Apple Music](https://img.shields.io/badge/Apple_Music-Listen-FA243C?logo=applemusic&logoColor=white)](https://music.apple.com/us/artist/johan-plus-kei/519360150)
+[![Linktree](https://img.shields.io/badge/Linktree-All_links-43E55E?logo=linktree&logoColor=white)](https://linktr.ee/jpk01)
+[![X](https://img.shields.io/badge/X-Follow-000000?logo=x&logoColor=white)](https://x.com/johanpluskei)
+[![Instagram](https://img.shields.io/badge/Instagram-Follow-E4405F?logo=instagram&logoColor=white)](https://www.instagram.com/johanpluskei)
+
+**Johan Plus Kei** — dream pop / indie pop / post-rock · [Learning labs](https://kazufumi01.github.io/)
+
+PayPal からの投げ銭も歓迎です / Tips via [PayPal](https://paypal.me/johanpluskei) are welcome too. More: <https://kazufumi01.github.io/support/>
