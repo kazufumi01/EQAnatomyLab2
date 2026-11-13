@@ -656,6 +656,8 @@ void EQAnatomyView::updateHover()
 
 void EQAnatomyView::timerCallback()
 {
+    // 60 fps while something on the graph is dragged (the curve and the dot move smoothly), 30 fps otherwise
+    if (const int ms = graph.isDragging() ? 16 : 33; getTimerInterval() != ms) startTimer (ms);
     updateHover();
     pullAnalyzer();
     refreshTexts();

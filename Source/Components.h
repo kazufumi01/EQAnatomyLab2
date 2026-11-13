@@ -35,7 +35,7 @@ struct ParamHelp
     void select (int i) const
     {
         auto& ui = proc.uiState;
-        ui.setProperty ("popPinned", false, nullptr);      // the extension stays as it is
+        // Lab 2: a panel the user moved stays where it was put (double-click its top strip to follow the dot again)
         ui.setProperty ("selected", i, nullptr);
         // the arrow keys follow to the same control of the newly selected band (b2_freq -> b5_freq)
         if (lastId.startsWithChar ('b') && lastId.containsChar ('_') && lastId.substring (1).upToFirstOccurrenceOf ("_", false, false).containsOnly ("0123456789"))
@@ -70,9 +70,9 @@ private:
 };
 inline void markReset (juce::Component& c) { c.getProperties().set ("resettable", true); }
 
-inline const char* mouseHelpJa() { return "| 操作 | 結果 |\n| 点をドラッグ | 周波数とゲイン |\n| Cmd＋ドラッグ | 縦か横に固定 |\n| Alt＋ドラッグ | そのバンドだけ試聴 |\n| Shift＋上下・ホイール | Q |\n| ダブルクリック | 追加（周波数で形を自動選択）・オフ |\n| 右クリック | 浮き窓の表示切替 |\n| Cmd＋Z | 元に戻す |\n| ↑ ↓ キー | 最後に触った値を変える（Shift＋↑↓ で細かく） |\nグラフ・メーターの各部分にマウスを置くと、その説明が出る"; }
+inline const char* mouseHelpJa() { return "| 操作 | 結果 |\n| 点をドラッグ | 周波数とゲイン |\n| Cmd＋ドラッグ | 縦か横に固定 |\n| Alt＋ドラッグ | そのバンドだけ試聴 |\n| Shift＋上下・ホイール | Q |\n| ダブルクリック | 追加（周波数で形を自動選択）・オフ |\n| 空きをクリック・右クリック | 浮き窓の表示切替 |\n| Cmd＋Z | 元に戻す |\n| ↑ ↓ キー | 最後に触った値を変える（Shift＋↑↓ で細かく） |\nグラフ・メーターの各部分にマウスを置くと、その説明が出る"; }
 inline const char* mouseHelpJaOld() { return "点をドラッグ：周波数とゲイン／Cmd＋ドラッグ：縦か横に固定／Alt＋ドラッグ：そのバンドだけを試聴／幅ハンドル・Shift＋上下・ホイール：Q／ダブルクリック：追加（クリックした周波数で形を自動選択：〜45 Hz ローカット／〜180 Hz ローシェルフ／〜6 kHz ベル／〜14 kHz ハイシェルフ／それ以上ハイカット）・オフ／右クリック：浮き窓の表示切替／DYN の▲▼（塗り＝ABOVE、輪＝BELOW）：上下ドラッグで可動範囲、Option＋クリックで初期値／上部の SAT タブ：サチュレーターの帯域／Cmd＋Z：元に戻す"; }
-inline const char* mouseHelpEn() { return "| Action | Result |\n| Drag a dot | frequency and gain |\n| Cmd + drag | lock to one axis |\n| Alt + drag | solo that band |\n| Shift + drag, wheel | Q |\n| Double-click | add (shape follows the frequency) or switch off |\n| Right-click | show / hide the floating panel |\n| Cmd + Z | undo |\n| Up / Down keys | step the value last touched (Shift: finer) |\nHover any part of the graph or the meters for its explanation"; }
+inline const char* mouseHelpEn() { return "| Action | Result |\n| Drag a dot | frequency and gain |\n| Cmd + drag | lock to one axis |\n| Alt + drag | solo that band |\n| Shift + drag, wheel | Q |\n| Double-click | add (shape follows the frequency) or switch off |\n| Click an empty spot, right-click | show / hide the floating panel |\n| Cmd + Z | undo |\n| Up / Down keys | step the value last touched (Shift: finer) |\nHover any part of the graph or the meters for its explanation"; }
 inline const char* mouseHelpEnOld() { return "Drag a dot: frequency and gain / Cmd + drag: lock to one axis / Alt + drag: solo that band / width handles, Shift + drag or wheel: Q / double-click: add (the shape follows the frequency: below 45 Hz low cut, 180 Hz low shelf, 6 kHz bell, 14 kHz high shelf, above that high cut) or switch off / right-click: show or hide the floating panel / DYN triangles (filled = ABOVE, ring = BELOW): drag up/down for the range, Option+click resets / SAT tabs: saturator band / Cmd + Z: undo"; }
 
 inline juce::String fmtHz (double f)
@@ -492,6 +492,7 @@ public:
                 setTopLeftPosition (x, y);
                 auto& ui = ph.proc.uiState;
                 ui.setProperty ("popPinned", true, nullptr); ui.setProperty ("popX", x, nullptr); ui.setProperty ("popY", y, nullptr);
+                if (onMoved) onMoved();
             }
             return;
         }
@@ -539,6 +540,7 @@ public:
     bool isBusy() const { return moving || thrDrag || fq.isBusy() || gn.isBusy() || qv.isBusy() || th.isBusy() || rg.isBusy() || bl.isBusy()
                               || at.isBusy() || rl.isBusy() || kn.isBusy() || tb.isMouseButtonDown(); }
     static constexpr int compactW = 270, compactH = 100, fullW = 270, fullH = 140;
+    std::function<void()> onMoved;      // the graph re-places (and re-scales) the panel
     int idealHeight() const { return full ? fullH : compactH; }
     int idealWidth() const { return full ? fullW : compactW; }
     void paint (juce::Graphics& g) override
@@ -867,6 +869,7 @@ public:
         scMethod (h, { "Ratio", "Slope" })
     {
         addChildComponent (popup);
+        popup.onMoved = popupFull.onMoved = [this] { placePopup(); };
         // T/B scope: the input's attack (Transient) and body share, scrolling, with the detector and its Sens / Width band
         scopeBtn.setClickingTogglesState (false); scopeBtn.setButtonText ("T/B scope"); addAndMakeVisible (scopeBtn);
         // T/B Scope and Stereo field share the lower panel: one of them (or neither) is shown
@@ -1507,7 +1510,7 @@ public:
         }
         drag = pick (e.position);
         if (drag.what >= 3) { ph.begin (edgeId (drag.what)); return; }
-        if (drag.band < 0) return;
+        if (drag.band < 0) { clickCand = ! e.mods.isAnyModifierKeyDown(); downPos = e.position; return; }   // an empty spot: a single click toggles the panel
         ph.select (drag.band);
         if (e.mods.isAltDown()) { altSolo = true; ph.proc.soloBand = drag.band; }
         downPos = e.position; axis = 0; scaleHold = true;   // drag above the plot to go past the current scale; it widens on release
@@ -1568,6 +1571,7 @@ public:
             if (low) f = std::min (f, ph.value (other) / 1.06f); else f = std::max (f, ph.value (other) * 1.06f);
             ph.set (id, juce::jlimit (20.0f, 20000.0f, f)); return;
         }
+        if (clickCand && e.position.getDistanceFrom (downPos) > 4.0f) clickCand = false;
         if (drag.band < 0) return;
         const int b = drag.band; const auto pr = plot();
         const int t = (int) ph.value (pid::band (b, "type"));
@@ -1586,6 +1590,7 @@ public:
             const bool noGain = t == (int) eqcore::Type::LowCut || t == (int) eqcore::Type::HighCut || t == (int) eqcore::Type::Notch || t == (int) eqcore::Type::AllPass;
             ph.set (pid::band (b, "freq"), axis == 2 ? startF : (float) fOf (e.position.x));
             if (! noGain) ph.set (pid::band (b, "gain"), axis == 1 ? startG : juce::jlimit (-30.0f, 30.0f, juce::jmap (e.position.y, pr.getBottom(), pr.getY(), -dbRange, dbRange)));
+            placePopup(); repaint();          // the dot follows the mouse at once, not at the next refresh
         }
         else
         {
@@ -1615,9 +1620,23 @@ public:
         else if (drag.band >= 0) for (auto w : { "freq", "gain", "q" }) ph.end (pid::band (drag.band, w));
         drag = {}; axis = 0;
         if (altSolo) { altSolo = false; ph.proc.soloBand = -1; }
+        if (clickCand)
+        {
+            // wait for a possible double-click (which adds a band) before toggling the floating panel
+            clickCand = false;
+            const int t = ++clickToken;
+            juce::Timer::callAfterDelay (juce::MouseEvent::getDoubleClickTimeout() + 20, [sp = juce::Component::SafePointer<GraphView> (this), t]
+            {
+                if (sp == nullptr || sp->clickToken != t) return;
+                auto& ui = sp->ph.proc.uiState;
+                ui.setProperty ("popup", ! (bool) ui.getProperty ("popup", true), nullptr);
+            });
+        }
     }
+    bool clickCand = false; int clickToken = 0;
     void mouseDoubleClick (const juce::MouseEvent& e) override
     {
+        ++clickToken; clickCand = false;      // a double-click is not a panel toggle
         if (ph.proc.earActive()) return;
         if (const int h = rsHit (e.position); h >= 0)
         {
@@ -1661,7 +1680,17 @@ public:
     }
 
     // ---- help for the spot under the mouse (the editor shows it in the info card) ----
+    // while a button is held (dragging a dot, a handle, a line) the help stays on what was grabbed instead of flickering
     bool hoverHelp (juce::Point<float> p, juce::String& title, juce::String& text) const override
+    {
+        if (juce::ModifierKeys::currentModifiers.isAnyMouseButtonDown() && heldTitle.isNotEmpty()) { title = heldTitle; text = heldText; return true; }
+        const bool r = hoverHelpAt (p, title, text);
+        heldTitle = r ? title : juce::String(); heldText = r ? text : juce::String();
+        return r;
+    }
+    mutable juce::String heldTitle, heldText;
+    bool isDragging() const { return drag.band >= 0 || drag.what >= 3 || rsDrag >= 0 || dynDrag >= 0 || scDrag != 0 || panelDrag; }
+    bool hoverHelpAt (juce::Point<float> p, juce::String& title, juce::String& text) const
     {
         if (ph.proc.earActive()) return false;
         auto T = [this] (const char* j, const char* e) { return ph.tr (j, e); };
@@ -2437,20 +2466,34 @@ private:
         const auto c = nodePos (s, bands[(size_t) s]);
         const bool ex = (bool) ph.proc.uiState.getProperty ("popExpand", false);
         auto& pp = popup;
-        const int w = pp.idealWidth(), h = pp.idealHeight() + (ex ? popupFull.idealHeight() + 2 : 0);   // the group: compact + extension
+        // Lab 2: the panel is drawn at 84 % and kept well away from the dot, so the point and the curve around it stay visible
+        constexpr float S = 0.84f;
+        const int w = (int) (pp.idealWidth() * S), h = (int) ((pp.idealHeight() + (ex ? popupFull.idealHeight() + 2 : 0)) * S);   // on screen: compact + extension
         auto& ui = ph.proc.uiState;
+        int x, y;
         if ((bool) ui.getProperty ("popPinned", false))       // parked where the user dragged it
         {
-            pp.setBounds (juce::jlimit (4, getWidth() - w - 4, (int) ui.getProperty ("popX", 40)), juce::jlimit (4, getHeight() - h - 4, (int) ui.getProperty ("popY", 40)), w, pp.idealHeight());
-            popupFull.setBounds (pp.getX(), pp.getBottom() + 2, w, popupFull.idealHeight());
-            return;
+            x = juce::jlimit (4, getWidth() - w - 4, (int) ui.getProperty ("popX", 40));
+            y = juce::jlimit (4, getHeight() - h - 4, (int) ui.getProperty ("popY", 40));
         }
-        int x = (int) c.x + 22, y = (int) c.y - h - 14;
-        if (x + w > getWidth() - 8) x = (int) c.x - w - 22;
-        if (y < 32) y = (int) c.y + 22;
-        if (y + h > getHeight() - 20) y = getHeight() - 20 - h;
-        pp.setBounds (juce::jlimit (8, getWidth() - w - 8, x), juce::jmax (30, y), w, pp.idealHeight());
-        popupFull.setBounds (pp.getX(), pp.getBottom() + 2, w, popupFull.idealHeight());
+        else
+        {
+            // the other side of the 0 dB line from the dot: a boost's curve rises above the line, so the panel goes below it (and the other way round)
+            constexpr int gapX = 64, gapY = 44;
+            const int zeroY = (int) yOf (0.0), top = 32, bottom = getHeight() - 20 - h;
+            x = (int) c.x + gapX;
+            if (x + w > getWidth() - 8) x = (int) c.x - w - gapX;       // no room on the right: the left side
+            if (c.y <= zeroY) y = std::max ((int) c.y + gapY, zeroY + 18);          // dot at or above the line: under the line
+            else              y = std::min ((int) c.y - h - gapY, zeroY - h - 18);  // dot below the line: over the line
+            if (y > bottom) y = std::min ((int) c.y - h - gapY, bottom);
+            if (y < top) y = std::max ((int) c.y + gapY, top);
+            y = juce::jlimit (top, std::max (top, bottom), y);
+            x = juce::jlimit (8, getWidth() - w - 8, x); y = juce::jmax (30, y);
+        }
+        auto put = [S] (juce::Component& c, int px, int py, int cw, int ch)
+        { c.setTransform ({}); c.setBounds (px, py, cw, ch); c.setTransform (juce::AffineTransform::scale (S, S, (float) px, (float) py)); };
+        put (pp, x, y, pp.idealWidth(), pp.idealHeight());
+        put (popupFull, x, y + (int) std::round ((pp.idealHeight() + 2) * S), popupFull.idealWidth(), popupFull.idealHeight());
     }
 
     ParamHelp& ph;
