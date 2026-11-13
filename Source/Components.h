@@ -70,9 +70,9 @@ private:
 };
 inline void markReset (juce::Component& c) { c.getProperties().set ("resettable", true); }
 
-inline const char* mouseHelpJa() { return "| 操作 | 結果 |\n| 点をドラッグ | 周波数とゲイン |\n| Cmd＋ドラッグ | 縦か横に固定 |\n| Alt＋ドラッグ | そのバンドだけ試聴 |\n| Shift＋上下・ホイール | Q |\n| ダブルクリック | 追加（周波数で形を自動選択）・オフ |\n| 空きをクリック・右クリック | 浮き窓の表示切替 |\n| Cmd＋Z | 元に戻す |\n| ↑ ↓ キー | 最後に触った値を変える（Shift＋↑↓ で細かく） |\nグラフ・メーターの各部分にマウスを置くと、その説明が出る"; }
+inline const char* mouseHelpJa() { return "| 操作 | 結果 |\n| 点をドラッグ | 周波数とゲイン |\n| Cmd＋ドラッグ | 縦か横に固定 |\n| Alt＋ドラッグ | そのバンドだけ試聴 |\n| Shift＋上下・ホイール | Q |\n| ダブルクリック | 追加（周波数で形を自動選択）・オフ |\n| 空きをクリック | 浮き窓をそこへ（点との位置関係を記憶） |\n| 右クリック | 浮き窓の表示切替 |\n| Cmd＋Z | 元に戻す |\n| ↑ ↓ キー | 最後に触った値を変える（Shift＋↑↓ で細かく） |\nグラフ・メーターの各部分にマウスを置くと、その説明が出る"; }
 inline const char* mouseHelpJaOld() { return "点をドラッグ：周波数とゲイン／Cmd＋ドラッグ：縦か横に固定／Alt＋ドラッグ：そのバンドだけを試聴／幅ハンドル・Shift＋上下・ホイール：Q／ダブルクリック：追加（クリックした周波数で形を自動選択：〜45 Hz ローカット／〜180 Hz ローシェルフ／〜6 kHz ベル／〜14 kHz ハイシェルフ／それ以上ハイカット）・オフ／右クリック：浮き窓の表示切替／DYN の▲▼（塗り＝ABOVE、輪＝BELOW）：上下ドラッグで可動範囲、Option＋クリックで初期値／上部の SAT タブ：サチュレーターの帯域／Cmd＋Z：元に戻す"; }
-inline const char* mouseHelpEn() { return "| Action | Result |\n| Drag a dot | frequency and gain |\n| Cmd + drag | lock to one axis |\n| Alt + drag | solo that band |\n| Shift + drag, wheel | Q |\n| Double-click | add (shape follows the frequency) or switch off |\n| Click an empty spot, right-click | show / hide the floating panel |\n| Cmd + Z | undo |\n| Up / Down keys | step the value last touched (Shift: finer) |\nHover any part of the graph or the meters for its explanation"; }
+inline const char* mouseHelpEn() { return "| Action | Result |\n| Drag a dot | frequency and gain |\n| Cmd + drag | lock to one axis |\n| Alt + drag | solo that band |\n| Shift + drag, wheel | Q |\n| Double-click | add (shape follows the frequency) or switch off |\n| Click an empty spot | move the floating panel there (kept relative to the dot) |\n| Right-click | show / hide the floating panel |\n| Cmd + Z | undo |\n| Up / Down keys | step the value last touched (Shift: finer) |\nHover any part of the graph or the meters for its explanation"; }
 inline const char* mouseHelpEnOld() { return "Drag a dot: frequency and gain / Cmd + drag: lock to one axis / Alt + drag: solo that band / width handles, Shift + drag or wheel: Q / double-click: add (the shape follows the frequency: below 45 Hz low cut, 180 Hz low shelf, 6 kHz bell, 14 kHz high shelf, above that high cut) or switch off / right-click: show or hide the floating panel / DYN triangles (filled = ABOVE, ring = BELOW): drag up/down for the range, Option+click resets / SAT tabs: saturator band / Cmd + Z: undo"; }
 
 inline juce::String fmtHz (double f)
@@ -285,7 +285,7 @@ public:
             auto& ui = ph.proc.uiState;
             // keep the panel where it is: park it at its current place before it grows or shrinks
             if (! (bool) ui.getProperty ("popPinned", false))
-            { ui.setProperty ("popPinned", true, nullptr); ui.setProperty ("popX", getX(), nullptr); ui.setProperty ("popY", getY(), nullptr); }
+            { ui.setProperty ("popPinned", true, nullptr); ui.setProperty ("popX", getX(), nullptr); ui.setProperty ("popY", getY(), nullptr); ui.setProperty ("popRel", false, nullptr); }
             ui.setProperty ("popExpand", ! (bool) ui.getProperty ("popExpand", false), nullptr);
         };
         addAndMakeVisible (expBtn);
@@ -492,6 +492,7 @@ public:
                 setTopLeftPosition (x, y);
                 auto& ui = ph.proc.uiState;
                 ui.setProperty ("popPinned", true, nullptr); ui.setProperty ("popX", x, nullptr); ui.setProperty ("popY", y, nullptr);
+                ui.setProperty ("popRel", false, nullptr);      // the graph turns this place into an offset from the dot
                 if (onMoved) onMoved();
             }
             return;
@@ -1623,17 +1624,21 @@ public:
         if (clickCand)
         {
             // wait for a possible double-click (which adds a band) before toggling the floating panel
-            clickCand = false;
+            clickCand = false; clickAt = downPos;
             const int t = ++clickToken;
             juce::Timer::callAfterDelay (juce::MouseEvent::getDoubleClickTimeout() + 20, [sp = juce::Component::SafePointer<GraphView> (this), t]
             {
                 if (sp == nullptr || sp->clickToken != t) return;
                 auto& ui = sp->ph.proc.uiState;
-                ui.setProperty ("popup", ! (bool) ui.getProperty ("popup", true), nullptr);
+                const int w = (int) (sp->popup.idealWidth() * 0.84f), h = (int) (sp->popup.idealHeight() * 0.84f);
+                ui.setProperty ("popup", true, nullptr);
+                ui.setProperty ("popPinned", true, nullptr); ui.setProperty ("popRel", false, nullptr);
+                ui.setProperty ("popX", (int) sp->clickAt.x - w / 2, nullptr); ui.setProperty ("popY", (int) sp->clickAt.y - h / 2, nullptr);
+                sp->placePopup();
             });
         }
     }
-    bool clickCand = false; int clickToken = 0;
+    bool clickCand = false; int clickToken = 0; juce::Point<float> clickAt;
     void mouseDoubleClick (const juce::MouseEvent& e) override
     {
         ++clickToken; clickCand = false;      // a double-click is not a panel toggle
@@ -2471,10 +2476,22 @@ private:
         const int w = (int) (pp.idealWidth() * S), h = (int) ((pp.idealHeight() + (ex ? popupFull.idealHeight() + 2 : 0)) * S);   // on screen: compact + extension
         auto& ui = ph.proc.uiState;
         int x, y;
-        if ((bool) ui.getProperty ("popPinned", false))       // parked where the user dragged it
+        if ((bool) ui.getProperty ("popPinned", false))
         {
-            x = juce::jlimit (4, getWidth() - w - 4, (int) ui.getProperty ("popX", 40));
-            y = juce::jlimit (4, getHeight() - h - 4, (int) ui.getProperty ("popY", 40));
+            // Lab 2: the place the user chose is kept as an offset from the dot, so the panel follows the dot (and any other
+            // selected band) at the same distance. Where that would leave the graph, the offset flips left/right or up/down
+            if (! (bool) ui.getProperty ("popRel", false))
+            {
+                ui.setProperty ("popDX", (int) ui.getProperty ("popX", 40) - (int) c.x, nullptr);
+                ui.setProperty ("popDY", (int) ui.getProperty ("popY", 40) - (int) c.y, nullptr);
+                ui.setProperty ("popRel", true, nullptr);
+            }
+            const int dx = (int) ui.getProperty ("popDX", 64), dy = (int) ui.getProperty ("popDY", 44);
+            const int left = 4, right = getWidth() - w - 4, top = 30, bottom = getHeight() - h - 4;
+            x = (int) c.x + dx; y = (int) c.y + dy;
+            if (x < left || x > right) { const int fx = (int) c.x - dx - w; if (fx >= left && fx <= right) x = fx; }    // mirror across the dot
+            if (y < top || y > bottom) { const int fy = (int) c.y - dy - h; if (fy >= top && fy <= bottom) y = fy; }
+            x = juce::jlimit (left, std::max (left, right), x); y = juce::jlimit (top, std::max (top, bottom), y);
         }
         else
         {
