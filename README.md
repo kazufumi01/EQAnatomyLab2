@@ -9,7 +9,7 @@
 
 ![EQ Anatomy Lab 2](docs/screenshot-main.png)
 
-🔗 **他の学習ラボ・解説記事 / More learning labs & articles：** [Learning labs（GitHub Pages）](https://kazufumi01.github.io/) ・ [目次・解説記事（Seesaa・日本語）](https://jpk.seesaa.net/article/521891797.html)
+🔗 **学習ラボ・解説ページ / Learning labs & articles：** [Learning labs（GitHub Pages）](https://kazufumi01.github.io/) ・ [目次・解説記事（Seesaa・日本語）](https://jpk.seesaa.net/article/521891797.html)
 
 ## ダウンロード / Download
 
