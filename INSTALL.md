@@ -10,10 +10,10 @@
 
 | ファイル | 内容 |
 |---|---|
-| `EQAnatomyLab2v1-1.0.0-mac.zip` | Mac・手動インストール（おすすめ） |
-| `EQAnatomyLab2v1-1.0.0-mac.pkg` | Mac・インストーラー（ターミナルを使いたくない人向け） |
-| `EQAnatomyLab2v1-1.0.0-win64.zip` | Windows・手動インストール（未検証） |
-| `EQAnatomyLab2v1-1.0.0-win64.exe` | Windows・インストーラー（未検証） |
+| [`EQAnatomyLab2v1-1.0.0-mac.zip`](https://github.com/kazufumi01/EQAnatomyLab2/releases/latest/download/EQAnatomyLab2v1-1.0.0-mac.zip) | Mac・手動インストール（おすすめ） |
+| [`EQAnatomyLab2v1-1.0.0-mac.pkg`](https://github.com/kazufumi01/EQAnatomyLab2/releases/latest/download/EQAnatomyLab2v1-1.0.0-mac.pkg) | Mac・インストーラー（ターミナルを使いたくない人向け） |
+| [`EQAnatomyLab2v1-1.0.0-win64.zip`](https://github.com/kazufumi01/EQAnatomyLab2/releases/latest/download/EQAnatomyLab2v1-1.0.0-win64.zip) | Windows・手動インストール（未検証） |
+| [`EQAnatomyLab2v1-1.0.0-win64.exe`](https://github.com/kazufumi01/EQAnatomyLab2/releases/latest/download/EQAnatomyLab2v1-1.0.0-win64.exe) | Windows・インストーラー（未検証） |
 
 ---
 
