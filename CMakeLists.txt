@@ -6,7 +6,7 @@ endif()
 # Windows: C++ ランタイムを静的リンク（VC++ 再頒布パッケージ不要）
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-project(EQAnatomyLab2v1 VERSION 1.0.0)   # EQ Anatomy Lab 2 1.0 (separate product from Lab 2 β 0.2.x and Lab 0.1.x)
+project(EQAnatomyLab2v1 VERSION 1.0.1)   # EQ Anatomy Lab 2 1.0 (separate product from Lab 2 β 0.2.x and Lab 0.1.x)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 

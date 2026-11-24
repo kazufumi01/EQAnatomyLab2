@@ -1,12 +1,12 @@
 # Windows (VST3 + Standalone) をクラウドでビルドし、インストーラー(.exe)と手動用zipを作る
-# 「Actions」タブから手動実行。release_tag（例 v1.0.0）を入れると、そのReleaseに添付する
+# 「Actions」タブから手動実行。release_tag（例 v1.0.1）を入れると、そのReleaseに添付する
 name: Build Windows
 
 on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: '既存Releaseに添付する場合のタグ（例 v1.0.0）。空ならテストビルドのみ'
+        description: '既存Releaseに添付する場合のタグ（例 v1.0.1）。空ならテストビルドのみ'
         required: false
         default: ''
 

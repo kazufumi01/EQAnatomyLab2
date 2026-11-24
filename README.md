@@ -13,12 +13,12 @@
 
 ## ダウンロード / Download
 
-**[最新版をダウンロード / Download latest (1.0.0)](https://github.com/kazufumi01/EQAnatomyLab2/releases/latest)**
+**[最新版をダウンロード / Download latest (1.0.1)](https://github.com/kazufumi01/EQAnatomyLab2/releases/latest)**
 
 | | 手動インストール（おすすめ）<br>Manual (recommended) | インストーラー<br>Installer |
 |---|---|---|
-| **Mac**<br>macOS 11+, Apple Silicon / Intel | [`EQAnatomyLab2v1-1.0.0-mac.zip`](https://github.com/kazufumi01/EQAnatomyLab2/releases/latest/download/EQAnatomyLab2v1-1.0.0-mac.zip) | [`EQAnatomyLab2v1-1.0.0-mac.pkg`](https://github.com/kazufumi01/EQAnatomyLab2/releases/latest/download/EQAnatomyLab2v1-1.0.0-mac.pkg) |
-| **Windows** ⚠️ 未検証 / untested<br>10 / 11, 64-bit | [`EQAnatomyLab2v1-1.0.0-win64.zip`](https://github.com/kazufumi01/EQAnatomyLab2/releases/latest/download/EQAnatomyLab2v1-1.0.0-win64.zip) | [`EQAnatomyLab2v1-1.0.0-win64.exe`](https://github.com/kazufumi01/EQAnatomyLab2/releases/latest/download/EQAnatomyLab2v1-1.0.0-win64.exe) |
+| **Mac**<br>macOS 11+, Apple Silicon / Intel | [`EQAnatomyLab2v1-1.0.1-mac.zip`](https://github.com/kazufumi01/EQAnatomyLab2/releases/latest/download/EQAnatomyLab2v1-1.0.1-mac.zip) | [`EQAnatomyLab2v1-1.0.1-mac.pkg`](https://github.com/kazufumi01/EQAnatomyLab2/releases/latest/download/EQAnatomyLab2v1-1.0.1-mac.pkg) |
+| **Windows** ⚠️ 未検証 / untested<br>10 / 11, 64-bit | [`EQAnatomyLab2v1-1.0.1-win64.zip`](https://github.com/kazufumi01/EQAnatomyLab2/releases/latest/download/EQAnatomyLab2v1-1.0.1-win64.zip) | [`EQAnatomyLab2v1-1.0.1-win64.exe`](https://github.com/kazufumi01/EQAnatomyLab2/releases/latest/download/EQAnatomyLab2v1-1.0.1-win64.exe) |
 
 | | 日本語 | English |
 |---|---|---|
@@ -35,6 +35,10 @@
 ---
 
 ## 日本語
+
+### 1.0.1 更新
+
+- 参照カーブ C の高さを、線上のホイールでも調整できるようにしました（Shift で微調整）。
 
 ### 1.0 の新機能
 
@@ -85,6 +89,10 @@
 ---
 
 ## English
+
+### 1.0.1
+
+- Adjust the height of reference curve C with the mouse wheel over its line; hold Shift for fine adjustment.
 
 ### What's new in 1.0
 

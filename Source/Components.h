@@ -926,8 +926,8 @@ public:
                  "Shows the analog EQ model's panel in the lower view: an EQ plus circuit colour after classic hardware, added after the main EQ.\n| Model | Kind / use |\n| Passive Tube Master | passive 4-band mastering EQ with a tube make-up stage |\n| Precision Master 3-Band | clean, exact solid-state mastering parametric |\n| Fixed-Band Air Lift | six wide fixed bands plus an ultra-high AIR shelf |\n| British Stepped Bus | stepped British console curves for the mix bus and drums |\n| 60s Studio 7-Band | a 1960s studio's home-built console EQ, 2 dB steps |\n| Vintage Tube Boost/Atten | a 1950s-60s tube program EQ: boost and attenuate the same lows |\n| 70s British Inductor | the class-A inductor channel EQ of 1970s British desks |\n| 80s British Large Console | the four-band channel EQ of large 1980s consoles |\n| American Discrete Punch | a discrete American console EQ: stepped, proportional Q |\nWhile on, its curve is drawn on the graph (dotted)");
         addAndMakeVisible (refBtn); refBtn.getProperties().set ("chevron", 1);
         refBtn.onClick = [this] { refMenu(); };
-        setHelp (refBtn, "REFERENCE C", "参照カーブ C。音声ファイルの平均的な周波数の特徴（または内蔵の参考カーブ）を、EQ の dB 目盛りで重ねる（GAIN SCALE を変えると C の縦の大きさも変わる。200 Hz〜5 kHz の平均を 0 dB の線にそろえる）。\n| 操作 | 結果 |\n| ファイルをグラフにドロップ | 解析して C に表示 |\n| メニュー → 読み込み | 同じ（WAV / AIFF / FLAC / MP3 / OGG） |\n| メニュー → 保存 | 今の C をプリセットとして登録 |\n| C の線を上下ドラッグ | 高さを動かす（Shift で細かく） |\n| C の線をダブルクリック | 高さを戻す（中域の平均＝0 dB） |\n| メニュー → スペアナに合わせる | 今の入力の中域と同じ高さにそろえる |\n無音と、平均より 20 dB 以上小さい部分は解析に含めない。C は「偏りを確かめる目安」で、完全に合わせる正解線ではない",
-                 "Reference curve C: the average frequency balance of an audio file (or a built-in reference), drawn on the EQ's dB scale (it follows GAIN SCALE; its 200 Hz - 5 kHz average sits on the 0 dB line).\n| Action | Result |\n| Drop a file on the graph | analyse it into C |\n| Menu > Load | the same (WAV / AIFF / FLAC / MP3 / OGG) |\n| Menu > Save | store the current C as a preset |\n| Drag the C line up/down | move its height (Shift: fine) |\n| Double-click the C line | back to the default height (mid-band average on 0 dB) |\n| Menu > Line up with the analyzer | match the current input's mid-band height |\nSilence and parts more than 20 dB below the average are left out. C is a guide to spot a lean, not a line to match exactly");
+        setHelp (refBtn, "REFERENCE C", "参照カーブ C。音声ファイルの平均的な周波数の特徴（または内蔵の参考カーブ）を、EQ の dB 目盛りで重ねる（GAIN SCALE を変えると C の縦の大きさも変わる。200 Hz〜5 kHz の平均を 0 dB の線にそろえる）。\n| 操作 | 結果 |\n| ファイルをグラフにドロップ | 解析して C に表示 |\n| メニュー → 読み込み | 同じ（WAV / AIFF / FLAC / MP3 / OGG） |\n| メニュー → 保存 | 今の C をプリセットとして登録 |\n        | C の線を上下ドラッグ／ホイール | 高さを動かす（Shift で細かく） |\n| C の線をダブルクリック／Alt＋クリック | 高さを戻す（中域の平均＝0 dB） |\n| メニュー → スペアナに合わせる | 今の入力の中域と同じ高さにそろえる |\n無音と、平均より 20 dB 以上小さい部分は解析に含めない。C は「偏りを確かめる目安」で、完全に合わせる正解線ではない",
+                 "Reference curve C: the average frequency balance of an audio file (or a built-in reference), drawn on the EQ's dB scale (it follows GAIN SCALE; its 200 Hz - 5 kHz average sits on the 0 dB line).\n| Action | Result |\n| Drop a file on the graph | analyse it into C |\n| Menu > Load | the same (WAV / AIFF / FLAC / MP3 / OGG) |\n| Menu > Save | store the current C as a preset |\n                 | Drag the C line up/down or wheel | move its height (Shift: fine) |\n| Double-click or Alt+click the C line | back to the default height (mid-band average on 0 dB) |\n| Menu > Line up with the analyzer | match the current input's mid-band height |\nSilence and parts more than 20 dB below the average are left out. C is a guide to spot a lean, not a line to match exactly");
         popup.onMoved = popupFull.onMoved = [this] { placePopup(); };
         // T/B scope: the input's attack (Transient) and body share, scrolling, with the detector and its Sens / Width band
         scopeBtn.setClickingTogglesState (false); scopeBtn.setButtonText ("T/B scope"); addAndMakeVisible (scopeBtn);
@@ -1753,6 +1753,15 @@ public:
         // trackpads send zero-length and momentum events (also around a two-finger click): ignore them
         if (w.isInertial || std::abs (w.deltaY) < 0.01f || ph.proc.earActive()) return;
         if (juce::Time::getMillisecondCounter() - lastRightClick < 500) return;
+        if (refHit (e.position))
+        {
+            const float dir = (w.isReversed ? -1.0f : 1.0f) * w.deltaY;
+            const float step = e.mods.isShiftDown() ? 0.1f : 0.5f;
+            const float next = refShift() + juce::jlimit (-1.0f, 1.0f, dir * 4.0f) * step;
+            ph.proc.uiState.setProperty ("refShift", juce::jlimit (-60.0f, 60.0f, next), nullptr);
+            repaint();
+            return;
+        }
         auto p = pick (e.position); if (p.what >= 3) return;
         const int b = p.band >= 0 ? p.band : ph.selected();
         if (ph.value (pid::band (b, "on")) < 0.5f) return;
@@ -1837,6 +1846,15 @@ public:
                                 "Lower detector line (SENS). Drag up/down for sensitivity: above it a sound starts to count as attack (Transient).\nLower = small attacks too / higher = only strong attacks.")
                            : T ("検出の上の線（SENS＋WIDTH）。ここで完全にアタック扱い。下の線との間は少しずつ切り替わる。\n狭い＝ハッキリ分かれる／広い＝なめらかに混ざる。",
                                 "Upper detector line (SENS + WIDTH): fully attack from here. Between the two lines it blends.\nNarrow = hard split / wide = smooth blend.");
+            return true;
+        }
+        if (refHit (p))
+        {
+            title = "REFERENCE C";
+            text = T ("参照カーブ C の高さ。\n"
+                      "| 操作 | 結果 |\n| 上下ドラッグ／ホイール | カーブ全体を上下 |\n| Shift＋上下ドラッグ／ホイール | 細かく調整 |\n| ダブルクリック／Alt＋クリック | 初期の高さに戻す |\n",
+                      "Height of reference curve C.\n"
+                      "| Action | Result |\n| Drag up/down or wheel | move the whole curve |\n| Shift + drag or wheel | fine adjustment |\n| Double-click or Alt+click | back to the default height |\n");
             return true;
         }
         if (const auto pk = pick (p); pk.what > 0 || pk.band >= 0)
